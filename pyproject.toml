@@ -48,7 +48,7 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "C4", "SIM", "RUF"]
-ignore = ["N999", "E501", "B008"]
+ignore = ["N999", "E501", "B008", "RUF022"]
 
 [tool.mypy]
 python_version = "3.12"
