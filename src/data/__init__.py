@@ -14,6 +14,6 @@ __all__ = [
     "DataIngestionPipeline",
     "OHLCV_COLUMNS",
     "ParquetDataStore",
-    "Timeframe",
     "timeframe_to_pandas_freq",
+    "Timeframe",
 ]
