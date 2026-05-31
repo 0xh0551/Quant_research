@@ -62,7 +62,17 @@ def calculate_metrics(returns: pd.Series, equity: pd.Series, periods_per_year: i
     """Calculate standard quant performance metrics."""
 
     if len(equity) < 2:
-        return {key: 0.0 for key in ["total_return", "cagr", "sharpe", "sortino", "calmar", "profit_factor", "win_rate", "max_drawdown"]}
+        metric_names = [
+            "total_return",
+            "cagr",
+            "sharpe",
+            "sortino",
+            "calmar",
+            "profit_factor",
+            "win_rate",
+            "max_drawdown",
+        ]
+        return dict.fromkeys(metric_names, 0.0)
     total_return = equity.iloc[-1] / equity.iloc[0] - 1
     years = max(len(returns) / periods_per_year, 1 / periods_per_year)
     cagr = (1 + total_return) ** (1 / years) - 1

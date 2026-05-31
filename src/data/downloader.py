@@ -6,7 +6,7 @@ import io
 import logging
 import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -89,9 +89,9 @@ class CCXTFallbackDownloader:
     def fetch(self, request: DownloadRequest, limit: int = 1000) -> pd.DataFrame:
         """Fetch candles from CCXT using paginated requests."""
 
-        since = int(datetime.combine(request.start, datetime.min.time(), timezone.utc).timestamp() * 1000)
-        end_date = request.end or datetime.now(timezone.utc).date()
-        end_ms = int(datetime.combine(end_date, datetime.min.time(), timezone.utc).timestamp() * 1000)
+        since = int(datetime.combine(request.start, datetime.min.time(), UTC).timestamp() * 1000)
+        end_date = request.end or datetime.now(UTC).date()
+        end_ms = int(datetime.combine(end_date, datetime.min.time(), UTC).timestamp() * 1000)
         step = timeframe_to_milliseconds(request.timeframe)
         rows: list[list[float]] = []
         symbol = request.symbol.replace("USDT", "/USDT")
@@ -123,7 +123,7 @@ class DataIngestionPipeline:
         """Download data and merge it into the configured Parquet store."""
 
         frames: list[pd.DataFrame] = []
-        end = request.end or datetime.now(timezone.utc).date()
+        end = request.end or datetime.now(UTC).date()
         for year, month in _month_range(request.start, end):
             try:
                 frames.append(self.bulk_downloader.download_month(request.symbol, request.timeframe, year, month))
