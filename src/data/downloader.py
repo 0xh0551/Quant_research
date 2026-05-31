@@ -8,6 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import IO
 
 import pandas as pd
 
@@ -55,7 +56,7 @@ class BinanceBulkDownloader:
             with archive.open(csv_name) as csv_file:
                 return self._parse_bulk_csv(csv_file)
 
-    def _parse_bulk_csv(self, csv_file: io.BufferedIOBase) -> pd.DataFrame:
+    def _parse_bulk_csv(self, csv_file: IO[bytes]) -> pd.DataFrame:
         """Parse Binance bulk CSV format into normalized OHLCV data."""
 
         columns = [
