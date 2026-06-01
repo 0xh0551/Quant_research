@@ -74,7 +74,11 @@ class BinanceBulkDownloader:
             "ignore",
         ]
         frame = pd.read_csv(csv_file, names=columns)
-        frame["timestamp"] = pd.to_datetime(frame["open_time"], unit="ms", utc=True)
+        open_time = pd.to_numeric(frame["open_time"], errors="coerce")
+        frame = frame.loc[open_time.notna()].copy()
+        open_time = open_time.dropna()
+        unit = "us" if open_time.median() > 10_000_000_000_000 else "ms"
+        frame["timestamp"] = pd.to_datetime(open_time.astype("int64"), unit=unit, utc=True)
         return normalize_ohlcv(frame.rename(columns={"timestamp": "timestamp"}))
 
 
@@ -124,12 +128,24 @@ class DataIngestionPipeline:
         """Download data and merge it into the configured Parquet store."""
 
         frames: list[pd.DataFrame] = []
+        missing_months: list[date] = []
         end = request.end or datetime.now(UTC).date()
         for year, month in _month_range(request.start, end):
             try:
                 frames.append(self.bulk_downloader.download_month(request.symbol, request.timeframe, year, month))
             except FileNotFoundError:
-                LOGGER.warning("Bulk file unavailable for %s-%02d; using fallback later", year, month)
+                LOGGER.warning("Bulk file unavailable for %s-%02d; using CCXT fallback", year, month)
+                missing_months.append(date(year, month, 1))
+        if missing_months:
+            if self.fallback_downloader is None:
+                self.fallback_downloader = CCXTFallbackDownloader()
+            fallback_request = DownloadRequest(
+                symbol=request.symbol,
+                timeframe=request.timeframe,
+                start=min(missing_months),
+                end=request.end,
+            )
+            frames.append(self.fallback_downloader.fetch(fallback_request))
         if not frames:
             if self.fallback_downloader is None:
                 self.fallback_downloader = CCXTFallbackDownloader()

@@ -52,17 +52,63 @@ Poetry users can import the `pyproject.toml` dependencies or run the equivalent 
 
 ## Usage
 
-Generate a small deterministic sample dataset and all core sample reports:
+Generate a small deterministic offline sample dataset and clearly marked demo reports:
 
 ```bash
 quant-research demo
 ```
 
-Download Binance historical data, falling back to CCXT when monthly bulk files are not available:
+Download one real Binance historical timeframe, falling back to CCXT when monthly bulk files are not available. The command prints the requested range and final local Parquet coverage:
 
 ```bash
-quant-research download --symbol BTCUSDT --timeframe 1h --start 2020-01-01
+quant-research download --symbol BTCUSDT --timeframe 1h --start 2020-01-01 --refresh
 ```
+
+Download all standard research timeframes for one pair in a single command:
+
+```bash
+quant-research download-all --symbol BTCUSDT --timeframes 1m,5m,1h,1d --start 2020-01-01 --refresh
+```
+
+Show what local data exists and exactly where each timeframe starts and ends:
+
+```bash
+quant-research data-status --symbol BTCUSDT
+```
+
+Run the full polished research pipeline on real Binance data:
+
+```bash
+quant-research research --symbol BTCUSDT --timeframe 1h --start 2020-01-01 --refresh
+```
+
+### Multi-Exchange Data
+
+Download a single timeframe from a supported exchange:
+
+```bash
+quant-research download-exchange --exchange nobitex --symbol BTCIRT --timeframe 1d --start 2024-01-01 --refresh
+```
+
+Download all standard timeframes for one exchange/symbol:
+
+```bash
+quant-research download-exchange-all --exchange nobitex --symbol BTCIRT --timeframes 1m,5m,1h,1d --start 2022-03-21 --refresh
+```
+
+Inspect local coverage across exchanges and timeframes:
+
+```bash
+quant-research data-status --exchange nobitex --symbol BTCIRT
+```
+
+Compare multiple local exchange/timeframe datasets:
+
+```bash
+quant-research compare-datasets data/processed/binance_BTCUSDT_1d.parquet data/processed/nobitex_BTCIRT_1d.parquet
+```
+
+Supported exchanges currently include `binance` and `nobitex`. Nobitex OHLCV uses the public UDF history endpoint documented by Nobitex: `GET /market/udf/history`.
 
 Validate a Parquet dataset:
 
