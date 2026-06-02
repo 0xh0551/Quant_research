@@ -13,3 +13,7 @@ Binance monthly bulk files are the preferred source, with CCXT fallback for unav
 ## Implementation Status
 
 The current version contains a runnable professional scaffold with deterministic demo data, validation, feature generation, factor ranking, strategy baselines, backtesting, Monte Carlo analysis, ML baseline research, and portfolio aggregation. Full empirical conclusions should be regenerated after downloading complete BTCUSDT history.
+
+## Multi-Exchange Extension
+
+See `docs/exchange_data.md` for Nobitex integration details, cross-exchange commands, and the unified `research-all` dashboard.

@@ -11,6 +11,7 @@ import typer
 from rich.console import Console
 
 from src.analysis import combine_strategy_returns, run_monte_carlo
+from src.analysis.global_report import build_global_research_dashboard
 from src.backtesting import BacktestConfig, BacktestResult, VectorizedBacktester
 from src.data.downloader import DataIngestionPipeline, DownloadRequest
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
@@ -263,6 +264,20 @@ def compare_datasets(
     ]
     output.write_text("\n".join(lines) + "\n", encoding="utf-8")
     console.print(f"[green]Comparison report[/green] {output}")
+
+
+@app.command("research-all")
+def research_all(
+    data_dir: Path = Path("data/processed"),
+    output: Path = Path("reports/global_research/index.html"),
+    pattern: str = "*.parquet",
+) -> None:
+    """Run all strategies across every local dataset and generate one HTML dashboard."""
+
+    result = build_global_research_dashboard(data_dir, output, STRATEGIES, pattern)
+    console.print(f"[green]Global dashboard[/green] {result.html_path}")
+    console.print(f"[green]Strategy metrics CSV[/green] {result.metrics_path}")
+    console.print(f"[green]Dataset stats CSV[/green] {result.dataset_stats_path}")
 
 
 @app.command()

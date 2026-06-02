@@ -108,6 +108,12 @@ Compare multiple local exchange/timeframe datasets:
 quant-research compare-datasets data/processed/binance_BTCUSDT_1d.parquet data/processed/nobitex_BTCIRT_1d.parquet
 ```
 
+Generate one unified HTML interface across every local dataset and every strategy:
+
+```bash
+quant-research research-all --data-dir data/processed --output reports/global_research/index.html
+```
+
 Supported exchanges currently include `binance` and `nobitex`. Nobitex OHLCV uses the public UDF history endpoint documented by Nobitex: `GET /market/udf/history`.
 
 Validate a Parquet dataset:
