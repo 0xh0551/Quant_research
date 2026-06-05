@@ -107,7 +107,7 @@ class NobitexDataIngestionPipeline:
 def nobitex_resolution(timeframe: str) -> str:
     """Map internal timeframes to Nobitex UDF resolutions."""
 
-    mapping = {"1m": "1", "5m": "5", "1h": "60", "1d": "D"}
+    mapping = {"1m": "1", "5m": "5", "15m": "15", "30m":"30", "1h": "60", "2h":"120", "3h":"180", "4h":"240", "1d": "D"}
     if timeframe not in mapping:
         raise ValueError(f"Unsupported Nobitex timeframe: {timeframe}")
     return mapping[timeframe]

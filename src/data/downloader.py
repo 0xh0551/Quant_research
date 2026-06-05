@@ -5,14 +5,14 @@ from __future__ import annotations
 import io
 import logging
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import IO
 
 import pandas as pd
 
-from src.data.schema import OHLCV_COLUMNS, timeframe_to_milliseconds
+from src.data.schema import OHLCV_COLUMNS, normalize_timeframe, timeframe_to_milliseconds
 from src.data.storage import ParquetDataStore, normalize_ohlcv
 
 LOGGER = logging.getLogger(__name__)
@@ -94,6 +94,7 @@ class CCXTFallbackDownloader:
     def fetch(self, request: DownloadRequest, limit: int = 1000) -> pd.DataFrame:
         """Fetch candles from CCXT using paginated requests."""
 
+        request = replace(request, timeframe=normalize_timeframe(request.timeframe))
         since = int(datetime.combine(request.start, datetime.min.time(), UTC).timestamp() * 1000)
         end_date = request.end or datetime.now(UTC).date()
         end_ms = int(datetime.combine(end_date, datetime.min.time(), UTC).timestamp() * 1000)
@@ -127,6 +128,7 @@ class DataIngestionPipeline:
     def run(self, request: DownloadRequest) -> Path:
         """Download data and merge it into the configured Parquet store."""
 
+        request = replace(request, timeframe=normalize_timeframe(request.timeframe))
         frames: list[pd.DataFrame] = []
         missing_months: list[date] = []
         end = request.end or datetime.now(UTC).date()

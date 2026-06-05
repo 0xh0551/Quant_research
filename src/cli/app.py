@@ -15,6 +15,7 @@ from src.analysis.global_report import build_global_research_dashboard
 from src.backtesting import BacktestConfig, BacktestResult, VectorizedBacktester
 from src.data.downloader import DataIngestionPipeline, DownloadRequest
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
+from src.data.schema import normalize_timeframe
 from src.data.storage import ParquetDataStore
 from src.factors import FactorResearcher
 from src.factors.research import FactorResearchResult
@@ -99,6 +100,7 @@ def download(
 ) -> None:
     """Download one Binance Spot timeframe to Parquet and print coverage."""
 
+    timeframe = normalize_timeframe(timeframe)
     start_date = date.fromisoformat(start)
     store = ParquetDataStore(output)
     path = store.path_for(symbol, timeframe)
@@ -136,6 +138,7 @@ def download_exchange(
     """Download one timeframe from a supported exchange and print coverage."""
 
     exchange_key = exchange.lower()
+    timeframe = normalize_timeframe(timeframe)
     start_date = date.fromisoformat(start)
     store = ParquetDataStore(output)
     path = _exchange_dataset_path(output, exchange_key, symbol, timeframe)
@@ -171,7 +174,11 @@ def download_exchange_all(
 ) -> None:
     """Download all requested timeframes from one exchange for one symbol."""
 
-    requested_timeframes = [item.strip() for item in timeframes.split(",") if item.strip()]
+    requested_timeframes = [
+        normalized
+        for item in timeframes.split(",")
+        if (normalized := normalize_timeframe(item))
+    ]
     for timeframe in requested_timeframes:
         console.rule(f"{exchange.lower()} {symbol} {timeframe}")
         download_exchange(exchange, symbol, timeframe, start, output, refresh)
@@ -278,6 +285,7 @@ def research_all(
     console.print(f"[green]Global dashboard[/green] {result.html_path}")
     console.print(f"[green]Strategy metrics CSV[/green] {result.metrics_path}")
     console.print(f"[green]Dataset stats CSV[/green] {result.dataset_stats_path}")
+    console.print(f"[green]Parameter stability CSV[/green] {result.parameter_stability_path}")
 
 
 @app.command()

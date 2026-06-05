@@ -1,0 +1,1517 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Quant Research Platform</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+:root{
+  --bg:#0a0b0f;--bg2:#0f1117;--bg3:#161b27;--bg4:#1e2537;
+  --border:#252d3d;--border2:#2e3a52;
+  --cyan:#00d4ff;--cyan2:#0099cc;--purple:#7c3aed;--purple2:#6d28d9;
+  --green:#10b981;--red:#ef4444;--yellow:#f59e0b;--orange:#f97316;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --font:'Inter','Vazirmatn','Tahoma',sans-serif;
+  --glow:0 0 20px rgba(0,212,255,.15);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;overflow:hidden}
+
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+
+/* Layout */
+#app{display:flex;height:100vh}
+
+/* Sidebar */
+#sidebar{
+  width:220px;min-width:220px;background:var(--bg2);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;padding:0;overflow:hidden;
+  box-shadow:2px 0 20px rgba(0,0,0,.4);
+}
+.sidebar-logo{
+  padding:24px 20px 16px;border-bottom:1px solid var(--border);
+  background:linear-gradient(135deg,rgba(0,212,255,.06),rgba(124,58,237,.06));
+}
+.sidebar-logo h1{font-size:15px;font-weight:700;color:var(--cyan);letter-spacing:.5px}
+.sidebar-logo p{font-size:11px;color:var(--text3);margin-top:2px}
+
+.nav-item{
+  display:flex;align-items:center;gap:12px;padding:12px 20px;cursor:pointer;
+  transition:all .2s;color:var(--text2);font-size:13px;font-weight:500;
+  border-right:3px solid transparent;
+}
+.nav-item:hover{background:rgba(0,212,255,.05);color:var(--text)}
+.nav-item.active{
+  background:linear-gradient(90deg,rgba(0,212,255,.1),transparent);
+  color:var(--cyan);border-right-color:var(--cyan);
+}
+.nav-icon{width:18px;height:18px;opacity:.8;flex-shrink:0}
+.nav-badge{
+  margin-right:auto;background:var(--cyan);color:var(--bg);
+  font-size:10px;padding:2px 6px;border-radius:10px;font-weight:700;
+}
+
+.sidebar-footer{padding:16px 20px;border-top:1px solid var(--border);margin-top:auto}
+.sidebar-footer p{font-size:11px;color:var(--text3)}
+
+/* Main content */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+
+/* Header */
+#topbar{
+  height:56px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 24px;gap:16px;flex-shrink:0;
+}
+#topbar h2{font-size:16px;font-weight:600;color:var(--text)}
+#topbar .subtitle{font-size:12px;color:var(--text3)}
+.topbar-actions{margin-right:auto;display:flex;gap:8px;align-items:center}
+
+/* Content */
+#content{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* Sections */
+.section{display:none}
+.section.active{display:block;animation:fadeIn .3s}
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+/* Cards */
+.card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:12px;
+  padding:20px;margin-bottom:16px;
+}
+.card-title{
+  font-size:13px;font-weight:600;color:var(--text2);text-transform:uppercase;
+  letter-spacing:.8px;margin-bottom:16px;display:flex;align-items:center;gap:8px;
+}
+.card-title .dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);flex-shrink:0}
+
+/* Grid */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px}
+
+/* Form elements */
+label{display:block;font-size:12px;color:var(--text2);margin-bottom:6px;font-weight:500}
+input,select,textarea{
+  width:100%;background:var(--bg4);border:1px solid var(--border2);border-radius:8px;
+  color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--font);
+  outline:none;transition:border-color .2s;
+}
+input:focus,select:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(0,212,255,.1)}
+input[type=date]{color-scheme:dark}
+select option{background:var(--bg3)}
+
+.form-group{margin-bottom:14px}
+
+/* Checkboxes */
+.checkbox-group{display:flex;flex-wrap:wrap;gap:8px}
+.cb-item{
+  display:flex;align-items:center;gap:6px;cursor:pointer;
+  background:var(--bg4);border:1px solid var(--border2);border-radius:6px;
+  padding:6px 10px;transition:all .2s;font-size:12px;
+}
+.cb-item:hover{border-color:var(--cyan);color:var(--cyan)}
+.cb-item.selected{border-color:var(--cyan);background:rgba(0,212,255,.08);color:var(--cyan)}
+.cb-item input{display:none}
+
+/* Buttons */
+.btn{
+  display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:8px;
+  font-size:13px;font-weight:600;cursor:pointer;transition:all .2s;border:none;
+  font-family:var(--font);letter-spacing:.3px;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--cyan2),var(--cyan));color:var(--bg);
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 20px rgba(0,212,255,.3)}
+.btn-primary:active{transform:translateY(0)}
+.btn-secondary{background:var(--bg4);color:var(--text);border:1px solid var(--border2)}
+.btn-secondary:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn-danger{background:rgba(239,68,68,.15);color:var(--red);border:1px solid rgba(239,68,68,.3)}
+.btn-sm{padding:6px 12px;font-size:12px}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none!important}
+
+/* Progress */
+.progress-wrap{margin-top:16px}
+.progress-label{display:flex;justify-content:space-between;font-size:12px;color:var(--text2);margin-bottom:6px}
+.progress-bar-bg{height:8px;background:var(--bg4);border-radius:4px;overflow:hidden}
+.progress-bar{
+  height:100%;border-radius:4px;transition:width .4s ease;
+  background:linear-gradient(90deg,var(--cyan2),var(--cyan));
+  box-shadow:0 0 10px rgba(0,212,255,.4);
+}
+.progress-msg{font-size:12px;color:var(--text3);margin-top:6px;min-height:18px}
+
+/* Status badges */
+.badge{
+  display:inline-flex;align-items:center;gap:4px;padding:3px 8px;
+  border-radius:20px;font-size:11px;font-weight:600;
+}
+.badge-green{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-red{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-yellow{background:rgba(245,158,11,.15);color:var(--yellow)}
+.badge-cyan{background:rgba(0,212,255,.12);color:var(--cyan)}
+.badge-purple{background:rgba(124,58,237,.15);color:#a78bfa}
+.badge-gray{background:rgba(100,116,139,.15);color:var(--text3)}
+
+/* Table */
+.table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead th{
+  background:var(--bg4);padding:10px 14px;text-align:right;
+  font-size:11px;font-weight:600;color:var(--text3);
+  text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);
+  cursor:pointer;white-space:nowrap;user-select:none;
+}
+thead th:hover{color:var(--cyan)}
+thead th.sort-asc::after{content:" ▲";font-size:9px;color:var(--cyan)}
+thead th.sort-desc::after{content:" ▼";font-size:9px;color:var(--cyan)}
+tbody tr{border-bottom:1px solid var(--border);transition:background .15s}
+tbody tr:hover{background:rgba(255,255,255,.03)}
+tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
+.cell-green{color:var(--green)!important;font-weight:600}
+.cell-red{color:var(--red)!important;font-weight:600}
+.cell-yellow{color:var(--yellow)!important}
+
+/* Metric cards */
+.metric-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px}
+.metric-card{
+  background:var(--bg4);border:1px solid var(--border);border-radius:10px;
+  padding:14px;text-align:center;
+}
+.metric-card .val{font-size:22px;font-weight:700;margin:4px 0}
+.metric-card .lbl{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+
+/* Inventory cards */
+.inv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.inv-card{
+  background:var(--bg4);border:1px solid var(--border);border-radius:10px;padding:14px;
+  transition:all .2s;cursor:pointer;
+}
+.inv-card:hover{border-color:var(--cyan);box-shadow:var(--glow)}
+.inv-card .exch{font-size:11px;text-transform:uppercase;color:var(--cyan);font-weight:700;margin-bottom:4px}
+.inv-card .sym{font-size:16px;font-weight:700;margin-bottom:2px}
+.inv-card .tf-badge{font-size:10px;background:rgba(124,58,237,.2);color:#c4b5fd;padding:2px 7px;border-radius:4px}
+.inv-card .dates{font-size:11px;color:var(--text3);margin-top:8px}
+.inv-card .rows{font-size:11px;color:var(--text2);margin-top:2px}
+
+/* Insight cards */
+.insight-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.insight-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:12px;
+  padding:16px;transition:all .25s;
+}
+.insight-card:hover{border-color:var(--border2);transform:translateY(-2px)}
+.insight-header{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:12px}
+.insight-symbol{font-size:18px;font-weight:700}
+.insight-meta{font-size:11px;color:var(--text3);margin-top:2px}
+.regime-badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px}
+.regime-up{background:rgba(16,185,129,.15);color:var(--green)}
+.regime-down{background:rgba(239,68,68,.12);color:var(--red)}
+.regime-ranging{background:rgba(245,158,11,.12);color:var(--yellow)}
+.regime-mr{background:rgba(124,58,237,.15);color:#c4b5fd}
+.score-bar-wrap{margin-top:10px}
+.score-bar-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.score-bar-label{font-size:11px;color:var(--text2);width:130px;flex-shrink:0;text-align:right}
+.score-bar-bg{flex:1;height:6px;background:var(--bg4);border-radius:3px;overflow:hidden}
+.score-bar-fill{height:100%;border-radius:3px;transition:width .6s ease;min-width:2px}
+.score-bar-val{font-size:10px;color:var(--text3);width:38px;text-align:left}
+.momentum-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:10px;padding-top:10px;border-top:1px solid var(--border);
+}
+
+/* Chart area */
+.chart-container{background:var(--bg3);border-radius:10px;border:1px solid var(--border);overflow:hidden;margin-bottom:16px}
+.chart-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.chart-title{font-size:13px;font-weight:600}
+.chart-actions{display:flex;gap:8px}
+
+/* Toggle */
+.toggle-group{display:flex;background:var(--bg4);border-radius:8px;padding:3px;border:1px solid var(--border)}
+.toggle-btn{
+  padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;
+  transition:all .2s;color:var(--text2);border:none;background:transparent;font-family:var(--font);
+}
+.toggle-btn.active{background:var(--bg3);color:var(--cyan);box-shadow:0 1px 4px rgba(0,0,0,.4)}
+
+/* Multi-select dataset picker */
+.dataset-picker{
+  background:var(--bg4);border:1px solid var(--border2);border-radius:10px;
+  max-height:200px;overflow-y:auto;padding:8px;
+}
+.ds-item{
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
+  cursor:pointer;transition:background .15s;
+}
+.ds-item:hover{background:rgba(0,212,255,.06)}
+.ds-item.selected{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2)}
+.ds-item input[type=checkbox]{accent-color:var(--cyan)}
+
+/* Report tabs */
+.report-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0}
+.report-tab{
+  padding:8px 16px;font-size:13px;cursor:pointer;color:var(--text2);
+  border-bottom:2px solid transparent;transition:all .2s;
+}
+.report-tab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+.report-tab-content{display:none}
+.report-tab-content.active{display:block;animation:fadeIn .2s}
+
+/* Log */
+.log-area{
+  background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  padding:12px;font-family:monospace;font-size:12px;color:var(--text3);
+  max-height:120px;overflow-y:auto;margin-top:12px;
+}
+
+/* Empty state */
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;color:var(--text3);text-align:center;
+}
+.empty-state svg{width:64px;height:64px;opacity:.3;margin-bottom:16px}
+.empty-state p{font-size:14px;margin-bottom:4px;color:var(--text2)}
+.empty-state small{font-size:12px}
+
+/* Loading spinner */
+.spinner{
+  display:inline-block;width:18px;height:18px;border:2px solid rgba(0,212,255,.2);
+  border-top-color:var(--cyan);border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Plotly dark override */
+.js-plotly-plot .plotly .modebar{background:transparent!important}
+
+/* Tooltip on hover in charts - via CSS */
+.hoverlayer{pointer-events:none}
+
+/* Responsive adjustments */
+@media(max-width:900px){
+  #sidebar{width:60px;min-width:60px}
+  .nav-item span,.sidebar-logo p,.sidebar-logo h1,.sidebar-footer{display:none}
+  .nav-icon{margin:auto}
+}
+</style>
+</head>
+<body>
+<div id="app">
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="sidebar-logo">
+    <h1>⚡ QuantResearch</h1>
+    <p>پلتفرم ریسرچ کوانت</p>
+  </div>
+
+  <div style="flex:1;overflow-y:auto;padding:12px 0">
+    <div class="nav-item active" onclick="showSection('download')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+      </svg>
+      <span>دانلود داده</span>
+    </div>
+    <div class="nav-item" onclick="showSection('inventory')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>
+      </svg>
+      <span>گزارش داده</span>
+      <span class="nav-badge" id="inv-count">0</span>
+    </div>
+    <div class="nav-item" onclick="showSection('research')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35M11 8v6M8 11h6"/>
+      </svg>
+      <span>ریسرچ</span>
+    </div>
+    <div class="nav-item" onclick="showSection('report')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+      </svg>
+      <span>ریپورت</span>
+    </div>
+    <div class="nav-item" onclick="showSection('insights')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/>
+      </svg>
+      <span>اینسایت</span>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <p>Quant Research v1.0</p>
+  </div>
+</nav>
+
+<!-- Main -->
+<div id="main">
+  <div id="topbar">
+    <h2 id="page-title">دانلود داده</h2>
+    <span class="subtitle" id="page-sub">دریافت داده از صرافی‌ها</span>
+    <div class="topbar-actions">
+      <button class="btn btn-secondary btn-sm" onclick="refreshCurrentSection()">↻ رفرش</button>
+    </div>
+  </div>
+  <div id="content">
+
+    <!-- ═══ DOWNLOAD SECTION ═══ -->
+    <div class="section active" id="sec-download">
+      <div class="grid-2">
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>تنظیمات دانلود</div>
+
+            <div class="form-group">
+              <label>صرافی</label>
+              <select id="dl-exchange" onchange="onExchangeChange()">
+                <option value="">در حال بارگذاری...</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>جفت ارز / نماد</label>
+              <div style="display:flex;gap:8px">
+                <input id="dl-symbol" type="text" placeholder="مثال: BTCUSDT" style="flex:1"/>
+                <select id="dl-symbol-select" style="flex:1;display:none" onchange="document.getElementById('dl-symbol').value=this.value">
+                  <option value="">انتخاب نماد...</option>
+                </select>
+                <button class="btn btn-secondary btn-sm" onclick="toggleSymbolMode()" id="sym-toggle-btn" title="سوییچ بین لیست و دستی">⇄</button>
+              </div>
+              <div id="sym-loading" style="font-size:11px;color:var(--text3);margin-top:4px;display:none">
+                <span class="spinner" style="width:12px;height:12px"></span> در حال بارگذاری نمادها...
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>بازه زمانی</label>
+              <div class="grid-2">
+                <div>
+                  <label style="font-size:11px">از تاریخ</label>
+                  <input type="date" id="dl-start" value="2023-01-01"/>
+                </div>
+                <div>
+                  <label style="font-size:11px">تا تاریخ</label>
+                  <input type="date" id="dl-end"/>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>تایم‌فریم‌ها</label>
+              <div class="checkbox-group" id="dl-timeframes">
+                <div class="cb-item" onclick="toggleCb(this,'1m')"><input type="checkbox" value="1m"/>1m</div>
+                <div class="cb-item" onclick="toggleCb(this,'5m')"><input type="checkbox" value="5m"/>5m</div>
+                <div class="cb-item" onclick="toggleCb(this,'15m')"><input type="checkbox" value="15m"/>15m</div>
+                <div class="cb-item" onclick="toggleCb(this,'30m')"><input type="checkbox" value="30m"/>30m</div>
+                <div class="cb-item selected" onclick="toggleCb(this,'1h')"><input type="checkbox" value="1h" checked/>1h</div>
+                <div class="cb-item" onclick="toggleCb(this,'2h')"><input type="checkbox" value="2h"/>2h</div>
+                <div class="cb-item" onclick="toggleCb(this,'3h')"><input type="checkbox" value="3h"/>3h</div>
+                <div class="cb-item selected" onclick="toggleCb(this,'4h')"><input type="checkbox" value="4h" checked/>4h</div>
+                <div class="cb-item selected" onclick="toggleCb(this,'1d')"><input type="checkbox" value="1d" checked/>1d</div>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" id="dl-btn" onclick="startDownload()" style="width:100%;justify-content:center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              شروع دانلود
+            </button>
+
+            <div class="progress-wrap" id="dl-progress-wrap" style="display:none">
+              <div class="progress-label">
+                <span>پیشرفت</span>
+                <span id="dl-pct">0%</span>
+              </div>
+              <div class="progress-bar-bg"><div class="progress-bar" id="dl-bar" style="width:0%"></div></div>
+              <div class="progress-msg" id="dl-msg"></div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card" style="height:100%">
+            <div class="card-title"><span class="dot"></span>تاریخچه دانلودها</div>
+            <div id="dl-history" style="max-height:400px;overflow-y:auto">
+              <div class="empty-state" style="padding:40px 20px">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                </svg>
+                <p>هنوز دانلودی انجام نشده</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ INVENTORY SECTION ═══ -->
+    <div class="section" id="sec-inventory">
+      <div class="card" id="inv-summary-card">
+        <div class="card-title"><span class="dot"></span>خلاصه داده‌های موجود</div>
+        <div class="metric-grid" id="inv-summary"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+          <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>فایل‌های پارکت</div>
+          <div style="display:flex;gap:8px">
+            <input type="text" id="inv-search" placeholder="جستجو..." style="width:180px" oninput="filterInventory()"/>
+            <select id="inv-exch-filter" onchange="filterInventory()" style="width:120px">
+              <option value="">همه صرافی‌ها</option>
+            </select>
+          </div>
+        </div>
+        <div class="inv-grid" id="inv-cards"></div>
+      </div>
+    </div>
+
+    <!-- ═══ RESEARCH SECTION ═══ -->
+    <div class="section" id="sec-research">
+      <div class="grid-2">
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>انتخاب داده</div>
+            <label>دیتاست‌ها (چند انتخابی)</label>
+            <div class="dataset-picker" id="research-datasets"></div>
+            <div style="margin-top:8px;font-size:11px;color:var(--text3)" id="ds-selected-count">0 دیتاست انتخاب شده</div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>فیلتر بازه زمانی (اختیاری)</div>
+            <div class="grid-2">
+              <div>
+                <label>از تاریخ</label>
+                <input type="date" id="res-start"/>
+              </div>
+              <div>
+                <label>تا تاریخ</label>
+                <input type="date" id="res-end"/>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>تنظیمات بک‌تست</div>
+            <div class="grid-2">
+              <div class="form-group">
+                <label>سرمایه اولیه ($)</label>
+                <input type="number" id="res-capital" value="10000" min="100"/>
+              </div>
+              <div class="form-group">
+                <label>نوع بازده</label>
+                <div class="toggle-group" style="width:100%">
+                  <button class="toggle-btn active" onclick="setReturnType('simple',this)">ساده</button>
+                  <button class="toggle-btn" onclick="setReturnType('log',this)">لگاریتمی</button>
+                </div>
+              </div>
+              <div class="form-group">
+                <label>کارمزد (bps)</label>
+                <input type="number" id="res-fee" value="10" min="0" max="100"/>
+              </div>
+              <div class="form-group">
+                <label>اسلیپیج (bps)</label>
+                <input type="number" id="res-slippage" value="2" min="0" max="50"/>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="dot"></span>استراتژی‌ها</div>
+            <div style="display:flex;flex-direction:column;gap:10px" id="strategy-picker">
+              <div class="ds-item selected" onclick="toggleStrategy('ema_trend',this)" data-strat="ema_trend">
+                <input type="checkbox" checked/><div>
+                  <div style="font-weight:600">EMA Trend</div>
+                  <div style="font-size:11px;color:var(--text3)">EMA کوتاه > EMA بلند → Long</div>
+                </div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('rsi_mean_reversion',this)" data-strat="rsi_mean_reversion">
+                <input type="checkbox" checked/><div>
+                  <div style="font-weight:600">RSI Mean Reversion</div>
+                  <div style="font-size:11px;color:var(--text3)">ورود زیر RSI=30، خروج بالای 50</div>
+                </div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('bollinger_mean_reversion',this)" data-strat="bollinger_mean_reversion">
+                <input type="checkbox" checked/><div>
+                  <div style="font-weight:600">Bollinger Bands</div>
+                  <div style="font-size:11px;color:var(--text3)">ورود زیر باند پایین، خروج نزدیک میانگین</div>
+                </div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('donchian_breakout',this)" data-strat="donchian_breakout">
+                <input type="checkbox" checked/><div>
+                  <div style="font-weight:600">Donchian Breakout</div>
+                  <div style="font-size:11px;color:var(--text3)">شکست کانال 55 روزه</div>
+                </div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('atr_breakout',this)" data-strat="atr_breakout">
+                <input type="checkbox" checked/><div>
+                  <div style="font-weight:600">ATR Breakout</div>
+                  <div style="font-size:11px;color:var(--text3)">شکست میانگین + ATR threshold</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card" style="margin-top:0">
+            <button class="btn btn-primary" id="res-btn" onclick="startResearch()" style="width:100%;justify-content:center">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              اجرای ریسرچ
+            </button>
+            <div class="progress-wrap" id="res-progress-wrap" style="display:none">
+              <div class="progress-label"><span>پیشرفت</span><span id="res-pct">0%</span></div>
+              <div class="progress-bar-bg"><div class="progress-bar" id="res-bar" style="width:0%;background:linear-gradient(90deg,var(--purple2),var(--purple))"></div></div>
+              <div class="progress-msg" id="res-msg"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ REPORT SECTION ═══ -->
+    <div class="section" id="sec-report">
+      <div id="report-empty" class="empty-state">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+        </svg>
+        <p>ابتدا یک ریسرچ اجرا کنید</p>
+        <small>به بخش ریسرچ بروید و بک‌تست را اجرا کنید</small>
+      </div>
+      <div id="report-content" style="display:none">
+        <!-- Dataset selector -->
+        <div class="card" id="report-dataset-selector" style="margin-bottom:16px">
+          <div class="card-title" style="margin-bottom:10px"><span class="dot"></span>انتخاب دیتاست برای نمایش</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap" id="report-ds-tabs"></div>
+        </div>
+        <!-- Chart tabs -->
+        <div class="report-tabs">
+          <div class="report-tab active" onclick="switchReportTab('equity',this)">نمودار سهام</div>
+          <div class="report-tab" onclick="switchReportTab('drawdown',this)">Drawdown</div>
+          <div class="report-tab" onclick="switchReportTab('monthly',this)">بازده ماهانه</div>
+          <div class="report-tab" onclick="switchReportTab('rolling',this)">Rolling Sharpe</div>
+          <div class="report-tab" onclick="switchReportTab('metrics',this)">جدول متریک‌ها</div>
+        </div>
+        <div class="report-tab-content active" id="rtab-equity">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">منحنی سهام (Equity Curve)</span>
+              <div class="chart-actions">
+                <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="show-regime" onchange="renderEquityChart()" checked style="accent-color:var(--cyan)"/>
+                  نمایش Regime
+                </label>
+                <button class="btn btn-secondary btn-sm" onclick="downloadChartPng('chart-equity')">↓ PNG</button>
+              </div>
+            </div>
+            <div id="chart-equity" style="height:420px"></div>
+          </div>
+        </div>
+        <div class="report-tab-content" id="rtab-drawdown">
+          <div class="chart-container">
+            <div class="chart-header"><span class="chart-title">Drawdown (افت از اوج)</span></div>
+            <div id="chart-drawdown" style="height:380px"></div>
+          </div>
+        </div>
+        <div class="report-tab-content" id="rtab-monthly">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">بازده ماهانه (Heatmap)</span>
+              <div class="chart-actions">
+                <select id="monthly-strat-select" onchange="renderMonthlyChart()" style="width:180px">
+                  <option value="buy_hold">Buy &amp; Hold</option>
+                </select>
+              </div>
+            </div>
+            <div id="chart-monthly" style="height:420px"></div>
+          </div>
+        </div>
+        <div class="report-tab-content" id="rtab-rolling">
+          <div class="chart-container">
+            <div class="chart-header"><span class="chart-title">Rolling Sharpe (30 کندل)</span></div>
+            <div id="chart-rolling" style="height:380px"></div>
+          </div>
+        </div>
+        <div class="report-tab-content" id="rtab-metrics">
+          <div class="card">
+            <div class="card-title" style="justify-content:space-between;display:flex">
+              <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>جدول متریک‌های کامل</div>
+              <button class="btn btn-secondary btn-sm" onclick="exportMetricsCsv()">↓ CSV</button>
+            </div>
+            <div class="table-wrap" id="metrics-table-wrap"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ INSIGHTS SECTION ═══ -->
+    <div class="section" id="sec-insights">
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+          <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>تحلیل بازار — ۹۰ روز اخیر</div>
+          <button class="btn btn-secondary btn-sm" onclick="loadInsights()">↻ بروزرسانی</button>
+        </div>
+        <div class="metric-grid" id="insights-summary"></div>
+      </div>
+      <div id="insights-loading" style="display:none;text-align:center;padding:40px">
+        <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
+        <p style="margin-top:12px;color:var(--text3)">در حال تحلیل داده‌ها...</p>
+      </div>
+      <div class="insight-grid" id="insights-grid"></div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// STATE
+// ═══════════════════════════════════════════════════════════════
+const state = {
+  currentSection: 'download',
+  exchanges: [],
+  inventory: [],
+  inventoryFiltered: [],
+  researchResult: null,
+  activeResearchDs: null,
+  activeReportTab: 'equity',
+  returnType: 'simple',
+  selectedStrategies: ['ema_trend','rsi_mean_reversion','bollinger_mean_reversion','donchian_breakout','atr_breakout'],
+  sortCol: null,
+  sortDir: 1,
+};
+
+const STRATEGY_LABELS = {
+  ema_trend: 'EMA Trend',
+  rsi_mean_reversion: 'RSI Mean Rev.',
+  bollinger_mean_reversion: 'Bollinger',
+  donchian_breakout: 'Donchian',
+  atr_breakout: 'ATR Breakout',
+};
+
+const STRATEGY_COLORS = {
+  ema_trend: '#00d4ff',
+  rsi_mean_reversion: '#7c3aed',
+  bollinger_mean_reversion: '#10b981',
+  donchian_breakout: '#f59e0b',
+  atr_breakout: '#f97316',
+};
+
+const PLOTLY_DARK = {
+  paper_bgcolor: '#161b27',
+  plot_bgcolor: '#0f1117',
+  font: {color: '#94a3b8', family: 'Inter,Tahoma,sans-serif', size: 12},
+  gridcolor: '#252d3d',
+  zerolinecolor: '#252d3d',
+};
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function init() {
+  setTodayEnd();
+  await loadExchanges();
+  await loadInventory();
+}
+
+function setTodayEnd() {
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('dl-end').value = today;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+const SECTION_TITLES = {
+  download: ['دانلود داده','دریافت داده از صرافی‌ها'],
+  inventory: ['گزارش داده','داده‌های موجود در سیستم'],
+  research: ['ریسرچ','اجرای بک‌تست استراتژی‌ها'],
+  report: ['ریپورت','نتایج تحلیل کوانت'],
+  insights: ['اینسایت','پیشنهاد بهترین استراتژی'],
+};
+
+function showSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById('sec-' + name).classList.add('active');
+  event.currentTarget.classList.add('active');
+  state.currentSection = name;
+  const [title, sub] = SECTION_TITLES[name] || [name, ''];
+  document.getElementById('page-title').textContent = title;
+  document.getElementById('page-sub').textContent = sub;
+  if (name === 'inventory') loadInventory();
+  if (name === 'research') populateResearchDatasets();
+  if (name === 'insights') loadInsights();
+}
+
+function refreshCurrentSection() {
+  if (state.currentSection === 'inventory') loadInventory();
+  else if (state.currentSection === 'insights') loadInsights();
+  else if (state.currentSection === 'research') populateResearchDatasets();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// EXCHANGES & SYMBOLS
+// ═══════════════════════════════════════════════════════════════
+async function loadExchanges() {
+  const r = await fetch('/api/exchanges');
+  const d = await r.json();
+  state.exchanges = d.exchanges || [];
+  const sel = document.getElementById('dl-exchange');
+  sel.innerHTML = state.exchanges.map(e =>
+    `<option value="${e}">${e === 'nobitex' ? '🇮🇷 Nobitex' : e}</option>`
+  ).join('');
+  sel.value = 'nobitex';
+  await onExchangeChange();
+}
+
+let symMode = 'select';
+function toggleSymbolMode() {
+  symMode = symMode === 'select' ? 'manual' : 'select';
+  document.getElementById('dl-symbol-select').style.display = symMode === 'select' ? 'block' : 'none';
+  document.getElementById('dl-symbol').style.display = symMode === 'manual' ? 'block' : 'none';
+}
+
+async function onExchangeChange() {
+  const exch = document.getElementById('dl-exchange').value;
+  if (!exch) return;
+  document.getElementById('sym-loading').style.display = 'flex';
+  document.getElementById('dl-symbol-select').innerHTML = '<option value="">در حال بارگذاری...</option>';
+  try {
+    const r = await fetch(`/api/symbols/${exch}`);
+    const d = await r.json();
+    const syms = d.symbols || [];
+    document.getElementById('dl-symbol-select').innerHTML =
+      '<option value="">انتخاب نماد...</option>' +
+      syms.map(s => `<option value="${s}">${s}</option>`).join('');
+    if (exch === 'nobitex') {
+      document.getElementById('dl-symbol-select').value = 'BTCUSDT';
+      document.getElementById('dl-symbol').value = 'BTCUSDT';
+      symMode = 'select';
+      document.getElementById('dl-symbol-select').style.display = 'block';
+      document.getElementById('dl-symbol').style.display = 'none';
+    } else {
+      symMode = 'manual';
+      document.getElementById('dl-symbol-select').style.display = 'none';
+      document.getElementById('dl-symbol').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('dl-symbol-select').innerHTML = '<option value="">خطا در بارگذاری</option>';
+  }
+  document.getElementById('sym-loading').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CHECKBOX HELPERS
+// ═══════════════════════════════════════════════════════════════
+function toggleCb(el, val) {
+  el.classList.toggle('selected');
+  el.querySelector('input').checked = el.classList.contains('selected');
+}
+
+function getCheckedValues(containerId) {
+  return [...document.querySelectorAll(`#${containerId} .cb-item.selected input`)]
+    .map(i => i.value);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DOWNLOAD
+// ═══════════════════════════════════════════════════════════════
+async function startDownload() {
+  const exch = document.getElementById('dl-exchange').value;
+  const sym = symMode === 'select'
+    ? document.getElementById('dl-symbol-select').value
+    : document.getElementById('dl-symbol').value;
+  const tfs = getCheckedValues('dl-timeframes');
+  const start = document.getElementById('dl-start').value;
+  const end = document.getElementById('dl-end').value;
+
+  if (!exch || !sym || !tfs.length || !start) {
+    alert('لطفاً همه فیلدها را پر کنید');
+    return;
+  }
+
+  const btn = document.getElementById('dl-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> در حال دانلود...';
+  document.getElementById('dl-progress-wrap').style.display = 'block';
+
+  try {
+    const r = await fetch('/api/download', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({exchange: exch, symbol: sym, timeframes: tfs, start, end: end || null}),
+    });
+    const {job_id} = await r.json();
+    listenToJob(job_id, 'dl', () => {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg> شروع دانلود';
+      loadInventory();
+      loadDownloadHistory();
+    });
+    loadDownloadHistory();
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = 'شروع دانلود';
+    alert('خطا: ' + e.message);
+  }
+}
+
+function listenToJob(jobId, prefix, onDone) {
+  const es = new EventSource(`/api/jobs/${jobId}/events`);
+  es.onmessage = (e) => {
+    const d = JSON.parse(e.data);
+    const pct = Math.round(d.progress || 0);
+    document.getElementById(`${prefix}-bar`).style.width = pct + '%';
+    document.getElementById(`${prefix}-pct`).textContent = pct + '%';
+    document.getElementById(`${prefix}-msg`).textContent = d.message || '';
+    if (d.status === 'done') {
+      document.getElementById(`${prefix}-bar`).style.background =
+        'linear-gradient(90deg,#059669,#10b981)';
+      es.close();
+      if (onDone) onDone(d);
+    } else if (d.status === 'error') {
+      document.getElementById(`${prefix}-bar`).style.background = 'var(--red)';
+      document.getElementById(`${prefix}-msg`).textContent = '❌ ' + (d.error || d.message);
+      es.close();
+      if (onDone) onDone(d);
+    }
+  };
+  es.onerror = () => es.close();
+}
+
+async function loadDownloadHistory() {
+  const r = await fetch('/api/jobs');
+  const {jobs} = await r.json();
+  const dlJobs = jobs.filter(j => j.type === 'download');
+  const el = document.getElementById('dl-history');
+  if (!dlJobs.length) return;
+  el.innerHTML = dlJobs.map(j => {
+    const ico = j.status === 'done' ? '✅' : j.status === 'error' ? '❌' : '⏳';
+    const when = new Date(j.created_at * 1000).toLocaleString('fa-IR');
+    return `<div style="display:flex;align-items:flex-start;gap:10px;padding:10px;border-bottom:1px solid var(--border)">
+      <div style="font-size:16px">${ico}</div>
+      <div style="flex:1">
+        <div style="font-size:12px;font-weight:600">${j.message || j.type}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${when}</div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:${j.status==='done'?'var(--green)':j.status==='error'?'var(--red)':'var(--yellow)'}">${Math.round(j.progress)}%</div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INVENTORY
+// ═══════════════════════════════════════════════════════════════
+async function loadInventory() {
+  const r = await fetch('/api/inventory');
+  const {items} = await r.json();
+  state.inventory = items || [];
+  state.inventoryFiltered = [...state.inventory];
+  document.getElementById('inv-count').textContent = state.inventory.length;
+  renderInventorySummary();
+  renderInventoryCards();
+  populateExchangeFilter();
+}
+
+function renderInventorySummary() {
+  const items = state.inventory;
+  const totalRows = items.reduce((s,i) => s+i.rows, 0);
+  const totalSize = items.reduce((s,i) => s+i.size_kb, 0);
+  const exchanges = new Set(items.map(i=>i.exchange)).size;
+  const symbols = new Set(items.map(i=>i.symbol)).size;
+  document.getElementById('inv-summary').innerHTML = `
+    <div class="metric-card">
+      <div class="lbl">فایل‌ها</div>
+      <div class="val" style="color:var(--cyan)">${items.length}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">کندل‌ها</div>
+      <div class="val" style="color:var(--green)">${fmtNum(totalRows)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">صرافی‌ها</div>
+      <div class="val" style="color:var(--purple)">${exchanges}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">نمادها</div>
+      <div class="val" style="color:var(--yellow)">${symbols}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">حجم دیسک</div>
+      <div class="val" style="font-size:16px;color:var(--orange)">${(totalSize/1024).toFixed(1)} MB</div>
+    </div>`;
+}
+
+function renderInventoryCards() {
+  const el = document.getElementById('inv-cards');
+  if (!state.inventoryFiltered.length) {
+    el.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px"><p>داده‌ای یافت نشد</p></div>';
+    return;
+  }
+  el.innerHTML = state.inventoryFiltered.map(item => {
+    const exchColor = item.exchange === 'nobitex' ? 'var(--orange)' :
+      item.exchange === 'binance' ? 'var(--yellow)' : 'var(--cyan)';
+    return `<div class="inv-card" onclick="selectDatasetForResearch('${item.file}')">
+      <div class="exch" style="color:${exchColor}">${item.exchange.toUpperCase()}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="sym">${item.symbol}</div>
+        <span class="tf-badge">${item.timeframe}</span>
+      </div>
+      <div class="dates">📅 ${item.start} → ${item.end}</div>
+      <div class="rows">📊 ${fmtNum(item.rows)} کندل | ${item.size_kb} KB</div>
+    </div>`;
+  }).join('');
+}
+
+function populateExchangeFilter() {
+  const exchanges = [...new Set(state.inventory.map(i=>i.exchange))].sort();
+  const sel = document.getElementById('inv-exch-filter');
+  sel.innerHTML = '<option value="">همه صرافی‌ها</option>' +
+    exchanges.map(e=>`<option value="${e}">${e}</option>`).join('');
+}
+
+function filterInventory() {
+  const q = document.getElementById('inv-search').value.toLowerCase();
+  const exch = document.getElementById('inv-exch-filter').value;
+  state.inventoryFiltered = state.inventory.filter(i =>
+    (!q || i.symbol.toLowerCase().includes(q) || i.file.toLowerCase().includes(q)) &&
+    (!exch || i.exchange === exch)
+  );
+  renderInventoryCards();
+}
+
+function selectDatasetForResearch(file) {
+  showSection('research');
+  document.querySelectorAll('.nav-item')[2].click();
+  setTimeout(() => {
+    const items = document.querySelectorAll('#research-datasets .ds-item');
+    items.forEach(item => {
+      if (item.dataset.file === file) {
+        item.click();
+      }
+    });
+  }, 200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESEARCH
+// ═══════════════════════════════════════════════════════════════
+function populateResearchDatasets() {
+  if (!state.inventory.length) return;
+  const el = document.getElementById('research-datasets');
+  el.innerHTML = state.inventory.map(item => {
+    const exchColor = item.exchange === 'nobitex' ? '#f97316' :
+      item.exchange === 'binance' ? '#f59e0b' : '#00d4ff';
+    return `<div class="ds-item" onclick="toggleResearchDataset(this)"
+      data-exchange="${item.exchange}" data-symbol="${item.symbol}" data-tf="${item.timeframe}" data-file="${item.file}">
+      <input type="checkbox"/>
+      <div style="flex:1">
+        <div style="font-weight:600;font-size:13px">${item.symbol} <span style="font-size:11px;color:${exchColor}">${item.exchange}</span></div>
+        <div style="font-size:11px;color:var(--text3)">${item.timeframe} | ${item.start} → ${item.end} | ${fmtNum(item.rows)} کندل</div>
+      </div>
+    </div>`;
+  }).join('');
+  updateDsCount();
+}
+
+function toggleResearchDataset(el) {
+  el.classList.toggle('selected');
+  el.querySelector('input').checked = el.classList.contains('selected');
+  updateDsCount();
+}
+
+function updateDsCount() {
+  const n = document.querySelectorAll('#research-datasets .ds-item.selected').length;
+  document.getElementById('ds-selected-count').textContent = `${n} دیتاست انتخاب شده`;
+}
+
+function toggleStrategy(name, el) {
+  el.classList.toggle('selected');
+  el.querySelector('input').checked = el.classList.contains('selected');
+}
+
+function setReturnType(type, btn) {
+  state.returnType = type;
+  document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function startResearch() {
+  const selectedDs = [...document.querySelectorAll('#research-datasets .ds-item.selected')].map(el => ({
+    exchange: el.dataset.exchange,
+    symbol: el.dataset.symbol,
+    timeframe: el.dataset.tf,
+  }));
+  const selectedStrats = [...document.querySelectorAll('#strategy-picker .ds-item.selected')].map(el => el.dataset.strat);
+
+  if (!selectedDs.length) { alert('حداقل یک دیتاست انتخاب کنید'); return; }
+  if (!selectedStrats.length) { alert('حداقل یک استراتژی انتخاب کنید'); return; }
+
+  const btn = document.getElementById('res-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> در حال اجرا...';
+  document.getElementById('res-progress-wrap').style.display = 'block';
+  document.getElementById('res-bar').style.width = '0%';
+  document.getElementById('res-bar').style.background = 'linear-gradient(90deg,var(--purple2),var(--purple))';
+
+  const payload = {
+    datasets: selectedDs,
+    strategies: selectedStrats,
+    start: document.getElementById('res-start').value || null,
+    end: document.getElementById('res-end').value || null,
+    return_type: state.returnType,
+    initial_capital: parseFloat(document.getElementById('res-capital').value) || 10000,
+    fee_bps: parseFloat(document.getElementById('res-fee').value) || 10,
+    slippage_bps: parseFloat(document.getElementById('res-slippage').value) || 2,
+  };
+
+  try {
+    const r = await fetch('/api/research', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const {job_id} = await r.json();
+    listenToJob(job_id, 'res', async (jobData) => {
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg> اجرای ریسرچ';
+      if (jobData.status === 'done') {
+        const res = await fetch(`/api/jobs/${job_id}/result`);
+        state.researchResult = await res.json();
+        initReport();
+        // Auto-switch to report
+        document.querySelectorAll('.nav-item')[3].click();
+      }
+    });
+  } catch(e) {
+    btn.disabled = false;
+    btn.innerHTML = 'اجرای ریسرچ';
+    alert('خطا: ' + e.message);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REPORT
+// ═══════════════════════════════════════════════════════════════
+function initReport() {
+  if (!state.researchResult || !state.researchResult.datasets) return;
+  const datasets = state.researchResult.datasets;
+  document.getElementById('report-empty').style.display = 'none';
+  document.getElementById('report-content').style.display = 'block';
+
+  // Dataset tabs
+  const tabsEl = document.getElementById('report-ds-tabs');
+  tabsEl.innerHTML = datasets.map((ds, i) =>
+    `<button class="btn ${i===0?'btn-primary':'btn-secondary'} btn-sm"
+      onclick="selectReportDataset(${i}, this)" data-idx="${i}">
+      ${ds.symbol} <span style="opacity:.7">${ds.exchange}</span> ${ds.timeframe}
+    </button>`
+  ).join('');
+
+  state.activeResearchDs = datasets[0];
+  buildMonthlyStratSelect();
+  renderEquityChart();
+  renderMetricsTable();
+}
+
+function selectReportDataset(idx, btn) {
+  document.querySelectorAll('#report-ds-tabs button').forEach(b => {
+    b.classList.remove('btn-primary'); b.classList.add('btn-secondary');
+  });
+  btn.classList.add('btn-primary'); btn.classList.remove('btn-secondary');
+  state.activeResearchDs = state.researchResult.datasets[idx];
+  buildMonthlyStratSelect();
+  renderEquityChart();
+  renderDrawdownChart();
+  renderMonthlyChart();
+  renderRollingChart();
+  renderMetricsTable();
+}
+
+function buildMonthlyStratSelect() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const sel = document.getElementById('monthly-strat-select');
+  sel.innerHTML = '<option value="buy_hold">Buy & Hold</option>' +
+    (ds.strategies || []).filter(s=>!s.error).map(s =>
+      `<option value="${s.name}">${s.label||s.name}</option>`
+    ).join('');
+}
+
+function switchReportTab(name, el) {
+  document.querySelectorAll('.report-tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.report-tab-content').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('rtab-' + name).classList.add('active');
+  state.activeReportTab = name;
+  if (name === 'equity') renderEquityChart();
+  else if (name === 'drawdown') renderDrawdownChart();
+  else if (name === 'monthly') renderMonthlyChart();
+  else if (name === 'rolling') renderRollingChart();
+  else if (name === 'metrics') renderMetricsTable();
+}
+
+function renderEquityChart() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const showRegime = document.getElementById('show-regime').checked;
+  const traces = [];
+  const ts = ds.timestamps || [];
+
+  // Buy & Hold
+  traces.push({
+    x: ts, y: ds.buy_hold_equity || [],
+    mode: 'lines', name: 'Buy & Hold',
+    line: {color:'#94a3b8', width:1.5, dash:'dot'},
+    hovertemplate: '<b>Buy&Hold</b><br>%{x}<br>$%{y:.2f}<extra></extra>',
+  });
+
+  // Strategy lines
+  (ds.strategies || []).filter(s=>!s.error).forEach(strat => {
+    traces.push({
+      x: ts, y: strat.equity,
+      mode: 'lines', name: strat.label || strat.name,
+      line: {color: STRATEGY_COLORS[strat.name] || '#fff', width: 2},
+      hovertemplate: `<b>${strat.label||strat.name}</b><br>%{x}<br>$%{y:.2f}<extra></extra>`,
+    });
+  });
+
+  const shapes = [];
+  if (showRegime && ds.regime_bands) {
+    ds.regime_bands.forEach(b => {
+      shapes.push({
+        type: 'rect', xref: 'x', yref: 'paper',
+        x0: b.start, x1: b.end, y0: 0, y1: 1,
+        fillcolor: b.regime === 'up' ? 'rgba(16,185,129,0.06)' : 'rgba(239,68,68,0.06)',
+        line: {width: 0},
+        layer: 'below',
+      });
+    });
+  }
+
+  Plotly.react('chart-equity', traces, {
+    ...PLOTLY_DARK,
+    shapes,
+    xaxis: {showgrid:true, gridcolor:'#1e2537', zeroline:false},
+    yaxis: {showgrid:true, gridcolor:'#1e2537', zeroline:false, title:'ارزش پرتفوی ($)'},
+    legend: {bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d', borderwidth:1, x:0, y:1},
+    hovermode: 'x unified',
+    margin: {l:60, r:20, t:20, b:50},
+  }, {responsive: true, displayModeBar: true, modeBarButtonsToRemove: ['lasso2d','select2d']});
+}
+
+function renderDrawdownChart() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const ts = ds.timestamps || [];
+  const traces = [];
+
+  (ds.strategies || []).filter(s=>!s.error).forEach(strat => {
+    const dd = (strat.drawdown || []).map(v => v * 100);
+    traces.push({
+      x: ts, y: dd,
+      fill: 'tozeroy', mode: 'lines', name: strat.label || strat.name,
+      line: {color: STRATEGY_COLORS[strat.name], width: 1.5},
+      fillcolor: (STRATEGY_COLORS[strat.name] || '#fff').replace(')', ',0.15)').replace('rgb','rgba'),
+      hovertemplate: `<b>${strat.label}</b><br>%{x}<br>%{y:.2f}%<extra></extra>`,
+    });
+  });
+
+  Plotly.react('chart-drawdown', traces, {
+    ...PLOTLY_DARK,
+    xaxis: {showgrid:true, gridcolor:'#1e2537'},
+    yaxis: {showgrid:true, gridcolor:'#1e2537', title:'Drawdown %', tickformat:'.1f', ticksuffix:'%'},
+    legend: {bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d', borderwidth:1},
+    hovermode: 'x unified',
+    margin: {l:60, r:20, t:20, b:50},
+  }, {responsive:true});
+}
+
+function renderMonthlyChart() {
+  const ds = state.activeResearchDs;
+  if (!ds || !ds.monthly_returns) return;
+  const stratName = document.getElementById('monthly-strat-select').value;
+  const monthly = ds.monthly_returns;
+
+  if (!monthly.length) {
+    document.getElementById('chart-monthly').innerHTML = '<div class="empty-state"><p>داده ماهانه کافی نیست</p></div>';
+    return;
+  }
+
+  const years = [...new Set(monthly.map(m => m.year))].sort();
+  const months = ['فروردین','اردیبهشت','خرداد','تیر','مرداد','شهریور','مهر','آبان','آذر','دی','بهمن','اسفند'];
+  const z = years.map(y => months.map((_, mi) => {
+    const rec = monthly.find(m => m.year === y && m.month === mi+1);
+    return rec ? parseFloat((rec.return * 100).toFixed(2)) : null;
+  }));
+
+  Plotly.react('chart-monthly', [{
+    z, x: months, y: years.map(String),
+    type: 'heatmap', colorscale: [
+      [0,'#7f1d1d'],[0.35,'#ef4444'],[0.5,'#252d3d'],[0.65,'#10b981'],[1,'#064e3b']
+    ],
+    zmid: 0,
+    text: z.map(row => row.map(v => v !== null ? v.toFixed(1)+'%' : '')),
+    texttemplate: '%{text}',
+    textfont: {size: 10},
+    hovertemplate: '%{y} %{x}<br>بازده: %{z:.2f}%<extra></extra>',
+    colorbar: {title:'%', ticksuffix:'%'},
+  }], {
+    ...PLOTLY_DARK,
+    margin: {l:60, r:60, t:20, b:60},
+    xaxis: {side:'bottom'},
+  }, {responsive: true});
+}
+
+function renderRollingChart() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const ts = ds.timestamps || [];
+  const win = 30;
+  const traces = [];
+
+  (ds.strategies || []).filter(s=>!s.error).forEach(strat => {
+    const eq = strat.equity || [];
+    const returns = eq.map((v,i) => i===0 ? 0 : (v - eq[i-1]) / eq[i-1]);
+    const rolling = returns.map((_, i) => {
+      if (i < win) return null;
+      const slice = returns.slice(i-win, i);
+      const mean = slice.reduce((a,b)=>a+b,0)/win;
+      const std = Math.sqrt(slice.reduce((a,b)=>a+(b-mean)**2,0)/win);
+      return std > 0 ? mean / std * Math.sqrt(365) : 0;
+    });
+    traces.push({
+      x: ts, y: rolling, mode: 'lines', name: strat.label || strat.name,
+      line: {color: STRATEGY_COLORS[strat.name], width: 1.5},
+      hovertemplate: `<b>${strat.label}</b><br>%{x}<br>Sharpe: %{y:.2f}<extra></extra>`,
+    });
+  });
+
+  traces.push({
+    x: [ts[0], ts[ts.length-1]], y: [0,0],
+    mode: 'lines', name: 'صفر', showlegend: false,
+    line: {color:'#ef4444', width:1, dash:'dash'},
+  });
+
+  Plotly.react('chart-rolling', traces, {
+    ...PLOTLY_DARK,
+    xaxis: {showgrid:true, gridcolor:'#1e2537'},
+    yaxis: {showgrid:true, gridcolor:'#1e2537', title:'Rolling Sharpe (30)'},
+    legend: {bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d', borderwidth:1},
+    hovermode: 'x unified',
+    margin: {l:60, r:20, t:20, b:50},
+  }, {responsive:true});
+}
+
+function renderMetricsTable() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const strats = (ds.strategies || []).filter(s=>!s.error);
+  if (!strats.length) return;
+
+  const METRICS = [
+    {key:'total_return', label:'بازده کل', fmt: pct, higher:true},
+    {key:'cagr', label:'CAGR', fmt: pct, higher:true},
+    {key:'sharpe', label:'Sharpe', fmt: n2, higher:true},
+    {key:'sortino', label:'Sortino', fmt: n2, higher:true},
+    {key:'calmar', label:'Calmar', fmt: n2, higher:true},
+    {key:'max_drawdown', label:'Max Drawdown', fmt: pct, higher:false},
+    {key:'profit_factor', label:'Profit Factor', fmt: n2, higher:true},
+    {key:'win_rate', label:'Win Rate', fmt: pct, higher:true},
+  ];
+
+  const bhMetrics = ds.buy_hold_metrics || {};
+
+  // Build rows: metric × strategy
+  let rows = METRICS.map(m => {
+    const vals = strats.map(s => s.metrics[m.key]);
+    const bhVal = bhMetrics[m.key];
+    const best = m.higher ? Math.max(...vals) : Math.min(...vals);
+    const worst = m.higher ? Math.min(...vals) : Math.max(...vals);
+    return {m, vals, bhVal, best, worst};
+  });
+
+  const html = `
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:right">متریک</th>
+          <th style="color:#94a3b8">Buy & Hold</th>
+          ${strats.map(s=>`<th style="color:${STRATEGY_COLORS[s.name]||'#fff'}">${s.label||s.name}</th>`).join('')}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(({m,vals,bhVal,best,worst}) => `
+          <tr>
+            <td style="font-weight:600;color:var(--text2)">${m.label}</td>
+            <td>${bhVal!==undefined ? m.fmt(bhVal) : '-'}</td>
+            ${vals.map((v,i) => {
+              const isBest = Math.abs(v-best)<0.0001;
+              const isWorst = Math.abs(v-worst)<0.0001 && strats.length>1;
+              const cls = isBest ? 'cell-green' : isWorst ? 'cell-red' : '';
+              return `<td class="${cls}">${m.fmt(v)}</td>`;
+            }).join('')}
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+
+  document.getElementById('metrics-table-wrap').innerHTML = html;
+}
+
+function exportMetricsCsv() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const METRICS = ['total_return','cagr','sharpe','sortino','calmar','max_drawdown','profit_factor','win_rate'];
+  const strats = (ds.strategies || []).filter(s=>!s.error);
+  const header = ['metric', 'buy_hold', ...strats.map(s=>s.name)].join(',');
+  const rows = METRICS.map(k => [k, ds.buy_hold_metrics[k]||0, ...strats.map(s=>s.metrics[k]||0)].join(','));
+  const csv = [header, ...rows].join('\n');
+  downloadFile(csv, `metrics_${ds.dataset_id}.csv`, 'text/csv');
+}
+
+function downloadChartPng(id) {
+  Plotly.downloadImage(id, {format:'png', width:1400, height:700, filename:`chart_${id}`});
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INSIGHTS
+// ═══════════════════════════════════════════════════════════════
+async function loadInsights() {
+  document.getElementById('insights-loading').style.display = 'block';
+  document.getElementById('insights-grid').innerHTML = '';
+  document.getElementById('insights-summary').innerHTML = '';
+  try {
+    const r = await fetch('/api/insights');
+    const {insights} = await r.json();
+    renderInsights(insights);
+  } catch(e) {
+    console.error(e);
+  }
+  document.getElementById('insights-loading').style.display = 'none';
+}
+
+function renderInsights(insights) {
+  if (!insights.length) {
+    document.getElementById('insights-grid').innerHTML =
+      '<div class="empty-state" style="grid-column:1/-1"><p>داده‌ای برای تحلیل یافت نشد</p><small>ابتدا از بخش دانلود، داده دریافت کنید</small></div>';
+    return;
+  }
+
+  // Summary
+  const trending = insights.filter(i=>i.regime.startsWith('trending')).length;
+  const ranging = insights.filter(i=>i.regime==='ranging').length;
+  const topSharpe = Math.max(...insights.map(i=>i.best_sharpe));
+  const stratCounts = {};
+  insights.forEach(i => stratCounts[i.best_strategy] = (stratCounts[i.best_strategy]||0)+1);
+  const topStrat = Object.entries(stratCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  document.getElementById('insights-summary').innerHTML = `
+    <div class="metric-card">
+      <div class="lbl">دیتاست‌ها</div>
+      <div class="val" style="color:var(--cyan)">${insights.length}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">ترند</div>
+      <div class="val" style="color:var(--green)">${trending}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">رنجینگ</div>
+      <div class="val" style="color:var(--yellow)">${ranging}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">بهترین Sharpe</div>
+      <div class="val" style="font-size:18px;color:var(--purple)">${topSharpe.toFixed(2)}</div>
+    </div>
+    <div class="metric-card">
+      <div class="lbl">استراتژی برتر</div>
+      <div class="val" style="font-size:14px;color:var(--orange)">${topStrat ? STRATEGY_LABELS[topStrat[0]]||topStrat[0] : '-'}</div>
+    </div>`;
+
+  // Cards
+  document.getElementById('insights-grid').innerHTML = insights.map(ins => {
+    const scores = ins.strategy_scores || {};
+    const maxScore = Math.max(...Object.values(scores));
+    const minScore = Math.min(...Object.values(scores));
+    const range = maxScore - minScore || 1;
+    const regimeLabelMap = {
+      trending_up: ['ترند صعودی','regime-up'],
+      trending_down: ['ترند نزولی','regime-down'],
+      ranging: ['رنجینگ','regime-ranging'],
+      mean_reverting: ['میانگین‌گرا','regime-mr'],
+      unknown: ['نامعلوم','regime-ranging'],
+    };
+    const [regLabel, regClass] = regimeLabelMap[ins.regime] || ['نامعلوم','regime-ranging'];
+    const momColor = ins.momentum > 2 ? 'var(--green)' : ins.momentum < -2 ? 'var(--red)' : 'var(--yellow)';
+    const momSign = ins.momentum > 0 ? '+' : '';
+
+    return `<div class="insight-card">
+      <div class="insight-header">
+        <div>
+          <div class="insight-symbol">${ins.symbol}</div>
+          <div class="insight-meta">${ins.exchange.toUpperCase()} · ${ins.timeframe} · ${ins.last_date}</div>
+        </div>
+        <span class="regime-badge ${regClass}">${regLabel}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:rgba(0,0,0,.2);border-radius:8px">
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text3)">پیشنهاد استراتژی</div>
+          <div style="font-weight:700;color:${STRATEGY_COLORS[ins.best_strategy]||'var(--cyan)'}">${ins.best_label}</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--text3)">Sharpe</div>
+          <div style="font-size:18px;font-weight:700;color:${ins.best_sharpe>0.5?'var(--green)':ins.best_sharpe<0?'var(--red)':'var(--yellow)'}">${ins.best_sharpe.toFixed(2)}</div>
+        </div>
+      </div>
+      <div class="score-bar-wrap">
+        ${Object.entries(scores).sort((a,b)=>b[1]-a[1]).map(([strat, score]) => {
+          const pct = Math.max(5, Math.round((score - minScore) / range * 100));
+          const isBest = strat === ins.best_strategy;
+          const color = STRATEGY_COLORS[strat] || '#94a3b8';
+          return `<div class="score-bar-row">
+            <div class="score-bar-label" style="${isBest?'color:'+color+';font-weight:700':''}">${STRATEGY_LABELS[strat]||strat}</div>
+            <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${isBest?color:'#2e3a52'}"></div></div>
+            <div class="score-bar-val">${score.toFixed(2)}</div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="momentum-row">
+        <span style="font-size:12px;color:var(--text3)">مومنتوم ۲۰ کندل اخیر</span>
+        <span style="font-weight:700;font-size:13px;color:${momColor}">${momSign}${ins.momentum.toFixed(1)}%</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// FORMATTERS
+// ═══════════════════════════════════════════════════════════════
+function pct(v) {
+  if (v === null || v === undefined) return '-';
+  const val = (v * 100).toFixed(2);
+  return `<span style="color:${v>=0?'var(--green)':'var(--red)'}">${v>=0?'+':''}${val}%</span>`;
+}
+function n2(v) {
+  if (v === null || v === undefined) return '-';
+  return v.toFixed(2);
+}
+function fmtNum(n) {
+  return n >= 1e6 ? (n/1e6).toFixed(1)+'M' : n >= 1e3 ? (n/1e3).toFixed(0)+'K' : String(n);
+}
+function downloadFile(content, name, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], {type:mime}));
+  a.download = name; a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BOOT
+// ═══════════════════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>

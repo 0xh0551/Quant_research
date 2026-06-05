@@ -1,23 +1,63 @@
 # Project Summary
 
-The Bitcoin Quantitative Research Platform is an end-to-end research repository for BTCUSDT on Binance Spot. It is designed as a professional portfolio project that demonstrates the engineering of a complete quant research workflow rather than a claim of live trading profitability.
+## What This Is
+
+The Quant Research Platform is an end-to-end quantitative research environment for cryptocurrency markets. It combines a production-grade Python library for data acquisition, feature engineering, strategy research, and backtesting with a browser-based interactive dashboard for daily research workflow.
 
 ## Architecture
 
-The project is module-first. Data acquisition writes Parquet files, validation produces Markdown quality reports, feature engineering creates a broad technical and statistical feature matrix, factor research ranks predictive relationships, strategy modules generate parameterized exposures, and the backtester applies fees, slippage, execution delay, and performance metrics. Analysis modules cover walk-forward splits, Monte Carlo bootstrapping, regimes, and portfolio aggregation.
+Three layers communicate through well-defined interfaces:
 
-## Methodology
+1. **Data store** — Parquet files in `data/processed/` named `{exchange}_{symbol}_{timeframe}.parquet`
+2. **Python library** — `src/` modules for data acquisition, validation, features, strategies, backtesting, analysis, ML
+3. **Web dashboard** — FastAPI backend (`src/web/app.py`) serving a single-page HTML UI (`web/dashboard.html`)
 
-All targets are shifted forward, all ML splits are chronological, and strategy outputs are separated from execution assumptions. Reports are deterministic when run with the demo command and can be regenerated on full Binance data.
+Background jobs (downloads and backtests) run in threads and report progress to the browser via Server-Sent Events.
 
-## Current Findings
+## Data Coverage
 
-The repository currently ships with synthetic BTC-like sample data generation so the full pipeline can run without network access. Real findings should be produced after running `quant-research download` for BTCUSDT timeframes from 2020-01-01 through the latest available Binance data.
+| Exchange | Method | Auth required |
+|---|---|---|
+| Binance | Monthly bulk ZIPs + CCXT fallback | No |
+| Nobitex | Public UDF history endpoint | No |
+| 110+ other CCXT exchanges | CCXT paginated OHLCV | No (public data) |
 
-## Limitations
+Supported timeframes: `1m`, `5m`, `15m`, `30m`, `1h`, `2h`, `3h`, `4h`, `1d`
 
-This is a research platform, not a live trading system. It does not model order book liquidity, exchange downtime, taxes, borrow costs, funding, latency, or live execution failures. LightGBM and XGBoost are included as dependencies for expansion; the first runnable ML baseline uses Random Forest for a lightweight smoke path.
+## Strategy Baselines
 
-## Future Work
+| Name | Family | Key parameter |
+|---|---|---|
+| EMA Trend | Trend following | Fast/slow EMA spans (20/100) |
+| RSI Mean Reversion | Counter-trend | Entry at RSI < 30, exit > 50 |
+| Bollinger Mean Reversion | Counter-trend | Enter below −2σ, exit at mean |
+| Donchian Breakout | Trend following | 55-period channel (Turtle Trading) |
+| ATR Breakout | Trend following | MA + 1.5× ATR(20) threshold |
 
-Add richer exchange microstructure data, HMM regimes, Bayesian parameter optimization, experiment tracking, CI workflows, and scheduled report publishing.
+## Backtesting Model
+
+Vectorised long/flat simulator. Costs: 10 bps fee + 2 bps slippage (one-way, charged on turnover). One-bar execution delay. Metrics: Sharpe, Sortino, Calmar, CAGR, Max Drawdown, Profit Factor, Win Rate.
+
+## What Is Not Modelled
+
+This is a research platform, not a live trading system. The following are **not** modelled:
+
+- Order book depth or market impact at scale
+- Partial fills or order rejection
+- Exchange downtime or API errors
+- Funding rates, borrow costs, or taxes
+- Intra-bar price movement
+- Multi-asset portfolio rebalancing constraints
+
+All strategy results are **in-sample** unless explicitly produced by the walk-forward module. Past backtest performance does not predict future live trading results.
+
+## Reproducibility
+
+Given the same Parquet input files, every backtest, report, and insights computation is fully deterministic. The `quant-research demo` command generates synthetic BTC-like data so the full pipeline can be exercised without any network access.
+
+## Development Status
+
+The platform is production-ready for personal and institutional research use. The web dashboard (`make web`) provides a complete self-serve research environment. The Python library can also be used programmatically or via the CLI for automated pipelines.
+
+**Ready:** data acquisition, validation, feature library, strategy backtesting, walk-forward, Monte Carlo, web dashboard, insights engine.
+**Planned:** Bayesian parameter optimisation, HMM regime detection, GitHub Actions CI for scheduled data refresh and report publishing.

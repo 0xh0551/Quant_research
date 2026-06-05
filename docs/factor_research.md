@@ -1,15 +1,12 @@
 # Factor Research
 
-Factor evaluation ranks predictors, studies stability, calculates decay curves, and checks correlation clusters to reduce redundant signals.
+See [architecture.md](architecture.md) for the module overview and [data_pipeline.md](data_pipeline.md) for the data conventions used by all pipeline stages.
 
-## Design Principles
+The `src/analysis/` and `src/` modules for this research area are implemented as standalone Python modules. They can be exercised via the CLI commands below or called directly from notebooks and scripts.
 
-- Reproducible from raw data.
-- Research logic belongs in modules, not only notebooks.
-- Reports are generated artifacts with clear methodology.
-- Time-series experiments preserve chronological order.
-- Outputs are suitable for public portfolio review.
+```bash
+# Run the full pipeline which includes this stage
+uv run quant-research research-all --data-dir data/processed --output reports/global_research/index.html
+```
 
-## Implementation Status
-
-The current version contains a runnable professional scaffold with deterministic demo data, validation, feature generation, factor ranking, strategy baselines, backtesting, Monte Carlo analysis, ML baseline research, and portfolio aggregation. Full empirical conclusions should be regenerated after downloading complete BTCUSDT history.
+Detailed methodology documentation for this module is in progress.

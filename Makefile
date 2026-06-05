@@ -1,4 +1,4 @@
-.PHONY: install demo test lint typecheck quality
+.PHONY: install demo test lint typecheck quality web
 
 install:
 	uv sync --extra dev
@@ -16,3 +16,6 @@ typecheck:
 	uv run mypy src
 
 quality: lint typecheck test
+
+web:
+	uv run uvicorn src.web.app:app --host 0.0.0.0 --port 8000 --reload

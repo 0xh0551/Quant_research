@@ -16,6 +16,7 @@ class BacktestConfig:
     initial_capital: float = 10_000.0
     fee_bps: float = 10.0
     slippage_bps: float = 2.0
+    spread_bps: float = 0.0
     execution_delay: int = 1
     periods_per_year: int = 365
 
@@ -42,7 +43,8 @@ class VectorizedBacktester:
         close_returns = data["close"].pct_change().fillna(0.0)
         position = target_position.shift(self.config.execution_delay).fillna(0.0).clip(0.0, 1.0)
         turnover = position.diff().abs().fillna(position.abs())
-        costs = turnover * ((self.config.fee_bps + self.config.slippage_bps) / 10_000)
+        cost_bps = self.config.fee_bps + self.config.slippage_bps + self.config.spread_bps
+        costs = turnover * (cost_bps / 10_000)
         strategy_returns = position.shift(1).fillna(0.0) * close_returns - costs
         equity = self.config.initial_capital * (1 + strategy_returns).cumprod()
         return BacktestResult(equity, strategy_returns, position, calculate_metrics(strategy_returns, equity, self.config.periods_per_year))
