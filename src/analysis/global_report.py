@@ -12,7 +12,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.io as pio
 
-from src.backtesting import BacktestConfig, VectorizedBacktester
+from src.backtesting import BacktestConfig, BacktestResult, VectorizedBacktester
 from src.strategies import build_strategy_signals
 from src.strategies.rules import (
     ATRBreakoutConfig,
@@ -281,7 +281,7 @@ def _exposure_stats(position: pd.Series) -> dict[str, float]:
     return {"exposure": float((clean > 0).mean()) if len(clean) else 0.0}
 
 
-def _buy_hold_comparison_metrics(result) -> dict[str, float]:
+def _buy_hold_comparison_metrics(result: BacktestResult) -> dict[str, float]:
     return {
         "buy_hold_total_return": result.metrics["total_return"],
         "buy_hold_cagr": result.metrics["cagr"],
@@ -348,15 +348,15 @@ def _segment_backtest(data: pd.DataFrame, signals: pd.Series, config: BacktestCo
 
 
 def _default_strategy_params(strategy: str) -> str:
-    defaults = {
+    defaults: dict[str, EMATrendConfig | RSIMeanReversionConfig | BollingerMeanReversionConfig | DonchianBreakoutConfig | ATRBreakoutConfig] = {
         "ema_trend": EMATrendConfig(),
         "rsi_mean_reversion": RSIMeanReversionConfig(),
         "bollinger_mean_reversion": BollingerMeanReversionConfig(),
         "donchian_breakout": DonchianBreakoutConfig(),
         "atr_breakout": ATRBreakoutConfig(),
     }
-    config = defaults.get(strategy)
-    return _format_params(asdict(config)) if config else "default"
+    cfg = defaults.get(strategy)
+    return _format_params(asdict(cfg)) if cfg is not None else "default"
 
 
 def _parameter_stability(
@@ -394,42 +394,70 @@ def _parameter_stability(
 
 def _strategy_variants(strategy: str) -> list[StrategyVariant]:
     if strategy == "ema_trend":
-        configs = [EMATrendConfig(18, 90), EMATrendConfig(20, 100), EMATrendConfig(22, 110)]
+        ema_configs: list[EMATrendConfig] = [EMATrendConfig(18, 90), EMATrendConfig(20, 100), EMATrendConfig(22, 110)]
         return [
-            StrategyVariant(f"ema_{config.fast}_{config.slow}", _format_params(asdict(config)), lambda data, config=config: ema_trend(data, config))
-            for config in configs
+            StrategyVariant(
+                f"ema_{c.fast}_{c.slow}",
+                _format_params(asdict(c)),
+                lambda data, c=c: ema_trend(data, c),  # type: ignore[misc]
+            )
+            for c in ema_configs
         ]
     if strategy == "rsi_mean_reversion":
-        configs = [RSIMeanReversionConfig(12, 30, 50), RSIMeanReversionConfig(14, 30, 50), RSIMeanReversionConfig(16, 30, 50)]
+        rsi_configs: list[RSIMeanReversionConfig] = [
+            RSIMeanReversionConfig(12, 30, 50),
+            RSIMeanReversionConfig(14, 30, 50),
+            RSIMeanReversionConfig(16, 30, 50),
+        ]
         return [
-            StrategyVariant(f"rsi_{config.window}", _format_params(asdict(config)), lambda data, config=config: rsi_mean_reversion(data, config))
-            for config in configs
+            StrategyVariant(
+                f"rsi_{c.window}",
+                _format_params(asdict(c)),
+                lambda data, c=c: rsi_mean_reversion(data, c),  # type: ignore[misc]
+            )
+            for c in rsi_configs
         ]
     if strategy == "bollinger_mean_reversion":
-        configs = [
+        bb_configs: list[BollingerMeanReversionConfig] = [
             BollingerMeanReversionConfig(18, -2.0, 0.0),
             BollingerMeanReversionConfig(20, -2.0, 0.0),
             BollingerMeanReversionConfig(22, -2.0, 0.0),
         ]
         return [
-            StrategyVariant(f"bollinger_{config.window}", _format_params(asdict(config)), lambda data, config=config: bollinger_mean_reversion(data, config))
-            for config in configs
+            StrategyVariant(
+                f"bollinger_{c.window}",
+                _format_params(asdict(c)),
+                lambda data, c=c: bollinger_mean_reversion(data, c),  # type: ignore[misc]
+            )
+            for c in bb_configs
         ]
     if strategy == "donchian_breakout":
-        configs = [DonchianBreakoutConfig(50), DonchianBreakoutConfig(55), DonchianBreakoutConfig(60)]
+        don_configs: list[DonchianBreakoutConfig] = [
+            DonchianBreakoutConfig(50),
+            DonchianBreakoutConfig(55),
+            DonchianBreakoutConfig(60),
+        ]
         return [
-            StrategyVariant(f"donchian_{config.window}", _format_params(asdict(config)), lambda data, config=config: donchian_breakout(data, config))
-            for config in configs
+            StrategyVariant(
+                f"donchian_{c.window}",
+                _format_params(asdict(c)),
+                lambda data, c=c: donchian_breakout(data, c),  # type: ignore[misc]
+            )
+            for c in don_configs
         ]
     if strategy == "atr_breakout":
-        configs = [
+        atr_configs: list[ATRBreakoutConfig] = [
             ATRBreakoutConfig(18, 1.4),
             ATRBreakoutConfig(20, 1.5),
             ATRBreakoutConfig(22, 1.6),
         ]
         return [
-            StrategyVariant(f"atr_{config.window}_{config.atr_multiple}", _format_params(asdict(config)), lambda data, config=config: atr_breakout(data, config))
-            for config in configs
+            StrategyVariant(
+                f"atr_{c.window}_{c.atr_multiple}",
+                _format_params(asdict(c)),
+                lambda data, c=c: atr_breakout(data, c),  # type: ignore[misc]
+            )
+            for c in atr_configs
         ]
     return []
 
@@ -645,7 +673,7 @@ def _strategy_metrics_table(metrics: pd.DataFrame) -> str:
 def _plain_table(frame: pd.DataFrame) -> str:
     if frame.empty:
         return '<table class="table"><tbody><tr><td>No stability rows available.</td></tr></tbody></table>'
-    return frame.to_html(index=False, classes="table", escape=True, float_format=lambda value: f"{value:.6f}")
+    return str(frame.to_html(index=False, classes="table", escape=True, float_format=lambda value: f"{value:.6f}") or "")
 
 
 def _column_label(column: str) -> str:
@@ -656,7 +684,7 @@ def _format_cell(value: object, column: str) -> str:
     if pd.isna(value):
         return ""
     if column in {"performance_rank", "trades_count", "train_trades_count", "test_trades_count", "execution_delay"}:
-        return str(int(value))
+        return str(int(value))  # type: ignore[call-overload]
     if isinstance(value, float | np.floating):
         return f"{float(value):.4f}"
     return html.escape(str(value))

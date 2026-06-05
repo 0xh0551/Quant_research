@@ -7,6 +7,7 @@ import json
 import logging
 import threading
 import time
+from collections.abc import AsyncGenerator
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -214,7 +215,7 @@ def start_research(req: ResearchRequest, background_tasks: BackgroundTasks) -> d
 
 @app.get("/api/jobs/{job_id}/events")
 async def job_events(job_id: str) -> StreamingResponse:
-    async def generator():
+    async def generator() -> AsyncGenerator[str, None]:
         for _ in range(300):
             data = job_manager.get_dict(job_id)
             if data is None:
@@ -720,7 +721,7 @@ def _monthly_heatmap(returns: pd.Series, timestamps: pd.Series) -> list[dict[str
         monthly = df.groupby(["year", "month"])["r"].apply(
             lambda x: float((1 + x).prod() - 1)
         ).reset_index()
-        return monthly.rename(columns={"r": "return"}).to_dict(orient="records")
+        return list(monthly.rename(columns={"r": "return"}).to_dict(orient="records"))
     except Exception:
         return []
 
