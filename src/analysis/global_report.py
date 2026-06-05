@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import html
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import pandas as pd

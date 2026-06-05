@@ -8,7 +8,7 @@ import zipfile
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import IO
+from typing import IO, ClassVar
 
 import pandas as pd
 
@@ -31,7 +31,18 @@ class DownloadRequest:
 class BinanceBulkDownloader:
     """Download public Binance monthly klines from data.binance.vision."""
 
-    base_url = "https://data.binance.vision/data/spot/monthly/klines"
+    _BASE_URLS: ClassVar[dict[str, str]] = {
+        "spot": "https://data.binance.vision/data/spot/monthly/klines",
+        "futures": "https://data.binance.vision/data/futures/um/monthly/klines",
+        "perp": "https://data.binance.vision/data/futures/um/monthly/klines",
+        "perpetual": "https://data.binance.vision/data/futures/um/monthly/klines",
+        "um": "https://data.binance.vision/data/futures/um/monthly/klines",
+        "cm": "https://data.binance.vision/data/futures/cm/monthly/klines",
+    }
+
+    def __init__(self, market_type: str = "spot") -> None:
+        self.market_type = market_type
+        self.base_url = self._BASE_URLS.get(market_type, self._BASE_URLS["spot"])
 
     def monthly_url(self, symbol: str, timeframe: str, year: int, month: int) -> str:
         """Build the monthly bulk zip URL for a symbol/timeframe."""

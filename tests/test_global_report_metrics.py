@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pandas as pd
-
 from src.analysis.global_report import _exposure_stats, _trade_stats
 from src.backtesting import BacktestConfig, VectorizedBacktester
 

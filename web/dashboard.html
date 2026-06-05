@@ -244,15 +244,21 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
 /* Multi-select dataset picker */
 .dataset-picker{
   background:var(--bg4);border:1px solid var(--border2);border-radius:10px;
-  max-height:200px;overflow-y:auto;padding:8px;
+  max-height:220px;overflow-y:auto;padding:6px;
 }
 .ds-item{
-  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
-  cursor:pointer;transition:background .15s;
+  display:block;width:100%;padding:9px 36px 9px 12px;border-radius:7px;
+  cursor:pointer;transition:all .15s;border:1px solid transparent;
+  position:relative;text-align:right;margin-bottom:3px;
 }
-.ds-item:hover{background:rgba(0,212,255,.06)}
-.ds-item.selected{background:rgba(0,212,255,.08);border:1px solid rgba(0,212,255,.2)}
-.ds-item input[type=checkbox]{accent-color:var(--cyan)}
+.ds-item:last-child{margin-bottom:0}
+.ds-item:hover{background:rgba(0,212,255,.05);border-color:rgba(0,212,255,.15)}
+.ds-item.selected{background:rgba(0,212,255,.08);border-color:rgba(0,212,255,.3)}
+.ds-item.selected::after{
+  content:'✓';position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  color:var(--cyan);font-size:14px;font-weight:700;
+}
+.ds-item input[type=checkbox]{display:none}
 
 /* Report tabs */
 .report-tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:0}
@@ -343,6 +349,13 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
       </svg>
       <span>اینسایت</span>
     </div>
+    <div class="nav-item" onclick="showSection('logs')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
+        <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
+      </svg>
+      <span>لاگ‌ها</span>
+    </div>
   </div>
 
   <div class="sidebar-footer">
@@ -400,6 +413,14 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
                   <label style="font-size:11px">تا تاریخ</label>
                   <input type="date" id="dl-end"/>
                 </div>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>نوع بازار</label>
+              <div class="toggle-group">
+                <button class="toggle-btn active" id="mt-spot" onclick="setMarketType('spot',this)">Spot</button>
+                <button class="toggle-btn" id="mt-futures" onclick="setMarketType('futures',this)">Futures / Perp</button>
               </div>
             </div>
 
@@ -524,36 +545,46 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
         <div>
           <div class="card">
             <div class="card-title"><span class="dot"></span>استراتژی‌ها</div>
-            <div style="display:flex;flex-direction:column;gap:10px" id="strategy-picker">
+            <div style="display:flex;flex-direction:column;gap:0" id="strategy-picker">
               <div class="ds-item selected" onclick="toggleStrategy('ema_trend',this)" data-strat="ema_trend">
-                <input type="checkbox" checked/><div>
-                  <div style="font-weight:600">EMA Trend</div>
-                  <div style="font-size:11px;color:var(--text3)">EMA کوتاه > EMA بلند → Long</div>
-                </div>
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">EMA Trend <span style="font-size:10px;background:rgba(0,212,255,.15);color:var(--cyan);padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">EMA20 از بالا از EMA100 بگذرد → Long</div>
               </div>
               <div class="ds-item selected" onclick="toggleStrategy('rsi_mean_reversion',this)" data-strat="rsi_mean_reversion">
-                <input type="checkbox" checked/><div>
-                  <div style="font-weight:600">RSI Mean Reversion</div>
-                  <div style="font-size:11px;color:var(--text3)">ورود زیر RSI=30، خروج بالای 50</div>
-                </div>
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">RSI Mean Reversion <span style="font-size:10px;background:rgba(124,58,237,.15);color:#c4b5fd;padding:1px 6px;border-radius:3px;margin-right:6px">MR</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">ورود RSI&lt;30، خروج RSI&gt;50</div>
               </div>
               <div class="ds-item selected" onclick="toggleStrategy('bollinger_mean_reversion',this)" data-strat="bollinger_mean_reversion">
-                <input type="checkbox" checked/><div>
-                  <div style="font-weight:600">Bollinger Bands</div>
-                  <div style="font-size:11px;color:var(--text3)">ورود زیر باند پایین، خروج نزدیک میانگین</div>
-                </div>
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">Bollinger Bands <span style="font-size:10px;background:rgba(16,185,129,.15);color:var(--green);padding:1px 6px;border-radius:3px;margin-right:6px">MR</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">ورود زیر باند پایین (z&lt;-2)، خروج نزدیک میانگین</div>
               </div>
               <div class="ds-item selected" onclick="toggleStrategy('donchian_breakout',this)" data-strat="donchian_breakout">
-                <input type="checkbox" checked/><div>
-                  <div style="font-weight:600">Donchian Breakout</div>
-                  <div style="font-size:11px;color:var(--text3)">شکست کانال 55 روزه</div>
-                </div>
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">Donchian Breakout <span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">شکست بالای سقف ۵۵ روزه → Long</div>
               </div>
               <div class="ds-item selected" onclick="toggleStrategy('atr_breakout',this)" data-strat="atr_breakout">
-                <input type="checkbox" checked/><div>
-                  <div style="font-weight:600">ATR Breakout</div>
-                  <div style="font-size:11px;color:var(--text3)">شکست میانگین + ATR threshold</div>
-                </div>
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">ATR Breakout <span style="font-size:10px;background:rgba(249,115,22,.15);color:var(--orange);padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">بسته شدن بالای MA + 1.5×ATR → Long</div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('macd_cross',this)" data-strat="macd_cross">
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">MACD Cross <span style="font-size:10px;background:rgba(232,121,249,.15);color:#e879f9;padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">MACD line از Signal line عبور کند → Long</div>
+              </div>
+              <div class="ds-item selected" onclick="toggleStrategy('stochastic_mr',this)" data-strat="stochastic_mr">
+                <input type="checkbox" checked/>
+                <div style="font-weight:600;font-size:13px">Stochastic MR <span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;padding:1px 6px;border-radius:3px;margin-right:6px">MR</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">%D&lt;20 → Long، %D&gt;80 → خروج</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('ml_signal',this)" data-strat="ml_signal">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">ML Signal (GBM) <span style="font-size:10px;background:rgba(16,185,129,.15);color:var(--green);padding:1px 6px;border-radius:3px;margin-right:6px">ML</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Gradient Boosting روی RSI، MACD، Bollinger، ATR — آموزش روی ۶۵٪ اول</div>
               </div>
             </div>
           </div>
@@ -594,6 +625,7 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
           <div class="report-tab" onclick="switchReportTab('drawdown',this)">Drawdown</div>
           <div class="report-tab" onclick="switchReportTab('monthly',this)">بازده ماهانه</div>
           <div class="report-tab" onclick="switchReportTab('rolling',this)">Rolling Sharpe</div>
+          <div class="report-tab" onclick="switchReportTab('distribution',this)">توزیع بازده</div>
           <div class="report-tab" onclick="switchReportTab('metrics',this)">جدول متریک‌ها</div>
         </div>
         <div class="report-tab-content active" id="rtab-equity">
@@ -636,6 +668,20 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
             <div id="chart-rolling" style="height:380px"></div>
           </div>
         </div>
+        <div class="report-tab-content" id="rtab-distribution">
+          <div class="chart-container">
+            <div class="chart-header">
+              <span class="chart-title">توزیع بازده (Return Distribution)</span>
+              <div class="chart-actions">
+                <select id="dist-strat-select" onchange="renderDistributionChart()" style="width:180px">
+                  <option value="buy_hold">Buy &amp; Hold</option>
+                </select>
+              </div>
+            </div>
+            <div id="chart-distribution" style="height:380px"></div>
+          </div>
+          <div class="grid-2" style="gap:12px;margin-top:8px" id="dist-stats-grid"></div>
+        </div>
         <div class="report-tab-content" id="rtab-metrics">
           <div class="card">
             <div class="card-title" style="justify-content:space-between;display:flex">
@@ -650,18 +696,104 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
 
     <!-- ═══ INSIGHTS SECTION ═══ -->
     <div class="section" id="sec-insights">
-      <div class="card" style="margin-bottom:16px">
-        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
-          <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>تحلیل بازار — ۹۰ روز اخیر</div>
-          <button class="btn btn-secondary btn-sm" onclick="loadInsights()">↻ بروزرسانی</button>
+      <!-- Step 1: Dataset selector -->
+      <div id="insights-step1">
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>انتخاب دیتاست برای آنالیز عمیق</div>
+            <button class="btn btn-secondary btn-sm" onclick="loadInsights()">↻ رفرش</button>
+          </div>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:14px">یک دیتاست را انتخاب کنید تا تحلیل کامل استراتژی‌ها، چرخش رژیم و oracle equity نمایش داده شود.</p>
+          <div class="inv-grid" id="insights-dataset-grid">
+            <div class="empty-state" style="grid-column:1/-1;padding:40px">
+              <p>در حال بارگذاری دیتاست‌ها...</p>
+            </div>
+          </div>
         </div>
-        <div class="metric-grid" id="insights-summary"></div>
       </div>
-      <div id="insights-loading" style="display:none;text-align:center;padding:40px">
-        <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
-        <p style="margin-top:12px;color:var(--text3)">در حال تحلیل داده‌ها...</p>
+
+      <!-- Step 2: Detailed analysis (hidden until dataset selected) -->
+      <div id="insights-step2" style="display:none">
+        <div class="card" style="margin-bottom:16px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div class="card-title" style="margin-bottom:0">
+              <span class="dot"></span>
+              <span id="ins-det-title">تحلیل عمیق</span>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="backToInsightsList()">← بازگشت</button>
+          </div>
+        </div>
+
+        <div id="insights-detail-loading" style="display:none;text-align:center;padding:60px">
+          <div class="spinner" style="width:40px;height:40px;border-width:3px;margin:0 auto"></div>
+          <p style="margin-top:16px;color:var(--text3)">در حال اجرای تحلیل...</p>
+        </div>
+
+        <div id="insights-detail-content" style="display:none">
+
+          <!-- ★ PRIMARY: Tomorrow's recommendation -->
+          <div id="ins-recommendation-main" style="margin-bottom:16px;border-radius:14px;overflow:hidden;border:1px solid var(--border2)"></div>
+
+          <!-- Context: regime + momentum + scores -->
+          <div class="grid-2" style="margin-bottom:16px;gap:12px">
+            <div class="card" style="margin-bottom:0">
+              <div class="card-title"><span class="dot"></span>امتیاز استراتژی‌ها (۹۰ روز اخیر)</div>
+              <div id="ins-sharpe-bars"></div>
+            </div>
+            <div class="card" style="margin-bottom:0">
+              <div class="card-title"><span class="dot"></span>چرخش استراتژی (پنجره‌های گذشته)</div>
+              <div id="ins-windows-timeline"></div>
+            </div>
+          </div>
+
+          <!-- Advanced: Oracle equity chart (collapsed by default) -->
+          <details style="margin-bottom:16px">
+            <summary style="cursor:pointer;padding:12px 16px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2);list-style:none;display:flex;align-items:center;gap:8px">
+              <span style="color:var(--cyan)">▶</span> تحلیل پیشرفته — Oracle vs Walk-Forward vs Buy&amp;Hold
+              <span style="font-size:11px;color:var(--text3);margin-right:auto">(نمودار مقایسه‌ای برای ارزیابی کیفیت پیشنهاد)</span>
+            </summary>
+            <div style="border:1px solid var(--border);border-top:none;border-radius:0 0 10px 10px;overflow:hidden">
+              <div class="metric-grid" id="ins-metrics-grid" style="padding:16px;background:var(--bg3);gap:10px"></div>
+              <div id="chart-ins-equity" style="height:360px;background:var(--bg3)"></div>
+            </div>
+          </details>
+
+        </div>
       </div>
-      <div class="insight-grid" id="insights-grid"></div>
+    </div>
+
+    <!-- ═══ LOGS SECTION ═══ -->
+    <div class="section" id="sec-logs">
+      <div class="card" style="margin-bottom:14px">
+        <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+          <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span>لاگ‌های سیستم</div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="log-level-filter" style="width:110px" onchange="loadLogs()">
+              <option value="all">همه سطوح</option>
+              <option value="info">INFO</option>
+              <option value="warning">WARNING</option>
+              <option value="error">ERROR</option>
+            </select>
+            <select id="log-file-filter" style="width:120px" onchange="loadLogs()">
+              <option value="app">app.log</option>
+              <option value="errors">errors.log</option>
+            </select>
+            <input type="number" id="log-lines" value="200" min="20" max="2000" style="width:80px" title="تعداد خطوط"/>
+            <button class="btn btn-secondary btn-sm" onclick="loadLogs()">↻ رفرش</button>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;cursor:pointer">
+              <input type="checkbox" id="log-autoscroll" checked style="accent-color:var(--cyan)"/>
+              auto-scroll
+            </label>
+          </div>
+        </div>
+        <div class="metric-grid" id="logs-stats" style="margin-bottom:12px"></div>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+        <div id="log-lines-container"
+          style="font-family:monospace;font-size:11.5px;padding:12px 16px;max-height:70vh;overflow-y:auto;line-height:1.7">
+          <span style="color:var(--text3)">در حال بارگذاری...</span>
+        </div>
+      </div>
     </div>
 
   </div><!-- /content -->
@@ -681,9 +813,12 @@ const state = {
   activeResearchDs: null,
   activeReportTab: 'equity',
   returnType: 'simple',
-  selectedStrategies: ['ema_trend','rsi_mean_reversion','bollinger_mean_reversion','donchian_breakout','atr_breakout'],
+  marketType: 'spot',
+  selectedStrategies: ['ema_trend','rsi_mean_reversion','bollinger_mean_reversion','donchian_breakout','atr_breakout','macd_cross','stochastic_mr'],
   sortCol: null,
   sortDir: 1,
+  insightDatasets: [],
+  insightDetail: null,
 };
 
 const STRATEGY_LABELS = {
@@ -692,6 +827,9 @@ const STRATEGY_LABELS = {
   bollinger_mean_reversion: 'Bollinger',
   donchian_breakout: 'Donchian',
   atr_breakout: 'ATR Breakout',
+  macd_cross: 'MACD Cross',
+  stochastic_mr: 'Stochastic MR',
+  ml_signal: 'ML Signal (GBM)',
 };
 
 const STRATEGY_COLORS = {
@@ -700,6 +838,9 @@ const STRATEGY_COLORS = {
   bollinger_mean_reversion: '#10b981',
   donchian_breakout: '#f59e0b',
   atr_breakout: '#f97316',
+  macd_cross: '#e879f9',
+  stochastic_mr: '#38bdf8',
+  ml_signal: '#4ade80',
 };
 
 const PLOTLY_DARK = {
@@ -733,6 +874,7 @@ const SECTION_TITLES = {
   research: ['ریسرچ','اجرای بک‌تست استراتژی‌ها'],
   report: ['ریپورت','نتایج تحلیل کوانت'],
   insights: ['اینسایت','پیشنهاد بهترین استراتژی'],
+  logs: ['لاگ‌های سیستم','رویدادهای داخلی پلتفرم'],
 };
 
 function showSection(name) {
@@ -747,12 +889,14 @@ function showSection(name) {
   if (name === 'inventory') loadInventory();
   if (name === 'research') populateResearchDatasets();
   if (name === 'insights') loadInsights();
+  if (name === 'logs') loadLogs();
 }
 
 function refreshCurrentSection() {
   if (state.currentSection === 'inventory') loadInventory();
   else if (state.currentSection === 'insights') loadInsights();
   else if (state.currentSection === 'research') populateResearchDatasets();
+  else if (state.currentSection === 'logs') loadLogs();
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -771,6 +915,12 @@ async function loadExchanges() {
 }
 
 let symMode = 'select';
+function setMarketType(type, btn) {
+  state.marketType = type;
+  document.querySelectorAll('#mt-spot,#mt-futures').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 function toggleSymbolMode() {
   symMode = symMode === 'select' ? 'manual' : 'select';
   document.getElementById('dl-symbol-select').style.display = symMode === 'select' ? 'block' : 'none';
@@ -845,7 +995,7 @@ async function startDownload() {
     const r = await fetch('/api/download', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({exchange: exch, symbol: sym, timeframes: tfs, start, end: end || null}),
+      body: JSON.stringify({exchange: exch, symbol: sym, timeframes: tfs, start, end: end || null, market_type: state.marketType}),
     });
     const {job_id} = await r.json();
     listenToJob(job_id, 'dl', () => {
@@ -958,10 +1108,20 @@ function renderInventoryCards() {
     const exchColor = item.exchange === 'nobitex' ? 'var(--orange)' :
       item.exchange === 'binance' ? 'var(--yellow)' : 'var(--cyan)';
     return `<div class="inv-card" onclick="selectDatasetForResearch('${item.file}')">
-      <div class="exch" style="color:${exchColor}">${item.exchange.toUpperCase()}</div>
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div class="exch" style="color:${exchColor}">${item.exchange.toUpperCase()}</div>
+        <button class="btn btn-danger btn-sm" style="padding:4px 8px;min-width:28px"
+          onclick="event.stopPropagation();deleteDataset('${item.file}',this)" title="حذف فایل">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/>
+            <path d="M9 6V4a1 1 0 011-1h4a1 1 0 011 1v2"/>
+          </svg>
+        </button>
+      </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
         <div class="sym">${item.symbol}</div>
         <span class="tf-badge">${item.timeframe}</span>
+        ${item.market_type && item.market_type !== 'spot' ? `<span class="tf-badge" style="background:rgba(249,115,22,.2);color:#fb923c">${item.market_type}</span>` : ''}
       </div>
       <div class="dates">📅 ${item.start} → ${item.end}</div>
       <div class="rows">📊 ${fmtNum(item.rows)} کندل | ${item.size_kb} KB</div>
@@ -984,6 +1144,20 @@ function filterInventory() {
     (!exch || i.exchange === exch)
   );
   renderInventoryCards();
+}
+
+async function deleteDataset(filename, btn) {
+  if (!confirm(`حذف "${filename}"؟\nاین عملیات قابل بازگشت نیست.`)) return;
+  btn.disabled = true;
+  try {
+    const r = await fetch(`/api/inventory/${encodeURIComponent(filename)}`, {method:'DELETE'});
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || 'خطا'); }
+    await loadInventory();
+    populateResearchDatasets();
+  } catch(e) {
+    alert('خطا در حذف: ' + e.message);
+    btn.disabled = false;
+  }
 }
 
 function selectDatasetForResearch(file) {
@@ -1011,10 +1185,12 @@ function populateResearchDatasets() {
     return `<div class="ds-item" onclick="toggleResearchDataset(this)"
       data-exchange="${item.exchange}" data-symbol="${item.symbol}" data-tf="${item.timeframe}" data-file="${item.file}">
       <input type="checkbox"/>
-      <div style="flex:1">
-        <div style="font-weight:600;font-size:13px">${item.symbol} <span style="font-size:11px;color:${exchColor}">${item.exchange}</span></div>
-        <div style="font-size:11px;color:var(--text3)">${item.timeframe} | ${item.start} → ${item.end} | ${fmtNum(item.rows)} کندل</div>
+      <div style="font-weight:600;font-size:13px">
+        ${item.symbol}
+        <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:${exchColor}22;color:${exchColor};margin-right:6px">${item.exchange.toUpperCase()}</span>
+        <span style="font-size:10px;padding:1px 6px;border-radius:3px;background:rgba(124,58,237,.15);color:#c4b5fd">${item.timeframe}</span>
       </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:3px">${item.start} → ${item.end} &nbsp;·&nbsp; ${fmtNum(item.rows)} کندل</div>
     </div>`;
   }).join('');
   updateDsCount();
@@ -1044,6 +1220,7 @@ function setReturnType(type, btn) {
 
 async function startResearch() {
   const selectedDs = [...document.querySelectorAll('#research-datasets .ds-item.selected')].map(el => ({
+    file: el.dataset.file,
     exchange: el.dataset.exchange,
     symbol: el.dataset.symbol,
     timeframe: el.dataset.tf,
@@ -1083,9 +1260,9 @@ async function startResearch() {
       if (jobData.status === 'done') {
         const res = await fetch(`/api/jobs/${job_id}/result`);
         state.researchResult = await res.json();
-        initReport();
-        // Auto-switch to report
+        // Switch to visible section FIRST, then render charts (Plotly needs visible container)
         document.querySelectorAll('.nav-item')[3].click();
+        setTimeout(initReport, 60);
       }
     });
   } catch(e) {
@@ -1117,6 +1294,7 @@ function initReport() {
   buildMonthlyStratSelect();
   renderEquityChart();
   renderMetricsTable();
+  renderDistributionChart();
 }
 
 function selectReportDataset(idx, btn) {
@@ -1130,17 +1308,19 @@ function selectReportDataset(idx, btn) {
   renderDrawdownChart();
   renderMonthlyChart();
   renderRollingChart();
+  renderDistributionChart();
   renderMetricsTable();
 }
 
 function buildMonthlyStratSelect() {
   const ds = state.activeResearchDs;
   if (!ds) return;
-  const sel = document.getElementById('monthly-strat-select');
-  sel.innerHTML = '<option value="buy_hold">Buy & Hold</option>' +
+  const opts = '<option value="buy_hold">Buy & Hold</option>' +
     (ds.strategies || []).filter(s=>!s.error).map(s =>
       `<option value="${s.name}">${s.label||s.name}</option>`
     ).join('');
+  document.getElementById('monthly-strat-select').innerHTML = opts;
+  document.getElementById('dist-strat-select').innerHTML = opts;
 }
 
 function switchReportTab(name, el) {
@@ -1153,6 +1333,7 @@ function switchReportTab(name, el) {
   else if (name === 'drawdown') renderDrawdownChart();
   else if (name === 'monthly') renderMonthlyChart();
   else if (name === 'rolling') renderRollingChart();
+  else if (name === 'distribution') renderDistributionChart();
   else if (name === 'metrics') renderMetricsTable();
 }
 
@@ -1308,6 +1489,57 @@ function renderRollingChart() {
   }, {responsive:true});
 }
 
+function renderDistributionChart() {
+  const ds = state.activeResearchDs;
+  if (!ds) return;
+  const stratName = document.getElementById('dist-strat-select').value;
+  let distData = null;
+  let label = 'Buy & Hold';
+  let color = '#94a3b8';
+
+  if (stratName === 'buy_hold') {
+    distData = ds.return_distribution;
+  } else {
+    const s = (ds.strategies || []).find(x => x.name === stratName);
+    if (s && s.return_dist) { distData = s.return_dist; label = s.label||s.name; color = STRATEGY_COLORS[s.name]||'#fff'; }
+  }
+
+  if (!distData || !distData.x) {
+    document.getElementById('chart-distribution').innerHTML = '<div class="empty-state"><p>داده کافی نیست</p></div>';
+    return;
+  }
+
+  // Normal distribution overlay
+  const {x, y, mean, std, skew, kurt} = distData;
+  const maxY = Math.max(...y);
+  const normpdf = x.map(xi => maxY * Math.exp(-0.5 * ((xi - mean) / std) ** 2));
+
+  Plotly.react('chart-distribution', [
+    {x, y, type:'bar', name:'تعداد', marker:{color: color+'55', line:{color, width:1}},
+      hovertemplate:'%{x:.2f}%<br>%{y} بار<extra></extra>'},
+    {x, y:normpdf, type:'scatter', mode:'lines', name:'توزیع نرمال',
+      line:{color:'#f59e0b', width:2, dash:'dot'},
+      hovertemplate:'%{x:.2f}%<extra></extra>'},
+    {x:[mean,mean], y:[0,maxY*1.05], type:'scatter', mode:'lines', name:'میانگین',
+      line:{color:'#10b981', width:1.5, dash:'dash'}},
+  ], {
+    ...PLOTLY_DARK,
+    xaxis: {showgrid:true, gridcolor:'#1e2537', title:'بازده %', ticksuffix:'%'},
+    yaxis: {showgrid:true, gridcolor:'#1e2537', title:'تعداد'},
+    legend: {bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d', borderwidth:1},
+    margin: {l:60, r:20, t:20, b:60},
+    bargap: 0.05,
+  }, {responsive:true});
+
+  // Stats
+  document.getElementById('dist-stats-grid').innerHTML = [
+    ['میانگین', mean.toFixed(3)+'%', mean>=0?'var(--green)':'var(--red)'],
+    ['انحراف معیار', std.toFixed(3)+'%', 'var(--yellow)'],
+    ['Skewness', typeof skew==='number' ? skew.toFixed(3) : '-', 'var(--text)'],
+    ['Kurtosis', typeof kurt==='number' ? kurt.toFixed(3) : '-', 'var(--text)'],
+  ].map(([l,v,c]) => `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${c}">${v}</div></div>`).join('');
+}
+
 function renderMetricsTable() {
   const ds = state.activeResearchDs;
   if (!ds) return;
@@ -1382,109 +1614,201 @@ function downloadChartPng(id) {
 // INSIGHTS
 // ═══════════════════════════════════════════════════════════════
 async function loadInsights() {
-  document.getElementById('insights-loading').style.display = 'block';
-  document.getElementById('insights-grid').innerHTML = '';
-  document.getElementById('insights-summary').innerHTML = '';
+  const grid = document.getElementById('insights-dataset-grid');
+  grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px"><span class="spinner" style="width:28px;height:28px"></span></div>';
   try {
     const r = await fetch('/api/insights');
-    const {insights} = await r.json();
-    renderInsights(insights);
+    const d = await r.json();
+    state.insightDatasets = d.datasets || [];
+    renderInsightDatasetGrid();
   } catch(e) {
-    console.error(e);
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1"><p>خطا در بارگذاری: ${e.message}</p></div>`;
   }
-  document.getElementById('insights-loading').style.display = 'none';
 }
 
-function renderInsights(insights) {
-  if (!insights.length) {
-    document.getElementById('insights-grid').innerHTML =
-      '<div class="empty-state" style="grid-column:1/-1"><p>داده‌ای برای تحلیل یافت نشد</p><small>ابتدا از بخش دانلود، داده دریافت کنید</small></div>';
+function renderInsightDatasetGrid() {
+  const grid = document.getElementById('insights-dataset-grid');
+  const items = state.insightDatasets;
+  if (!items.length) {
+    grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;padding:40px"><p>داده‌ای یافت نشد</p><small>ابتدا از بخش دانلود، داده دریافت کنید</small></div>';
     return;
   }
-
-  // Summary
-  const trending = insights.filter(i=>i.regime.startsWith('trending')).length;
-  const ranging = insights.filter(i=>i.regime==='ranging').length;
-  const topSharpe = Math.max(...insights.map(i=>i.best_sharpe));
-  const stratCounts = {};
-  insights.forEach(i => stratCounts[i.best_strategy] = (stratCounts[i.best_strategy]||0)+1);
-  const topStrat = Object.entries(stratCounts).sort((a,b)=>b[1]-a[1])[0];
-
-  document.getElementById('insights-summary').innerHTML = `
-    <div class="metric-card">
-      <div class="lbl">دیتاست‌ها</div>
-      <div class="val" style="color:var(--cyan)">${insights.length}</div>
-    </div>
-    <div class="metric-card">
-      <div class="lbl">ترند</div>
-      <div class="val" style="color:var(--green)">${trending}</div>
-    </div>
-    <div class="metric-card">
-      <div class="lbl">رنجینگ</div>
-      <div class="val" style="color:var(--yellow)">${ranging}</div>
-    </div>
-    <div class="metric-card">
-      <div class="lbl">بهترین Sharpe</div>
-      <div class="val" style="font-size:18px;color:var(--purple)">${topSharpe.toFixed(2)}</div>
-    </div>
-    <div class="metric-card">
-      <div class="lbl">استراتژی برتر</div>
-      <div class="val" style="font-size:14px;color:var(--orange)">${topStrat ? STRATEGY_LABELS[topStrat[0]]||topStrat[0] : '-'}</div>
-    </div>`;
-
-  // Cards
-  document.getElementById('insights-grid').innerHTML = insights.map(ins => {
-    const scores = ins.strategy_scores || {};
-    const maxScore = Math.max(...Object.values(scores));
-    const minScore = Math.min(...Object.values(scores));
-    const range = maxScore - minScore || 1;
-    const regimeLabelMap = {
-      trending_up: ['ترند صعودی','regime-up'],
-      trending_down: ['ترند نزولی','regime-down'],
-      ranging: ['رنجینگ','regime-ranging'],
-      mean_reverting: ['میانگین‌گرا','regime-mr'],
-      unknown: ['نامعلوم','regime-ranging'],
-    };
-    const [regLabel, regClass] = regimeLabelMap[ins.regime] || ['نامعلوم','regime-ranging'];
-    const momColor = ins.momentum > 2 ? 'var(--green)' : ins.momentum < -2 ? 'var(--red)' : 'var(--yellow)';
-    const momSign = ins.momentum > 0 ? '+' : '';
-
-    return `<div class="insight-card">
-      <div class="insight-header">
-        <div>
-          <div class="insight-symbol">${ins.symbol}</div>
-          <div class="insight-meta">${ins.exchange.toUpperCase()} · ${ins.timeframe} · ${ins.last_date}</div>
-        </div>
-        <span class="regime-badge ${regClass}">${regLabel}</span>
+  grid.innerHTML = items.map(item => {
+    const exchColor = item.exchange === 'nobitex' ? 'var(--orange)' :
+      item.exchange === 'binance' ? 'var(--yellow)' : 'var(--cyan)';
+    return `<div class="inv-card" onclick="loadDetailedInsight('${item.file}','${item.symbol}','${item.exchange}','${item.timeframe}')"
+      style="cursor:pointer;border:1px solid var(--border)">
+      <div class="exch" style="color:${exchColor}">${item.exchange.toUpperCase()}</div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <div class="sym">${item.symbol}</div>
+        <span class="tf-badge">${item.timeframe}</span>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:10px;background:rgba(0,0,0,.2);border-radius:8px">
-        <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3)">پیشنهاد استراتژی</div>
-          <div style="font-weight:700;color:${STRATEGY_COLORS[ins.best_strategy]||'var(--cyan)'}">${ins.best_label}</div>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--text3)">Sharpe</div>
-          <div style="font-size:18px;font-weight:700;color:${ins.best_sharpe>0.5?'var(--green)':ins.best_sharpe<0?'var(--red)':'var(--yellow)'}">${ins.best_sharpe.toFixed(2)}</div>
-        </div>
-      </div>
-      <div class="score-bar-wrap">
-        ${Object.entries(scores).sort((a,b)=>b[1]-a[1]).map(([strat, score]) => {
-          const pct = Math.max(5, Math.round((score - minScore) / range * 100));
-          const isBest = strat === ins.best_strategy;
-          const color = STRATEGY_COLORS[strat] || '#94a3b8';
-          return `<div class="score-bar-row">
-            <div class="score-bar-label" style="${isBest?'color:'+color+';font-weight:700':''}">${STRATEGY_LABELS[strat]||strat}</div>
-            <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${isBest?color:'#2e3a52'}"></div></div>
-            <div class="score-bar-val">${score.toFixed(2)}</div>
-          </div>`;
-        }).join('')}
-      </div>
-      <div class="momentum-row">
-        <span style="font-size:12px;color:var(--text3)">مومنتوم ۲۰ کندل اخیر</span>
-        <span style="font-weight:700;font-size:13px;color:${momColor}">${momSign}${ins.momentum.toFixed(1)}%</span>
-      </div>
+      <div class="dates">📅 ${item.start} → ${item.end}</div>
+      <div class="rows">📊 ${fmtNum(item.rows)} کندل</div>
+      <div style="margin-top:10px;font-size:12px;color:var(--cyan);text-align:center">کلیک برای تحلیل عمیق ←</div>
     </div>`;
   }).join('');
+}
+
+function backToInsightsList() {
+  document.getElementById('insights-step1').style.display = '';
+  document.getElementById('insights-step2').style.display = 'none';
+}
+
+async function loadDetailedInsight(file, symbol, exchange, tf) {
+  document.getElementById('insights-step1').style.display = 'none';
+  document.getElementById('insights-step2').style.display = '';
+  document.getElementById('ins-det-title').textContent = `${symbol} · ${exchange.toUpperCase()} · ${tf}`;
+  document.getElementById('insights-detail-loading').style.display = 'block';
+  document.getElementById('insights-detail-content').style.display = 'none';
+  try {
+    const r = await fetch('/api/insights/detailed', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename: file}),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.statusText); }
+    const data = await r.json();
+    state.insightDetail = data;
+    renderDetailedInsight(data);
+  } catch(e) {
+    document.getElementById('insights-detail-content').innerHTML =
+      `<div class="empty-state"><p>خطا: ${e.message}</p></div>`;
+    document.getElementById('insights-detail-content').style.display = 'block';
+  }
+  document.getElementById('insights-detail-loading').style.display = 'none';
+}
+
+function renderDetailedInsight(d) {
+  const rec = d.recommendation || {};
+  const stratColor = STRATEGY_COLORS[rec.strategy] || 'var(--cyan)';
+  const conf = rec.confidence || 0;
+  const confColor = conf >= 70 ? 'var(--green)' : conf >= 40 ? 'var(--yellow)' : 'var(--red)';
+  const confLabel = conf >= 70 ? 'بالا' : conf >= 40 ? 'متوسط' : 'پایین';
+  const momSign = d.momentum > 0 ? '+' : '';
+  const momColor = d.momentum > 2 ? 'var(--green)' : d.momentum < -2 ? 'var(--red)' : 'var(--yellow)';
+
+  // ★ Primary recommendation card
+  document.getElementById('ins-recommendation-main').innerHTML = `
+    <div style="padding:24px;background:linear-gradient(135deg,${stratColor}0f,${stratColor}04,var(--bg3))">
+      <div style="font-size:11px;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:12px">پیشنهاد استراتژی برای دوره بعدی</div>
+      <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:24px">
+        <!-- Strategy name -->
+        <div>
+          <div style="font-size:36px;font-weight:800;color:${stratColor};line-height:1">${rec.label || rec.strategy}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:4px">Sharpe اخیر: <b style="color:${stratColor}">${rec.sharpe_score}</b></div>
+        </div>
+        <!-- Confidence -->
+        <div style="min-width:160px">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:6px">سطح اطمینان</div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="flex:1;height:10px;background:var(--bg4);border-radius:5px;overflow:hidden">
+              <div style="width:${conf}%;height:100%;background:${confColor};border-radius:5px;transition:width .6s"></div>
+            </div>
+            <span style="font-size:18px;font-weight:700;color:${confColor}">${conf}%</span>
+          </div>
+          <div style="font-size:11px;color:${confColor};margin-top:4px">${confLabel}</div>
+        </div>
+        <!-- Context chips -->
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+          <span style="font-size:12px;padding:4px 12px;border-radius:20px;background:var(--bg4);color:var(--text2)">
+            رژیم: <b style="color:${rec.regime_fit?'var(--green)':'var(--yellow)'}">${rec.regime_label}</b>
+          </span>
+          <span style="font-size:12px;padding:4px 12px;border-radius:20px;background:var(--bg4);color:var(--text2)">
+            مومنتوم: <b style="color:${momColor}">${momSign}${d.momentum.toFixed(1)}%</b>
+          </span>
+        </div>
+      </div>
+      <!-- Reasons -->
+      <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:8px">
+        ${(rec.reasons||[]).map(r=>`<span style="font-size:12px;padding:4px 12px;border-radius:6px;background:rgba(255,255,255,.04);color:var(--text2);border:1px solid var(--border)">• ${r}</span>`).join('')}
+      </div>
+      ${rec.alt_strategy ? `
+      <div style="margin-top:14px;padding:10px 14px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.2);border-radius:8px;font-size:12px;color:var(--yellow)">
+        ⚠ رژیم با این استراتژی همخوانی کامل ندارد — گزینه جایگزین مطابق رژیم: <b>${rec.alt_label}</b>
+      </div>` : ''}
+    </div>`;
+
+  // Advanced section metrics
+  const bh = d.buy_hold_metrics || {};
+  const oracle = d.oracle_metrics || {};
+  const wf = d.wf_metrics || {};
+  document.getElementById('ins-metrics-grid').innerHTML = [
+    ['Sharpe تصمیم روزانه', wf.sharpe, 'var(--purple)'],
+    ['CAGR تصمیم روزانه', wf.cagr, 'var(--purple)', true],
+    ['MaxDD تصمیم روزانه', wf.max_drawdown, '#a78bfa', true],
+    ['Sharpe Buy&Hold', bh.sharpe, '#94a3b8'],
+    ['Oracle Sharpe (سقف)', oracle.sharpe, 'var(--cyan)'],
+  ].map(([l,v,c,isPct]) => {
+    if (v == null) return '';
+    const fmt = isPct ? (v*100).toFixed(1)+'%' : v.toFixed(2);
+    return `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${c}">${fmt}</div></div>`;
+  }).join('');
+
+  // Oracle equity chart (inside <details>)
+  const ts = d.timestamps || [];
+  const traces = [
+    {x:ts, y:d.buy_hold_equity, mode:'lines', name:'Buy & Hold (بنچمارک)',
+      line:{color:'#94a3b8', width:1.5, dash:'dot'}},
+    {x:ts, y:d.wf_equity, mode:'lines',
+      name:'تصمیم روزانه (هر دوره بهترین استراتژی قبلی)',
+      line:{color:'#7c3aed', width:2.5}},
+    {x:ts, y:d.oracle_equity, mode:'lines',
+      name:'Oracle — سقف نظری (با دانستن آینده)',
+      line:{color:'#00d4ff', width:1.5, dash:'dot'}},
+  ];
+  Object.entries(d.strategy_equities||{}).forEach(([strat, eq]) => {
+    traces.push({x:ts, y:eq, mode:'lines', name:STRATEGY_LABELS[strat]||strat,
+      line:{color:STRATEGY_COLORS[strat]||'#fff', width:1}, visible:'legendonly'});
+  });
+  Plotly.react('chart-ins-equity', traces, {
+    ...PLOTLY_DARK,
+    xaxis:{showgrid:true, gridcolor:'#1e2537'},
+    yaxis:{showgrid:true, gridcolor:'#1e2537', title:'ارزش ($)'},
+    legend:{bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d', borderwidth:1},
+    hovermode:'x unified', margin:{l:60,r:20,t:20,b:50},
+  }, {responsive:true});
+
+  // Sharpe score bars
+  const scores = d.recent_scores || {};
+  const maxS = Math.max(...Object.values(scores).filter(isFinite), 0.01);
+  const minS = Math.min(...Object.values(scores).filter(isFinite), 0);
+  const range = maxS - minS || 1;
+  document.getElementById('ins-sharpe-bars').innerHTML = Object.entries(scores)
+    .sort((a,b) => b[1]-a[1])
+    .map(([strat, score]) => {
+      const isBest = strat === d.best_now;
+      const c = STRATEGY_COLORS[strat] || '#94a3b8';
+      const pct = Math.max(3, Math.round((score - minS) / range * 100));
+      return `<div class="score-bar-row">
+        <div class="score-bar-label" style="${isBest?'color:'+c+';font-weight:700':''}">${STRATEGY_LABELS[strat]||strat}</div>
+        <div class="score-bar-bg"><div class="score-bar-fill" style="width:${pct}%;background:${isBest?c:'#2e3a52'}"></div></div>
+        <div class="score-bar-val" style="color:${score>0?'var(--green)':score<0?'var(--red)':'var(--text3)'}">${score.toFixed(2)}</div>
+      </div>`;
+    }).join('');
+
+  // Strategy rotation timeline
+  const wins = d.strategy_windows || [];
+  const tlEl = document.getElementById('ins-windows-timeline');
+  if (wins.length) {
+    const stratSet = [...new Set(wins.map(w=>w.best_strategy))];
+    tlEl.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">
+        ${stratSet.map(s=>`<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${(STRATEGY_COLORS[s]||'#94a3b8')}20;color:${STRATEGY_COLORS[s]||'#94a3b8'};font-weight:600">${STRATEGY_LABELS[s]||s}</span>`).join('')}
+      </div>
+      <div style="display:flex;gap:2px;height:32px;border-radius:6px;overflow:hidden;margin-bottom:6px">
+        ${wins.map(w=>{const c=STRATEGY_COLORS[w.best_strategy]||'#94a3b8';
+          return `<div title="${w.best_label} | ${w.start}→${w.end} | Sharpe:${w.best_sharpe}"
+            style="flex:1;background:${c}40;border-left:2px solid ${c};min-width:3px"
+            onmouseover="this.style.opacity='.6'" onmouseout="this.style.opacity='1'"></div>`;
+        }).join('')}
+      </div>
+      <div style="font-size:11px;color:var(--text3)">هر ستون = یک پنجره زمانی | رنگ = برترین استراتژی آن دوره | hover برای جزئیات</div>`;
+  } else {
+    tlEl.innerHTML = '<p style="font-size:12px;color:var(--text3);padding:10px 0">داده کافی برای پنجره‌بندی نیست</p>';
+  }
+
+  document.getElementById('insights-detail-content').style.display = 'block';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1506,6 +1830,80 @@ function downloadFile(content, name, mime) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([content], {type:mime}));
   a.download = name; a.click();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOGS
+// ═══════════════════════════════════════════════════════════════
+const LOG_COLORS = {
+  DEBUG:    '#64748b',
+  INFO:     '#10b981',
+  WARNING:  '#f59e0b',
+  ERROR:    '#ef4444',
+  CRITICAL: '#e879f9',
+};
+
+async function loadLogs() {
+  const level = document.getElementById('log-level-filter').value;
+  const file  = document.getElementById('log-file-filter').value;
+  const n     = parseInt(document.getElementById('log-lines').value) || 200;
+  const el    = document.getElementById('log-lines-container');
+  el.innerHTML = '<span style="color:var(--text3)">در حال بارگذاری...</span>';
+
+  try {
+    const url = file === 'errors'
+      ? `/api/logs/errors?n=${n}`
+      : `/api/logs?n=${n}&level=${level}`;
+    const r = await fetch(url);
+    const {lines, total} = await r.json();
+    renderLogLines(lines, total);
+  } catch(e) {
+    el.innerHTML = `<span style="color:var(--red)">خطا: ${e.message}</span>`;
+  }
+}
+
+function renderLogLines(lines, total) {
+  const el = document.getElementById('log-lines-container');
+  if (!lines.length) {
+    el.innerHTML = '<span style="color:var(--text3)">لاگی یافت نشد.</span>';
+    updateLogStats(lines);
+    return;
+  }
+
+  el.innerHTML = lines.map(line => {
+    let color = 'var(--text2)';
+    let bg = '';
+    for (const [lvl, c] of Object.entries(LOG_COLORS)) {
+      if (line.includes(`  ${lvl}  `) || line.includes(`  ${lvl} `)) {
+        color = c;
+        if (lvl === 'ERROR' || lvl === 'CRITICAL') bg = `background:${c}10;`;
+        break;
+      }
+    }
+    const safe = line.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return `<div style="color:${color};${bg}padding:1px 4px;border-radius:3px;white-space:pre-wrap;word-break:break-all">${safe}</div>`;
+  }).join('');
+
+  updateLogStats(lines);
+
+  if (document.getElementById('log-autoscroll').checked) {
+    el.scrollTop = el.scrollHeight;
+  }
+}
+
+function updateLogStats(lines) {
+  const counts = {INFO:0, WARNING:0, ERROR:0, CRITICAL:0};
+  lines.forEach(l => {
+    for (const lvl of Object.keys(counts)) {
+      if (l.includes(`  ${lvl}  `) || l.includes(`  ${lvl} `)) { counts[lvl]++; break; }
+    }
+  });
+  document.getElementById('logs-stats').innerHTML = [
+    ['خطوط', lines.length, 'var(--cyan)'],
+    ['INFO', counts.INFO, 'var(--green)'],
+    ['WARNING', counts.WARNING, 'var(--yellow)'],
+    ['ERROR', counts.ERROR + counts.CRITICAL, 'var(--red)'],
+  ].map(([l,v,c]) => `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${c}">${v}</div></div>`).join('');
 }
 
 // ═══════════════════════════════════════════════════════════════
