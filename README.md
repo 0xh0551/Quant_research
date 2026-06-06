@@ -6,7 +6,7 @@
 ![CCXT](https://img.shields.io/badge/CCXT-111%20exchanges-orange)
 ![Parquet](https://img.shields.io/badge/storage-Parquet-blueviolet)
 
-An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across five strategy families, and a professional browser-based research dashboard — all backed by a reproducible Python pipeline.
+**v1.1** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families** (including Ichimoku, SuperTrend, and crypto-native strategies), full **long/short futures support**, an interactive **Strategy Lab** with grid-search optimizer, and **ML/RL fitness scoring** — all in a professional browser-based dashboard.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -26,7 +26,7 @@ An end-to-end quantitative research platform covering data acquisition from **11
 │              ┌────────────────────────────────────────┐         │
 │              │         FastAPI Web Dashboard          │         │
 │              │  Download │ Inventory │ Research       │         │
-│              │  Report   │ Insights                   │         │
+│              │  Report   │ Insights  │ Lab  │ Logs    │         │
 │              └────────────────────────────────────────┘         │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -37,11 +37,15 @@ An end-to-end quantitative research platform covering data acquisition from **11
 
 | Section | Description |
 |---|---|
-| **Download** | Select any of 111+ CCXT exchanges or Nobitex, pick symbol, date range, and multiple timeframes; real-time progress bar; saves to Parquet |
+| **Download** | Select any of 111+ CCXT exchanges or Nobitex, pick symbol, date range, multiple timeframes; real-time progress bar; saves to Parquet |
 | **Data Inventory** | Visual grid of all downloaded datasets with exchange, symbol, timeframe, date range, row count, and file size |
-| **Research** | Multi-select datasets and strategies, configure capital/fees/slippage, run vectorized backtests with live progress |
-| **Report** | Interactive Plotly charts — equity curve with market regime shading, drawdown panel, monthly returns heatmap, rolling Sharpe, fully sortable colour-coded metrics table |
-| **Insights** | Automatic 90-day rolling analysis across all downloaded datasets; regime detection, strategy ranking, momentum gauge |
+| **Research** | Multi-select datasets and 14 strategies, configure capital/fees/slippage, run vectorized backtests (full Long+Short for futures) with live progress |
+| **Report** | Interactive Plotly charts — equity curve with regime shading, drawdown panel, monthly heatmap, rolling Sharpe, sortable metrics table |
+| **Insights** | Deep analysis: 90-day rolling strategy scores, regime detection, strategy rotation on price chart, ML/RL fitness scoring with bot hints |
+| **Lab** | Customize strategy parameters with sliders, run instant backtests, and run Grid Search optimizer to find best params |
+| **Logs** | Live log viewer with level filtering |
+
+Language: FA/EN toggle in the top bar.
 
 ### Python Library
 
@@ -49,8 +53,9 @@ An end-to-end quantitative research platform covering data acquisition from **11
 - **Validation** — gap detection, duplicate timestamps, outlier flagging, OHLCV consistency checks
 - **Feature library** — 40+ technical and statistical features (trend, momentum, volatility, volume, market structure)
 - **Factor research** — Information Coefficient, rank IC, conditional returns, factor decay, cross-factor correlation
-- **Strategies** — five parameterised families: EMA Trend, RSI Mean Reversion, Bollinger Bands, Donchian Breakout, ATR Breakout
-- **Backtesting engine** — vectorised long/flat with fees, slippage, execution delay, Sharpe, Sortino, Calmar, CAGR, profit factor, win rate, max drawdown
+- **Strategies** — 14 parameterised families: trend-following (EMA, MACD, Donchian, ATR, Ichimoku, SuperTrend, CMF), mean-reversion (RSI, Bollinger, Stochastic, VWAP), candlestick patterns (Hammer, Engulfing), and ML (GBM)
+- **Backtesting engine** — vectorised long/flat/short with fees, slippage, execution delay; full futures short support (`allow_short=True`); Sharpe, Sortino, Calmar, CAGR, profit factor, win rate, max drawdown
+- **ML/RL fitness scoring** — quantifies how suitable each dataset is for supervised ML vs reinforcement learning bots; provides actionable hints (Hurst exponent, IC, regime diversity, reward density)
 - **Walk-forward & Monte Carlo** — out-of-sample validation and bootstrapped robustness analysis
 - **ML research** — time-series-safe LightGBM/XGBoost return and volatility forecasting baselines
 
@@ -105,15 +110,52 @@ Nobitex integration uses the public UDF history endpoint (`GET https://apiv2.nob
 
 ## Strategies
 
-| Strategy | Entry Signal | Exit Signal | Best Regime |
-|---|---|---|---|
-| **EMA Trend** | Fast EMA (20) crosses above Slow EMA (100) | Fast EMA crosses below Slow EMA | Trending |
-| **RSI Mean Reversion** | RSI(14) falls below 30 | RSI recovers above 50 | Ranging / oversold |
-| **Bollinger Mean Reversion** | Close drops below lower band (−2σ) | Close returns to moving average | Mean-reverting |
-| **Donchian Breakout** | Close breaks above 55-period high | Close breaks below 55-period low | Trending / breakout |
-| **ATR Breakout** | Close exceeds MA + 1.5×ATR(20) | Close falls back below MA | High-volatility trending |
+All strategies support **long/flat** mode (spot) and **long/short** mode (futures, `-1/0/+1` signals).
 
-All strategies produce a long/flat binary signal. Short selling and leverage are not modelled.
+### Trend-Following
+
+| Strategy | Signal Logic | Futures Short Trigger |
+|---|---|---|
+| **EMA Trend** | Fast EMA > Slow EMA → Long | Fast EMA < Slow EMA → Short |
+| **MACD Cross** | MACD line > Signal → Long | MACD line < Signal → Short |
+| **Donchian Breakout** | Close > 55-bar high → Long | Close < 55-bar low → Short |
+| **ATR Breakout** | Close > MA + 1.5×ATR → Long | Close < MA − 1.5×ATR → Short |
+| **Ichimoku Cloud** 🇯🇵 | Above cloud + Tenkan > Kijun → Long | Below cloud + Tenkan < Kijun → Short |
+| **SuperTrend** | Close above SuperTrend line → Long | Close below SuperTrend line → Short |
+| **CMF Trend** | CMF > threshold → Long | CMF < −threshold → Short |
+
+### Mean-Reversion
+
+| Strategy | Long Entry | Short Entry |
+|---|---|---|
+| **RSI Mean Reversion** | RSI < 30 | RSI > 70 (futures) |
+| **Bollinger Bands** | z-score < −2 | z-score > +2 (futures) |
+| **Stochastic MR** | %D < 20 | %D > 80 (futures) |
+| **VWAP Deviation** 🔷 | Price > 2% below VWAP | Price > 2% above VWAP |
+
+### Candlestick Patterns (Japanese) 🕯️
+
+| Strategy | Bullish Signal | Bearish Signal |
+|---|---|---|
+| **Hammer Pattern** | Hammer candle (long lower shadow) | Shooting Star (long upper shadow) |
+| **Engulfing** | Bullish engulfing | Bearish engulfing |
+
+### ML-Based
+
+| Strategy | Method |
+|---|---|
+| **ML Signal (GBM)** | GradientBoosting on RSI/MACD/Bollinger/ATR features; trains on first 65% of bars |
+
+## Backtesting Assumptions
+
+| Parameter | Default | Notes |
+|---|---|---|
+| Initial capital | $10,000 | Configurable via UI |
+| Transaction fee | 10 bps | One-way; charged on position changes |
+| Slippage | 2 bps | One-way; charged on position changes |
+| Execution delay | 1 bar | Signal at close, executed next bar |
+| Spot position | 0–100% long | Binary long/flat |
+| Futures position | −100% to +100% | Full long/short enabled automatically for futures datasets |
 
 ## Backtesting Assumptions
 
