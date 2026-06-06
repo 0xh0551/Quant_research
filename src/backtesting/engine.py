@@ -19,6 +19,7 @@ class BacktestConfig:
     spread_bps: float = 0.0
     execution_delay: int = 1
     periods_per_year: int = 365
+    allow_short: bool = False  # enables -1 (short) positions for futures
 
 
 @dataclass(frozen=True)
@@ -41,7 +42,8 @@ class VectorizedBacktester:
         """Run a backtest using delayed execution and transaction costs."""
 
         close_returns = data["close"].pct_change().fillna(0.0)
-        position = target_position.shift(self.config.execution_delay).fillna(0.0).clip(0.0, 1.0)
+        clip_min = -1.0 if self.config.allow_short else 0.0
+        position = target_position.shift(self.config.execution_delay).fillna(0.0).clip(clip_min, 1.0)
         turnover = position.diff().abs().fillna(position.abs())
         cost_bps = self.config.fee_bps + self.config.slippage_bps + self.config.spread_bps
         costs = turnover * (cost_bps / 10_000)

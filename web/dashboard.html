@@ -305,6 +305,47 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
   .nav-item span,.sidebar-logo p,.sidebar-logo h1,.sidebar-footer{display:none}
   .nav-icon{margin:auto}
 }
+
+/* Language toggle */
+.lang-toggle{
+  display:flex;align-items:center;gap:4px;background:var(--bg4);border:1px solid var(--border2);
+  border-radius:6px;padding:3px;
+}
+.lang-btn{
+  padding:4px 10px;border-radius:4px;font-size:12px;font-weight:600;cursor:pointer;
+  transition:all .2s;color:var(--text2);border:none;background:transparent;font-family:var(--font);
+}
+.lang-btn.active{background:var(--bg3);color:var(--cyan)}
+
+/* Futures badge */
+.futures-badge{
+  font-size:10px;padding:2px 7px;border-radius:4px;
+  background:rgba(239,68,68,.2);color:#fca5a5;font-weight:700;
+}
+
+/* ML/RL fitness */
+.fitness-card{
+  background:var(--bg4);border:1px solid var(--border);border-radius:12px;padding:16px;
+}
+.fitness-score{
+  font-size:42px;font-weight:800;line-height:1;
+}
+.fitness-bar-bg{height:12px;background:var(--bg3);border-radius:6px;overflow:hidden;margin:8px 0}
+.fitness-bar-fill{height:100%;border-radius:6px;transition:width .8s ease}
+.fitness-detail{font-size:11px;color:var(--text3);display:flex;flex-direction:column;gap:3px;margin-top:10px}
+.fitness-detail-row{display:flex;justify-content:space-between;padding:2px 0;border-bottom:1px solid var(--border)}
+
+/* Lab section */
+.param-group{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.param-group label{width:160px;flex-shrink:0;font-size:12px;color:var(--text2)}
+.param-group input{flex:1}
+.param-group span{width:50px;text-align:right;font-size:12px;color:var(--cyan);font-weight:600}
+.opt-result-row{
+  display:grid;grid-template-columns:auto 1fr auto auto auto;gap:10px;align-items:center;
+  padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;
+}
+.opt-result-row:hover{background:rgba(255,255,255,.02)}
+.opt-result-row.best-row{background:rgba(0,212,255,.05);border-left:2px solid var(--cyan)}
 </style>
 </head>
 <body>
@@ -349,17 +390,24 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
       </svg>
       <span>اینسایت</span>
     </div>
+    <div class="nav-item" onclick="showSection('lab')">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+      </svg>
+      <span data-t="lab_nav">آزمایشگاه</span>
+      <span class="nav-badge" style="background:var(--purple)">NEW</span>
+    </div>
     <div class="nav-item" onclick="showSection('logs')">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
         <line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>
       </svg>
-      <span>لاگ‌ها</span>
+      <span data-t="logs_nav">لاگ‌ها</span>
     </div>
   </div>
 
   <div class="sidebar-footer">
-    <p>Quant Research v1.0</p>
+    <p>Quant Research v1.1</p>
   </div>
 </nav>
 
@@ -369,7 +417,11 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
     <h2 id="page-title">دانلود داده</h2>
     <span class="subtitle" id="page-sub">دریافت داده از صرافی‌ها</span>
     <div class="topbar-actions">
-      <button class="btn btn-secondary btn-sm" onclick="refreshCurrentSection()">↻ رفرش</button>
+      <div class="lang-toggle">
+        <button class="lang-btn active" id="lang-fa" onclick="setLang('fa',this)">FA</button>
+        <button class="lang-btn" id="lang-en" onclick="setLang('en',this)">EN</button>
+      </div>
+      <button class="btn btn-secondary btn-sm" onclick="refreshCurrentSection()">↻ <span data-t="refresh">رفرش</span></button>
     </div>
   </div>
   <div id="content">
@@ -581,6 +633,36 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
                 <div style="font-weight:600;font-size:13px">Stochastic MR <span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;padding:1px 6px;border-radius:3px;margin-right:6px">MR</span></div>
                 <div style="font-size:11px;color:var(--text3);margin-top:2px">%D&lt;20 → Long، %D&gt;80 → خروج</div>
               </div>
+              <div class="ds-item" onclick="toggleStrategy('ichimoku',this)" data-strat="ichimoku">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">Ichimoku Cloud <span style="font-size:10px;background:rgba(0,212,255,.15);color:var(--cyan);padding:1px 6px;border-radius:3px;margin-right:6px">Trend 🇯🇵</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Long بالای ابر، Short زیر ابر + Tenkan/Kijun</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('supertrend',this)" data-strat="supertrend">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">SuperTrend <span style="font-size:10px;background:rgba(249,115,22,.15);color:var(--orange);padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">ATR-based trend: Long بالای خط، Short زیر خط</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('vwap_deviation',this)" data-strat="vwap_deviation">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">VWAP Deviation <span style="font-size:10px;background:rgba(56,189,248,.15);color:#38bdf8;padding:1px 6px;border-radius:3px;margin-right:6px">MR 🔷</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">ورود هنگام انحراف قیمت از VWAP — مناسب کریپتو</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('cmf_trend',this)" data-strat="cmf_trend">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">CMF Trend <span style="font-size:10px;background:rgba(16,185,129,.15);color:var(--green);padding:1px 6px;border-radius:3px;margin-right:6px">Trend</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Chaikin Money Flow — Long جریان مثبت، Short جریان منفی</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('hammer_pattern',this)" data-strat="hammer_pattern">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">Hammer Pattern <span style="font-size:10px;background:rgba(245,158,11,.15);color:var(--yellow);padding:1px 6px;border-radius:3px;margin-right:6px">MR 🕯️</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">Hammer → Long | Shooting Star → Short (فیوچرز)</div>
+              </div>
+              <div class="ds-item" onclick="toggleStrategy('engulfing',this)" data-strat="engulfing">
+                <input type="checkbox"/>
+                <div style="font-weight:600;font-size:13px">Engulfing Pattern <span style="font-size:10px;background:rgba(232,121,249,.15);color:#e879f9;padding:1px 6px;border-radius:3px;margin-right:6px">MR 🕯️</span></div>
+                <div style="font-size:11px;color:var(--text3);margin-top:2px">کندل بلعنده صعودی/نزولی — الگوی ژاپنی قوی</div>
+              </div>
               <div class="ds-item" onclick="toggleStrategy('ml_signal',this)" data-strat="ml_signal">
                 <input type="checkbox"/>
                 <div style="font-weight:600;font-size:13px">ML Signal (GBM) <span style="font-size:10px;background:rgba(16,185,129,.15);color:var(--green);padding:1px 6px;border-radius:3px;margin-right:6px">ML</span></div>
@@ -737,14 +819,53 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
           <!-- Context: regime + momentum + scores -->
           <div class="grid-2" style="margin-bottom:16px;gap:12px">
             <div class="card" style="margin-bottom:0">
-              <div class="card-title"><span class="dot"></span>امتیاز استراتژی‌ها (۹۰ روز اخیر)</div>
+              <div class="card-title"><span class="dot"></span><span data-t="sharpe_scores">امتیاز استراتژی‌ها (۹۰ روز اخیر)</span></div>
               <div id="ins-sharpe-bars"></div>
             </div>
             <div class="card" style="margin-bottom:0">
-              <div class="card-title"><span class="dot"></span>چرخش استراتژی (پنجره‌های گذشته)</div>
+              <div class="card-title"><span class="dot"></span><span data-t="strategy_rotation_mini">چرخش استراتژی (خلاصه)</span></div>
               <div id="ins-windows-timeline"></div>
             </div>
           </div>
+
+          <!-- Strategy Rotation on Price Chart -->
+          <div class="chart-container" style="margin-bottom:16px">
+            <div class="chart-header">
+              <span class="chart-title" data-t="rotation_price_title">چرخش استراتژی روی نمودار قیمت</span>
+              <div class="chart-actions">
+                <span style="font-size:11px;color:var(--text3)" data-t="rotation_price_hint">رنگ پس‌زمینه = برترین استراتژی آن دوره</span>
+              </div>
+            </div>
+            <div id="chart-ins-strategy-price" style="height:380px"></div>
+          </div>
+
+          <!-- ML/RL Fitness -->
+          <div class="grid-2" style="margin-bottom:16px;gap:12px" id="ins-ml-rl-section">
+            <div class="fitness-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:var(--cyan)" data-t="ml_fitness">ML Fitness</div>
+                  <div style="font-size:11px;color:var(--text3)" data-t="ml_fitness_sub">مناسب بودن برای یادگیری ماشین</div>
+                </div>
+                <div class="fitness-score" id="ins-ml-score" style="color:var(--cyan)">—</div>
+              </div>
+              <div class="fitness-bar-bg"><div class="fitness-bar-fill" id="ins-ml-bar" style="width:0%;background:var(--cyan)"></div></div>
+              <div id="ins-ml-detail" class="fitness-detail"></div>
+            </div>
+            <div class="fitness-card">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div>
+                  <div style="font-size:13px;font-weight:700;color:var(--purple)" data-t="rl_fitness">RL Fitness</div>
+                  <div style="font-size:11px;color:var(--text3)" data-t="rl_fitness_sub">مناسب بودن برای یادگیری تقویتی</div>
+                </div>
+                <div class="fitness-score" id="ins-rl-score" style="color:#a78bfa">—</div>
+              </div>
+              <div class="fitness-bar-bg"><div class="fitness-bar-fill" id="ins-rl-bar" style="width:0%;background:#7c3aed"></div></div>
+              <div id="ins-rl-detail" class="fitness-detail"></div>
+            </div>
+          </div>
+          <!-- ML/RL Recommendation banner -->
+          <div id="ins-ml-rl-banner" style="margin-bottom:16px;display:none"></div>
 
           <!-- Advanced: Oracle equity chart (collapsed by default) -->
           <details style="margin-bottom:16px">
@@ -758,6 +879,90 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
             </div>
           </details>
 
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══ LAB SECTION ═══ -->
+    <div class="section" id="sec-lab">
+      <div class="grid-2" style="align-items:start">
+        <!-- Left: Config -->
+        <div>
+          <div class="card">
+            <div class="card-title"><span class="dot"></span><span data-t="lab_dataset">انتخاب دیتاست</span></div>
+            <div class="form-group">
+              <select id="lab-dataset-select" onchange="onLabDatasetChange()" style="width:100%">
+                <option value="">انتخاب دیتاست...</option>
+              </select>
+            </div>
+            <div id="lab-futures-notice" style="display:none;font-size:12px;margin-top:6px;padding:8px 12px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:8px;color:#fca5a5">
+              ⚡ <strong>Futures:</strong> استراتژی‌ها هم Long و هم Short باز می‌کنند
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span><span data-t="lab_strategy_params">استراتژی و پارامترها</span></div>
+            <div class="form-group">
+              <label data-t="strategy_label">استراتژی</label>
+              <select id="lab-strategy-select" onchange="onLabStrategyChange()" style="width:100%">
+                <option value="">انتخاب استراتژی...</option>
+              </select>
+            </div>
+            <div id="lab-params-container" style="margin-top:12px"></div>
+            <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px" onclick="runLabBacktest()" id="lab-run-btn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              <span data-t="lab_run">اجرای بک‌تست</span>
+            </button>
+          </div>
+
+          <div class="card">
+            <div class="card-title"><span class="dot"></span><span data-t="optimizer">بهینه‌ساز (Grid Search)</span></div>
+            <p style="font-size:12px;color:var(--text3);margin-bottom:12px" data-t="optimizer_desc">جستجوی بهترین ترکیب پارامترها برای استراتژی انتخابی روی دیتاست فعلی</p>
+            <button class="btn btn-secondary" style="width:100%;justify-content:center" onclick="runLabOptimizer()" id="lab-opt-btn" disabled>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93A10 10 0 0 0 4.93 4.93M19.07 19.07A10 10 0 0 0 4.93 19.07M22 12h-4M6 12H2M12 6V2M12 22v-4"/></svg>
+              <span data-t="run_optimizer">اجرای بهینه‌ساز</span>
+            </button>
+            <div id="lab-opt-progress" style="display:none;margin-top:12px">
+              <div class="progress-wrap">
+                <div class="progress-label"><span data-t="progress">پیشرفت</span><span id="lab-opt-pct">0%</span></div>
+                <div class="progress-bar-bg"><div class="progress-bar" id="lab-opt-bar" style="width:0%;background:linear-gradient(90deg,var(--purple2),var(--purple))"></div></div>
+                <div class="progress-msg" id="lab-opt-msg"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right: Results -->
+        <div>
+          <div id="lab-results-empty" class="empty-state" style="padding:80px 20px">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64" style="opacity:.3;margin-bottom:16px">
+              <path d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18"/>
+            </svg>
+            <p data-t="lab_empty">یک دیتاست و استراتژی انتخاب کنید، سپس بک‌تست را اجرا کنید</p>
+          </div>
+
+          <div id="lab-results-content" style="display:none">
+            <div class="card" style="margin-bottom:12px">
+              <div class="card-title"><span class="dot"></span><span data-t="lab_result">نتایج بک‌تست</span> <span id="lab-short-badge" style="display:none" class="futures-badge">Short/Long</span></div>
+              <div class="metric-grid" id="lab-metrics-grid" style="margin-bottom:12px"></div>
+              <div class="chart-container">
+                <div class="chart-header"><span class="chart-title" data-t="equity_curve">منحنی سهام</span></div>
+                <div id="chart-lab-equity" style="height:300px"></div>
+              </div>
+              <div class="chart-container" style="margin-top:8px">
+                <div class="chart-header"><span class="chart-title" data-t="position_chart">نمودار پوزیشن</span></div>
+                <div id="chart-lab-position" style="height:160px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="lab-opt-results" style="display:none">
+            <div class="card">
+              <div class="card-title"><span class="dot"></span><span data-t="opt_results">نتایج بهینه‌ساز</span></div>
+              <div id="lab-opt-best" style="margin-bottom:12px;padding:12px;background:rgba(0,212,255,.06);border:1px solid rgba(0,212,255,.2);border-radius:8px"></div>
+              <div class="table-wrap" id="lab-opt-table-wrap" style="max-height:320px;overflow-y:auto"></div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -819,7 +1024,64 @@ const state = {
   sortDir: 1,
   insightDatasets: [],
   insightDetail: null,
+  lang: 'fa',
+  lab: {dataset: null, strategy: null, params: {}},
 };
+
+// ═══════════════════════════════════════════════════════════════
+// TRANSLATIONS
+// ═══════════════════════════════════════════════════════════════
+const LANG_DICT = {
+  fa: {
+    download_nav:'دانلود داده', inventory_nav:'گزارش داده', research_nav:'ریسرچ',
+    report_nav:'ریپورت', insights_nav:'اینسایت', lab_nav:'آزمایشگاه', logs_nav:'لاگ‌ها',
+    refresh:'رفرش', strategy_label:'استراتژی',
+    lab_dataset:'انتخاب دیتاست', lab_strategy_params:'استراتژی و پارامترها',
+    lab_run:'اجرای بک‌تست', optimizer:'بهینه‌ساز (Grid Search)',
+    optimizer_desc:'جستجوی بهترین ترکیب پارامترها برای استراتژی انتخابی',
+    run_optimizer:'اجرای بهینه‌ساز', progress:'پیشرفت',
+    lab_empty:'یک دیتاست و استراتژی انتخاب کنید، سپس بک‌تست را اجرا کنید',
+    lab_result:'نتایج بک‌تست', equity_curve:'منحنی سهام',
+    position_chart:'نمودار پوزیشن', opt_results:'نتایج بهینه‌ساز',
+    sharpe_scores:'امتیاز استراتژی‌ها (۹۰ روز اخیر)',
+    strategy_rotation_mini:'چرخش استراتژی (خلاصه)',
+    rotation_price_title:'چرخش استراتژی روی نمودار قیمت',
+    rotation_price_hint:'رنگ پس‌زمینه = برترین استراتژی آن دوره',
+    ml_fitness:'ML Fitness', ml_fitness_sub:'مناسب بودن برای یادگیری ماشین',
+    rl_fitness:'RL Fitness', rl_fitness_sub:'مناسب بودن برای یادگیری تقویتی',
+  },
+  en: {
+    download_nav:'Download Data', inventory_nav:'Data Report', research_nav:'Research',
+    report_nav:'Report', insights_nav:'Insights', lab_nav:'Lab', logs_nav:'Logs',
+    refresh:'Refresh', strategy_label:'Strategy',
+    lab_dataset:'Select Dataset', lab_strategy_params:'Strategy & Parameters',
+    lab_run:'Run Backtest', optimizer:'Optimizer (Grid Search)',
+    optimizer_desc:'Find the best parameter combination for the selected strategy',
+    run_optimizer:'Run Optimizer', progress:'Progress',
+    lab_empty:'Select a dataset and strategy, then run the backtest',
+    lab_result:'Backtest Results', equity_curve:'Equity Curve',
+    position_chart:'Position Chart', opt_results:'Optimizer Results',
+    sharpe_scores:'Strategy Scores (Last 90 Days)',
+    strategy_rotation_mini:'Strategy Rotation (Summary)',
+    rotation_price_title:'Strategy Rotation on Price Chart',
+    rotation_price_hint:'Background color = best strategy for that period',
+    ml_fitness:'ML Fitness', ml_fitness_sub:'Suitability for Machine Learning',
+    rl_fitness:'RL Fitness', rl_fitness_sub:'Suitability for Reinforcement Learning',
+  },
+};
+
+function setLang(lang, btn) {
+  state.lang = lang;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = lang === 'fa' ? 'rtl' : 'ltr';
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  const dict = LANG_DICT[lang] || LANG_DICT.fa;
+  document.querySelectorAll('[data-t]').forEach(el => {
+    const key = el.dataset.t;
+    if (dict[key]) el.textContent = dict[key];
+  });
+}
 
 const STRATEGY_LABELS = {
   ema_trend: 'EMA Trend',
@@ -829,6 +1091,12 @@ const STRATEGY_LABELS = {
   atr_breakout: 'ATR Breakout',
   macd_cross: 'MACD Cross',
   stochastic_mr: 'Stochastic MR',
+  ichimoku: 'Ichimoku Cloud',
+  supertrend: 'SuperTrend',
+  vwap_deviation: 'VWAP Dev.',
+  cmf_trend: 'CMF Trend',
+  hammer_pattern: 'Hammer',
+  engulfing: 'Engulfing',
   ml_signal: 'ML Signal (GBM)',
 };
 
@@ -840,8 +1108,16 @@ const STRATEGY_COLORS = {
   atr_breakout: '#f97316',
   macd_cross: '#e879f9',
   stochastic_mr: '#38bdf8',
+  ichimoku: '#06b6d4',
+  supertrend: '#fb923c',
+  vwap_deviation: '#60a5fa',
+  cmf_trend: '#34d399',
+  hammer_pattern: '#fbbf24',
+  engulfing: '#c084fc',
   ml_signal: '#4ade80',
 };
+
+const ALL_STRATEGIES = Object.keys(STRATEGY_LABELS);
 
 const PLOTLY_DARK = {
   paper_bgcolor: '#161b27',
@@ -874,6 +1150,7 @@ const SECTION_TITLES = {
   research: ['ریسرچ','اجرای بک‌تست استراتژی‌ها'],
   report: ['ریپورت','نتایج تحلیل کوانت'],
   insights: ['اینسایت','پیشنهاد بهترین استراتژی'],
+  lab: ['آزمایشگاه','کاستومایز و بهینه‌سازی استراتژی'],
   logs: ['لاگ‌های سیستم','رویدادهای داخلی پلتفرم'],
 };
 
@@ -889,6 +1166,7 @@ function showSection(name) {
   if (name === 'inventory') loadInventory();
   if (name === 'research') populateResearchDatasets();
   if (name === 'insights') loadInsights();
+  if (name === 'lab') initLab();
   if (name === 'logs') loadLogs();
 }
 
@@ -896,6 +1174,7 @@ function refreshCurrentSection() {
   if (state.currentSection === 'inventory') loadInventory();
   else if (state.currentSection === 'insights') loadInsights();
   else if (state.currentSection === 'research') populateResearchDatasets();
+  else if (state.currentSection === 'lab') initLab();
   else if (state.currentSection === 'logs') loadLogs();
 }
 
@@ -1787,7 +2066,7 @@ function renderDetailedInsight(d) {
       </div>`;
     }).join('');
 
-  // Strategy rotation timeline
+  // Strategy rotation mini-timeline
   const wins = d.strategy_windows || [];
   const tlEl = document.getElementById('ins-windows-timeline');
   if (wins.length) {
@@ -1803,12 +2082,114 @@ function renderDetailedInsight(d) {
             onmouseover="this.style.opacity='.6'" onmouseout="this.style.opacity='1'"></div>`;
         }).join('')}
       </div>
-      <div style="font-size:11px;color:var(--text3)">هر ستون = یک پنجره زمانی | رنگ = برترین استراتژی آن دوره | hover برای جزئیات</div>`;
+      <div style="font-size:11px;color:var(--text3)">هر ستون = یک پنجره | رنگ = برترین استراتژی | hover جزئیات</div>`;
   } else {
-    tlEl.innerHTML = '<p style="font-size:12px;color:var(--text3);padding:10px 0">داده کافی برای پنجره‌بندی نیست</p>';
+    tlEl.innerHTML = '<p style="font-size:12px;color:var(--text3);padding:10px 0">داده کافی نیست</p>';
+  }
+
+  // Strategy Rotation on Price Chart
+  renderStrategyRotationOnPrice(d);
+
+  // ML/RL Fitness
+  renderMLRLFitness(d.ml_rl_fitness);
+
+  // Futures banner
+  if (d.allow_short) {
+    const banner = document.getElementById('ins-recommendation-main');
+    const futuresToast = document.createElement('div');
+    futuresToast.style.cssText = 'font-size:12px;padding:8px 16px;background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.2);color:#fca5a5';
+    futuresToast.innerHTML = '⚡ <strong>Futures Mode:</strong> استراتژی‌ها با هر دو پوزیشن Long و Short تست شده‌اند';
+    if (banner.firstChild) banner.insertBefore(futuresToast, banner.firstChild);
   }
 
   document.getElementById('insights-detail-content').style.display = 'block';
+}
+
+function renderStrategyRotationOnPrice(d) {
+  const ts = d.timestamps || [];
+  const price = d.price || [];
+  const wins = d.strategy_windows || [];
+
+  const traces = [{
+    x: ts, y: price,
+    mode: 'lines', name: 'Price',
+    line: {color: '#94a3b8', width: 1.5},
+    hovertemplate: '%{x}<br>$%{y:.4f}<extra>Price</extra>',
+  }];
+
+  const shapes = wins.map(w => ({
+    type: 'rect', xref: 'x', yref: 'paper',
+    x0: w.start, x1: w.end, y0: 0, y1: 1,
+    fillcolor: (STRATEGY_COLORS[w.best_strategy] || '#94a3b8') + '1a',
+    line: {width: 1, color: (STRATEGY_COLORS[w.best_strategy] || '#94a3b8') + '40'},
+    layer: 'below',
+  }));
+
+  // Legend trace per strategy (invisible, just for legend)
+  const usedStrats = [...new Set(wins.map(w => w.best_strategy))];
+  usedStrats.forEach(strat => {
+    traces.push({
+      x: [null], y: [null], mode: 'markers',
+      marker: {color: STRATEGY_COLORS[strat] || '#94a3b8', size: 10, symbol: 'square'},
+      name: STRATEGY_LABELS[strat] || strat,
+      showlegend: true,
+    });
+  });
+
+  Plotly.react('chart-ins-strategy-price', traces, {
+    ...PLOTLY_DARK,
+    shapes,
+    xaxis: {showgrid: true, gridcolor: '#1e2537', zeroline: false},
+    yaxis: {showgrid: true, gridcolor: '#1e2537', zeroline: false, title: 'Price'},
+    legend: {bgcolor: 'rgba(0,0,0,.5)', bordercolor: '#252d3d', borderwidth: 1, x: 0, y: 1},
+    hovermode: 'x unified',
+    margin: {l: 60, r: 20, t: 20, b: 50},
+  }, {responsive: true});
+}
+
+function renderMLRLFitness(fit) {
+  if (!fit) return;
+  const mlScore = fit.ml_score || 0;
+  const rlScore = fit.rl_score || 0;
+
+  document.getElementById('ins-ml-score').textContent = mlScore;
+  document.getElementById('ins-rl-score').textContent = rlScore;
+  document.getElementById('ins-ml-bar').style.width = mlScore + '%';
+  document.getElementById('ins-rl-bar').style.width = rlScore + '%';
+
+  const det = fit.details || {};
+  const mlRows = [
+    ['Autocorrelation', det.autocorrelation],
+    ['Hurst Exponent', det.hurst],
+    ['Info Coefficient', det.ic],
+    ['Stationarity', det.stationarity],
+    ['Sample Count', det.sample_count],
+  ];
+  const rlRows = [
+    ['Regime Changes', det.regime_changes],
+    ['Regime Diversity', det.regime_diversity],
+    ['Reward Density', det.reward_density],
+    ['Vol. Clustering', det.vol_clustering],
+    ['Kurtosis (Fat Tails)', det.kurtosis],
+  ];
+  document.getElementById('ins-ml-detail').innerHTML = mlRows.map(([l, v]) =>
+    `<div class="fitness-detail-row"><span>${l}</span><span style="color:var(--cyan);font-weight:600">${v !== undefined ? (typeof v === 'number' && v > 100 ? v : Number(v).toFixed(3)) : '—'}</span></div>`
+  ).join('');
+  document.getElementById('ins-rl-detail').innerHTML = rlRows.map(([l, v]) =>
+    `<div class="fitness-detail-row"><span>${l}</span><span style="color:#a78bfa;font-weight:600">${v !== undefined ? (typeof v === 'number' && v > 100 ? v : Number(v).toFixed(3)) : '—'}</span></div>`
+  ).join('');
+
+  const banner = document.getElementById('ins-ml-rl-banner');
+  if (fit.recommendation) {
+    const colors = {ml: 'var(--cyan)', rl: '#a78bfa', both: 'var(--yellow)'};
+    const icons = {ml: '🤖', rl: '🎮', both: '⚖️'};
+    const c = colors[fit.recommendation] || 'var(--cyan)';
+    banner.style.display = 'block';
+    banner.innerHTML = `<div style="padding:14px 18px;background:${c}0d;border:1px solid ${c}33;border-radius:10px">
+      <div style="font-size:14px;font-weight:700;color:${c};margin-bottom:6px">${icons[fit.recommendation] || ''} ${fit.hint}</div>
+      <div style="font-size:12px;color:var(--text2)">${fit.bot_hint || ''}</div>
+    </div>`;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1904,6 +2285,226 @@ function updateLogStats(lines) {
     ['WARNING', counts.WARNING, 'var(--yellow)'],
     ['ERROR', counts.ERROR + counts.CRITICAL, 'var(--red)'],
   ].map(([l,v,c]) => `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${c}">${v}</div></div>`).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LAB
+// ═══════════════════════════════════════════════════════════════
+function initLab() {
+  const sel = document.getElementById('lab-dataset-select');
+  sel.innerHTML = '<option value="">انتخاب دیتاست...</option>' +
+    state.inventory.map(item => {
+      const isFutures = item.market_type && item.market_type !== 'spot';
+      return `<option value="${item.file}" data-futures="${isFutures}">${item.symbol} (${item.exchange} · ${item.timeframe}${isFutures ? ' · FUTURES' : ''})</option>`;
+    }).join('');
+
+  const stSel = document.getElementById('lab-strategy-select');
+  stSel.innerHTML = '<option value="">انتخاب استراتژی...</option>' +
+    Object.entries(STRATEGY_LABELS).map(([k, v]) =>
+      `<option value="${k}">${v}</option>`
+    ).join('');
+}
+
+function onLabDatasetChange() {
+  const sel = document.getElementById('lab-dataset-select');
+  const opt = sel.options[sel.selectedIndex];
+  const isFutures = opt && opt.dataset.futures === 'true';
+  state.lab.dataset = sel.value;
+  document.getElementById('lab-futures-notice').style.display = isFutures ? 'block' : 'none';
+  updateLabButtons();
+}
+
+function onLabStrategyChange() {
+  const strat = document.getElementById('lab-strategy-select').value;
+  state.lab.strategy = strat;
+  if (!strat) {
+    document.getElementById('lab-params-container').innerHTML = '';
+    updateLabButtons();
+    return;
+  }
+  fetch(`/api/lab/params/${strat}`)
+    .then(r => r.json())
+    .then(d => renderLabParams(d.params || []))
+    .catch(() => document.getElementById('lab-params-container').innerHTML = '');
+  updateLabButtons();
+}
+
+function renderLabParams(params) {
+  const container = document.getElementById('lab-params-container');
+  if (!params.length) { container.innerHTML = '<p style="font-size:12px;color:var(--text3)">این استراتژی پارامتر قابل تنظیم ندارد</p>'; return; }
+  container.innerHTML = `<div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:600">پارامترهای قابل تنظیم:</div>` +
+    params.map(p => `
+      <div class="param-group">
+        <label title="${p.key}">${p.label}</label>
+        <input type="range" id="lab-p-${p.key}" min="${p.min}" max="${p.max}"
+          step="${p.type === 'int' ? 1 : (p.max - p.min) / 100}"
+          value="${p.default}"
+          oninput="document.getElementById('lab-pv-${p.key}').textContent=parseFloat(this.value).toFixed(p.type==='int'?0:2);state.lab.params['${p.key}']=parseFloat(this.value)"/>
+        <span id="lab-pv-${p.key}">${p.default}</span>
+      </div>`
+    ).join('');
+  // Init params with defaults
+  state.lab.params = {};
+  params.forEach(p => { state.lab.params[p.key] = p.default; });
+}
+
+function updateLabButtons() {
+  const ready = !!(state.lab.dataset && state.lab.strategy);
+  document.getElementById('lab-run-btn').disabled = !ready;
+  document.getElementById('lab-opt-btn').disabled = !ready;
+}
+
+async function runLabBacktest() {
+  if (!state.lab.dataset || !state.lab.strategy) return;
+  const btn = document.getElementById('lab-run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  document.getElementById('lab-results-empty').style.display = 'none';
+  document.getElementById('lab-results-content').style.display = 'none';
+  try {
+    const r = await fetch('/api/lab/run', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        filename: state.lab.dataset,
+        strategy: state.lab.strategy,
+        params: state.lab.params,
+      }),
+    });
+    if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.statusText); }
+    const data = await r.json();
+    renderLabResults(data);
+  } catch(e) {
+    document.getElementById('lab-results-empty').style.display = 'flex';
+    document.getElementById('lab-results-empty').innerHTML = `<p style="color:var(--red)">خطا: ${e.message}</p>`;
+  }
+  btn.disabled = false;
+  btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> <span data-t="lab_run">اجرای بک‌تست</span>';
+}
+
+function renderLabResults(data) {
+  document.getElementById('lab-results-content').style.display = 'block';
+  document.getElementById('lab-short-badge').style.display = data.allow_short ? 'inline-flex' : 'none';
+
+  const m = data.metrics || {};
+  const bm = data.bh_metrics || {};
+  const MDEF = [
+    ['Sharpe', 'sharpe', n2], ['CAGR', 'cagr', pct],
+    ['Total Return', 'total_return', pct], ['Max DD', 'max_drawdown', pct],
+    ['Profit Factor', 'profit_factor', n2], ['Win Rate', 'win_rate', pct],
+  ];
+  document.getElementById('lab-metrics-grid').innerHTML = MDEF.map(([label, key, fmt]) => {
+    const v = m[key];
+    const bv = bm[key];
+    const better = key === 'max_drawdown' ? v > bv : v > bv;
+    return `<div class="metric-card">
+      <div class="lbl">${label}</div>
+      <div class="val" style="font-size:18px;color:${v >= 0 ? 'var(--green)' : 'var(--red)'}">${fmt(v)}</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:2px">B&H: ${fmt(bv)}</div>
+    </div>`;
+  }).join('');
+
+  const ts = data.timestamps || [];
+  Plotly.react('chart-lab-equity', [
+    {x: ts, y: data.bh_equity, mode: 'lines', name: 'Buy & Hold', line: {color: '#94a3b8', width: 1.5, dash: 'dot'}},
+    {x: ts, y: data.equity, mode: 'lines', name: STRATEGY_LABELS[state.lab.strategy] || state.lab.strategy, line: {color: STRATEGY_COLORS[state.lab.strategy] || 'var(--cyan)', width: 2.5}},
+  ], {...PLOTLY_DARK, xaxis: {showgrid: true, gridcolor: '#1e2537'}, yaxis: {showgrid: true, gridcolor: '#1e2537', title: '$'}, hovermode: 'x unified', margin: {l:50,r:15,t:10,b:40}, legend: {bgcolor:'rgba(0,0,0,.4)', bordercolor:'#252d3d'}}, {responsive:true});
+
+  const posColor = data.allow_short
+    ? (data.position || []).map(v => v > 0 ? 'rgba(16,185,129,.7)' : v < 0 ? 'rgba(239,68,68,.7)' : 'rgba(100,116,139,.4)')
+    : 'rgba(0,212,255,.6)';
+  Plotly.react('chart-lab-position', [{
+    x: ts, y: data.position,
+    type: 'bar', name: 'Position',
+    marker: {color: posColor},
+    hovertemplate: '%{x}<br>Pos: %{y:.2f}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK,
+    xaxis: {showgrid: false, gridcolor: '#1e2537'},
+    yaxis: {showgrid: true, gridcolor: '#1e2537', range: data.allow_short ? [-1.2, 1.2] : [-0.1, 1.2], zeroline: true, zerolinecolor: '#2e3a52'},
+    margin: {l:50,r:15,t:5,b:40},
+  }, {responsive:true});
+}
+
+async function runLabOptimizer() {
+  if (!state.lab.dataset || !state.lab.strategy) return;
+  const btn = document.getElementById('lab-opt-btn');
+  btn.disabled = true;
+  document.getElementById('lab-opt-progress').style.display = 'block';
+  document.getElementById('lab-opt-results').style.display = 'none';
+  document.getElementById('lab-opt-bar').style.width = '0%';
+  document.getElementById('lab-opt-bar').style.background = 'linear-gradient(90deg,var(--purple2),var(--purple))';
+  try {
+    const r = await fetch('/api/lab/optimize', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({filename: state.lab.dataset, strategy: state.lab.strategy}),
+    });
+    const {job_id} = await r.json();
+    const es = new EventSource(`/api/jobs/${job_id}/events`);
+    es.onmessage = (e) => {
+      const d = JSON.parse(e.data);
+      const pct = Math.round(d.progress || 0);
+      document.getElementById('lab-opt-bar').style.width = pct + '%';
+      document.getElementById('lab-opt-pct').textContent = pct + '%';
+      document.getElementById('lab-opt-msg').textContent = d.message || '';
+      if (d.status === 'done') {
+        document.getElementById('lab-opt-bar').style.background = 'linear-gradient(90deg,#059669,#10b981)';
+        es.close();
+        fetch(`/api/jobs/${job_id}/result`).then(r2 => r2.json()).then(renderOptResults);
+        btn.disabled = false;
+      } else if (d.status === 'error') {
+        document.getElementById('lab-opt-bar').style.background = 'var(--red)';
+        es.close();
+        btn.disabled = false;
+      }
+    };
+    es.onerror = () => { es.close(); btn.disabled = false; };
+  } catch(e) {
+    btn.disabled = false;
+    document.getElementById('lab-opt-msg').textContent = 'خطا: ' + e.message;
+  }
+}
+
+function renderOptResults(data) {
+  document.getElementById('lab-opt-results').style.display = 'block';
+  const best = data.best || {};
+  const allRes = data.all_results || [];
+  const strat = data.strategy || state.lab.strategy;
+
+  document.getElementById('lab-opt-best').innerHTML = `
+    <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:6px">🏆 بهترین پارامترها — ${STRATEGY_LABELS[strat]||strat}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+      ${Object.entries(best.params||{}).map(([k,v])=>`<span style="font-size:12px;padding:3px 10px;border-radius:5px;background:rgba(0,212,255,.1);color:var(--cyan)"><b>${k}</b>: ${v}</span>`).join('')}
+    </div>
+    <div style="display:flex;gap:16px;flex-wrap:wrap">
+      ${[['Sharpe', best.sharpe, n2], ['CAGR', best.cagr, pct], ['Max DD', best.max_drawdown, pct], ['Win Rate', best.win_rate, pct]].map(([l,v,f])=>`<span style="font-size:12px;color:var(--text2)">${l}: <b style="color:var(--green)">${f(v)}</b></span>`).join('')}
+    </div>`;
+
+  const header = `<div class="opt-result-row" style="font-weight:700;font-size:11px;color:var(--text3);text-transform:uppercase;padding-bottom:4px">
+    <span>#</span><span>پارامترها</span><span>Sharpe</span><span>CAGR</span><span>Max DD</span></div>`;
+  const rows = allRes.slice(0, 30).map((r, i) => {
+    const isBest = i === 0;
+    return `<div class="opt-result-row${isBest?' best-row':''}">
+      <span style="color:var(--text3)">${i+1}</span>
+      <span style="font-size:11px">${Object.entries(r.params||{}).map(([k,v])=>`${k}=${v}`).join(', ')}</span>
+      <span style="color:${r.sharpe>0?'var(--green)':'var(--red)'};font-weight:600">${n2(r.sharpe)}</span>
+      <span>${pct(r.cagr)}</span>
+      <span>${pct(r.max_drawdown)}</span>
+    </div>`;
+  }).join('');
+  document.getElementById('lab-opt-table-wrap').innerHTML = header + rows;
+
+  // Auto-apply best params to lab
+  if (best.params) {
+    state.lab.params = {...best.params};
+    Object.entries(best.params).forEach(([k, v]) => {
+      const input = document.getElementById(`lab-p-${k}`);
+      const val = document.getElementById(`lab-pv-${k}`);
+      if (input) { input.value = v; }
+      if (val) val.textContent = v;
+    });
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════

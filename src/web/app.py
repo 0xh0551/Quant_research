@@ -1,8 +1,9 @@
-"""FastAPI web server for the Quant Research Platform dashboard."""
+"""FastAPI web server for the Quant Research Platform dashboard — v1.1."""
 
 from __future__ import annotations
 
 import asyncio
+import itertools
 import json
 import logging
 import threading
@@ -25,7 +26,12 @@ from src.data.downloader import CCXTFallbackDownloader, DataIngestionPipeline, D
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
 from src.data.storage import ParquetDataStore
 from src.logging_config import setup_logging, tail_log
-from src.strategies.rules import build_strategy_signals
+from src.strategies.rules import (
+    STRATEGY_PARAM_GRIDS,
+    STRATEGY_PARAM_SPECS,
+    build_strategy_signals,
+    build_strategy_signals_with_params,
+)
 from src.web.jobs import JobStatus, job_manager
 
 ROOT = Path(__file__).parent.parent.parent
@@ -36,7 +42,6 @@ LOG_DIR = ROOT / "logs"
 setup_logging(level="INFO", log_dir=LOG_DIR)
 logger = logging.getLogger(__name__)
 
-# All supported exchanges (CCXT + nobitex) — computed once at startup
 _ALL_KNOWN_EXCHANGES: frozenset[str] = frozenset(_ccxt.exchanges) | {"nobitex"}
 
 NOBITEX_SYMBOLS = [
@@ -49,11 +54,13 @@ NOBITEX_SYMBOLS = [
 NOBITEX_TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "2h", "3h", "4h", "1d"]
 CCXT_TIMEFRAMES = ["1m", "5m", "15m", "30m", "1h", "2h", "4h", "1d"]
 KNOWN_TF_SET = {"1m", "5m", "15m", "30m", "1h", "2h", "3h", "4h", "1d"}
+FUTURES_MARKET_TYPES = {"futures", "perp", "perpetual", "um", "cm"}
 
 ALL_STRATEGIES = [
     "ema_trend", "rsi_mean_reversion", "bollinger_mean_reversion",
     "donchian_breakout", "atr_breakout", "macd_cross", "stochastic_mr",
-    "ml_signal",
+    "ichimoku", "supertrend", "vwap_deviation", "cmf_trend",
+    "hammer_pattern", "engulfing", "ml_signal",
 ]
 
 STRATEGY_LABELS = {
@@ -64,6 +71,12 @@ STRATEGY_LABELS = {
     "atr_breakout": "ATR Breakout",
     "macd_cross": "MACD Cross",
     "stochastic_mr": "Stochastic MR",
+    "ichimoku": "Ichimoku Cloud",
+    "supertrend": "SuperTrend",
+    "vwap_deviation": "VWAP Deviation",
+    "cmf_trend": "CMF Trend",
+    "hammer_pattern": "Hammer Pattern",
+    "engulfing": "Engulfing Pattern",
     "ml_signal": "ML Signal (GBM)",
 }
 
@@ -80,7 +93,7 @@ BARS_30D = {
 _symbol_cache: dict[str, list[str]] = {}
 _symbol_cache_lock = threading.Lock()
 
-app = FastAPI(title="Quant Research Platform")
+app = FastAPI(title="Quant Research Platform", version="1.1.0")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
@@ -118,6 +131,17 @@ class ResearchRequest(BaseModel):
 
 class DetailedInsightRequest(BaseModel):
     filename: str
+
+
+class LabRunRequest(BaseModel):
+    filename: str
+    strategy: str
+    params: dict[str, Any] = {}
+
+
+class LabOptRequest(BaseModel):
+    filename: str
+    strategy: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -243,7 +267,6 @@ def get_job_result(job_id: str) -> dict[str, Any]:
 
 @app.get("/api/logs")
 def get_logs(n: int = 200, level: str = "all") -> dict[str, Any]:
-    """Return the last N log lines, optionally filtered by level."""
     lines = tail_log(LOG_DIR, "app.log", lines=n)
     if level != "all":
         lvl = level.upper()
@@ -264,7 +287,6 @@ def list_jobs() -> dict[str, Any]:
 
 @app.get("/api/insights")
 def get_insights() -> dict[str, Any]:
-    """Quick overview of all datasets — used to populate the dataset selector."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     items = []
     for path in sorted(DATA_DIR.glob("*.parquet")):
@@ -276,6 +298,7 @@ def get_insights() -> dict[str, Any]:
                 "exchange": info["exchange"],
                 "symbol": info["symbol"],
                 "timeframe": info["timeframe"],
+                "market_type": info["market_type"],
                 "rows": len(df),
                 "start": str(df["timestamp"].min())[:10] if len(df) else "",
                 "end": str(df["timestamp"].max())[:10] if len(df) else "",
@@ -299,16 +322,20 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
     info = _parse_dataset_id(path)
     tf = info["timeframe"]
     ppy = PERIODS_PER_YEAR.get(tf, 365)
-    config = BacktestConfig(periods_per_year=ppy)
+    allow_short = info["market_type"] in FUTURES_MARKET_TYPES
+    config = BacktestConfig(periods_per_year=ppy, allow_short=allow_short)
     backtester = VectorizedBacktester(config)
 
-    # Full-period results
-    bh_result = backtester.run(df, pd.Series(1.0, index=df.index))
+    # Buy & Hold baseline
+    bh_pos = pd.Series(1.0, index=df.index)
+    bh_result = backtester.run(df, bh_pos)
+
+    # Full-period results for all strategies
     full_metrics: dict[str, Any] = {}
     full_equities: dict[str, list] = {}
     for strat in ALL_STRATEGIES:
         try:
-            sigs = build_strategy_signals(df, strat)
+            sigs = build_strategy_signals(df, strat, allow_short=allow_short)
             res = backtester.run(df, sigs)
             full_metrics[strat] = res.metrics
             full_equities[strat] = _downsample(res.equity.tolist(), 800)
@@ -327,18 +354,16 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
     while win_start < n - window:
         win_end = min(win_start + window, n)
         win_df = df.iloc[win_start:win_end].reset_index(drop=True)
-        best_strat, best_sharpe = _best_strategy_in_window(win_df, config)
+        best_strat, best_sharpe = _best_strategy_in_window(win_df, config, allow_short)
 
-        # Oracle: look-ahead best strategy for this window
         try:
-            oracle_sigs = build_strategy_signals(df, best_strat)
+            oracle_sigs = build_strategy_signals(df, best_strat, allow_short=allow_short)
             oracle_pos.iloc[win_start:win_end] = oracle_sigs.iloc[win_start:win_end].values
         except Exception:
             pass
 
-        # Walk-forward: previous window's best strategy applied to current window
         try:
-            wf_sigs = build_strategy_signals(df, prev_best)
+            wf_sigs = build_strategy_signals(df, prev_best, allow_short=allow_short)
             wf_pos.iloc[win_start:win_end] = wf_sigs.iloc[win_start:win_end].values
         except Exception:
             pass
@@ -359,8 +384,9 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
     wf_result = backtester.run(df, wf_pos)
 
     timestamps = _downsample(df["timestamp"].dt.strftime("%Y-%m-%d %H:%M").tolist(), 800)
+    price_ds = _downsample(df["close"].tolist(), 800)
 
-    # Recent insight
+    # Recent 90-day scores
     cutoff = df["timestamp"].max() - pd.Timedelta(days=90)
     recent = df[df["timestamp"] >= cutoff].reset_index(drop=True)
     if len(recent) < 30:
@@ -368,7 +394,7 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
     recent_scores = {}
     for strat in ALL_STRATEGIES:
         try:
-            sigs = build_strategy_signals(recent, strat)
+            sigs = build_strategy_signals(recent, strat, allow_short=allow_short)
             res = backtester.run(recent, sigs)
             recent_scores[strat] = round(res.metrics.get("sharpe", 0.0), 3)
         except Exception:
@@ -376,12 +402,14 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
 
     best_now = max(recent_scores, key=recent_scores.get)  # type: ignore[arg-type]
     current_regime = _current_regime(recent)
-    recommendation = _build_recommendation(
-        best_now, current_regime, strategy_windows, recent_scores
-    )
+    recommendation = _build_recommendation(best_now, current_regime, strategy_windows, recent_scores)
+
+    # ML/RL fitness
+    ml_rl_fitness = _compute_ml_rl_fitness(df, ppy)
 
     return {
         "info": info,
+        "allow_short": allow_short,
         "rows": n,
         "start": str(df["timestamp"].min())[:10],
         "end": str(df["timestamp"].max())[:10],
@@ -394,6 +422,7 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
         "wf_equity": _downsample(wf_result.equity.tolist(), 800),
         "strategy_equities": full_equities,
         "timestamps": timestamps,
+        "price": price_ds,
         "strategy_windows": strategy_windows,
         "current_regime": current_regime,
         "momentum": _price_momentum(df),
@@ -401,7 +430,66 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
         "best_now": best_now,
         "best_now_label": STRATEGY_LABELS.get(best_now, best_now),
         "recommendation": recommendation,
+        "ml_rl_fitness": ml_rl_fitness,
     }
+
+
+# ── Lab endpoints ─────────────────────────────────────────────────────────────
+
+@app.get("/api/lab/params/{strategy}")
+def lab_get_params(strategy: str) -> dict[str, Any]:
+    """Return parameter spec for the Lab UI."""
+    if strategy not in STRATEGY_PARAM_SPECS:
+        raise HTTPException(status_code=404, detail=f"Unknown strategy: {strategy}")
+    return {"strategy": strategy, "params": STRATEGY_PARAM_SPECS[strategy]}
+
+
+@app.post("/api/lab/run")
+def lab_run(req: LabRunRequest) -> dict[str, Any]:
+    """Run a single strategy backtest with custom parameters (synchronous)."""
+    path = DATA_DIR / req.filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+    if len(df) < 50:
+        raise HTTPException(status_code=422, detail="Insufficient data (need ≥ 50 bars)")
+
+    info = _parse_dataset_id(path)
+    tf = info["timeframe"]
+    ppy = PERIODS_PER_YEAR.get(tf, 365)
+    allow_short = info["market_type"] in FUTURES_MARKET_TYPES
+    config = BacktestConfig(periods_per_year=ppy, allow_short=allow_short)
+    backtester = VectorizedBacktester(config)
+
+    try:
+        signals = build_strategy_signals_with_params(df, req.strategy, req.params, allow_short=allow_short)
+        result = backtester.run(df, signals)
+        bh = backtester.run(df, pd.Series(1.0, index=df.index))
+        ts_ds = _downsample(df["timestamp"].dt.strftime("%Y-%m-%d %H:%M").tolist(), 600)
+        eq_ds = _downsample(result.equity.tolist(), 600)
+        bh_eq_ds = _downsample(bh.equity.tolist(), 600)
+        pos_ds = _downsample(result.position.tolist(), 600)
+        return {
+            "metrics": result.metrics,
+            "bh_metrics": bh.metrics,
+            "equity": eq_ds,
+            "bh_equity": bh_eq_ds,
+            "position": pos_ds,
+            "timestamps": ts_ds,
+            "allow_short": allow_short,
+            "params": req.params,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/api/lab/optimize")
+def lab_optimize(req: LabOptRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Grid search optimization — returns a job_id to poll."""
+    job_id = job_manager.create("optimize")
+    background_tasks.add_task(_run_optimize, job_id, req)
+    return {"job_id": job_id}
 
 
 # ── Exchange-prefixed store ────────────────────────────────────────────────────
@@ -422,10 +510,8 @@ class _ExchangePrefixedStore(ParquetDataStore):
 
 def _run_download(job_id: str, req: DownloadRequestBody) -> None:
     _log = logging.getLogger("quant.download")
-    _log.info(
-        "Download started  job=%s  exchange=%s  symbol=%s  market=%s  tfs=%s",
-        job_id, req.exchange, req.symbol, req.market_type, req.timeframes,
-    )
+    _log.info("Download started  job=%s  exchange=%s  symbol=%s  market=%s  tfs=%s",
+              job_id, req.exchange, req.symbol, req.market_type, req.timeframes)
     job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع دانلود...")
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -450,17 +536,12 @@ def _run_download(job_id: str, req: DownloadRequestBody) -> None:
                     bulk_downloader=BinanceBulkDownloader(market_type=req.market_type),
                     fallback_downloader=CCXTFallbackDownloader("binance"),
                 )
-                pipeline.run(DownloadRequest(
-                    symbol=req.symbol, timeframe=tf, start=start_date, end=end_date,
-                ))
+                pipeline.run(DownloadRequest(symbol=req.symbol, timeframe=tf, start=start_date, end=end_date))
             else:
                 pipeline = DataIngestionPipeline(
-                    store,
-                    fallback_downloader=CCXTFallbackDownloader(req.exchange),
+                    store, fallback_downloader=CCXTFallbackDownloader(req.exchange),
                 )
-                pipeline.run(DownloadRequest(
-                    symbol=req.symbol, timeframe=tf, start=start_date, end=end_date,
-                ))
+                pipeline.run(DownloadRequest(symbol=req.symbol, timeframe=tf, start=start_date, end=end_date))
 
         done_msg = f"دانلود {req.symbol} کامل شد ({total} تایم‌فریم)"
         _log.info("Download done  job=%s  %s", job_id, done_msg)
@@ -472,10 +553,8 @@ def _run_download(job_id: str, req: DownloadRequestBody) -> None:
 
 def _run_research(job_id: str, req: ResearchRequest) -> None:
     _log = logging.getLogger("quant.research")
-    _log.info(
-        "Research started  job=%s  datasets=%d  strategies=%s",
-        job_id, len(req.datasets), req.strategies,
-    )
+    _log.info("Research started  job=%s  datasets=%d  strategies=%s",
+              job_id, len(req.datasets), req.strategies)
     job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع بک‌تست...")
     try:
         total = len(req.datasets) * len(req.strategies)
@@ -483,7 +562,6 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
         all_results: list[dict[str, Any]] = []
 
         for ds in req.datasets:
-            # Use filename directly when available (avoids any naming ambiguity)
             file_key = ds.get("file", "")
             if file_key:
                 parquet_path = DATA_DIR / file_key
@@ -502,6 +580,7 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
             exchange = info["exchange"]
             symbol = info["symbol"]
             tf = info["timeframe"]
+            allow_short = info["market_type"] in FUTURES_MARKET_TYPES
 
             if df.empty:
                 step += len(req.strategies)
@@ -521,6 +600,7 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 fee_bps=req.fee_bps,
                 slippage_bps=req.slippage_bps,
                 periods_per_year=ppy,
+                allow_short=allow_short,
             )
             backtester = VectorizedBacktester(config)
             bh_result = backtester.run(df, pd.Series(1.0, index=df.index))
@@ -533,7 +613,9 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 "exchange": exchange,
                 "symbol": symbol,
                 "timeframe": tf,
+                "market_type": info["market_type"],
                 "dataset_id": f"{exchange}_{symbol}_{tf}",
+                "allow_short": allow_short,
                 "rows": len(df),
                 "start": str(df["timestamp"].min())[:10],
                 "end": str(df["timestamp"].max())[:10],
@@ -552,10 +634,10 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 job_manager.update(
                     job_id,
                     progress=round(step / total * 90, 1),
-                    message=f"بک‌تست {STRATEGY_LABELS.get(strategy, strategy)} روی {symbol} {tf}...",
+                    message=f"بک‌تست {STRATEGY_LABELS.get(strategy, strategy)} روی {symbol} {tf}{'  [Short/Long]' if allow_short else ''}...",
                 )
                 try:
-                    signals = build_strategy_signals(df, strategy)
+                    signals = build_strategy_signals(df, strategy, allow_short=allow_short)
                     result = backtester.run(df, signals)
                     log_returns = np.log1p(result.returns)
                     equity_ds = _downsample(result.equity.tolist(), 1000)
@@ -583,22 +665,75 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
         job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
 
 
+def _run_optimize(job_id: str, req: LabOptRequest) -> None:
+    _log = logging.getLogger("quant.optimize")
+    job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع بهینه‌سازی...")
+    try:
+        path = DATA_DIR / req.filename
+        df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+        info = _parse_dataset_id(path)
+        tf = info["timeframe"]
+        ppy = PERIODS_PER_YEAR.get(tf, 365)
+        allow_short = info["market_type"] in FUTURES_MARKET_TYPES
+        config = BacktestConfig(periods_per_year=ppy, allow_short=allow_short)
+        backtester = VectorizedBacktester(config)
+
+        grid = STRATEGY_PARAM_GRIDS.get(req.strategy, {})
+        if not grid:
+            all_params = [{}]
+        else:
+            keys = list(grid.keys())
+            values = list(grid.values())
+            all_params = [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+
+        total = len(all_params)
+        results: list[dict[str, Any]] = []
+
+        for i, params in enumerate(all_params):
+            job_manager.update(
+                job_id,
+                progress=round(i / total * 95, 1),
+                message=f"ترکیب {i+1}/{total}: {params}",
+            )
+            try:
+                sigs = build_strategy_signals_with_params(df, req.strategy, params, allow_short=allow_short)
+                res = backtester.run(df, sigs)
+                results.append({
+                    "params": params,
+                    "sharpe": round(res.metrics.get("sharpe", -999), 4),
+                    "cagr": round(res.metrics.get("cagr", 0), 4),
+                    "max_drawdown": round(res.metrics.get("max_drawdown", -1), 4),
+                    "total_return": round(res.metrics.get("total_return", 0), 4),
+                    "win_rate": round(res.metrics.get("win_rate", 0), 4),
+                })
+            except Exception:
+                pass
+
+        results.sort(key=lambda x: x["sharpe"], reverse=True)
+        best = results[0] if results else {}
+        done_msg = f"بهینه‌سازی کامل شد — {len(results)} ترکیب، بهترین Sharpe: {best.get('sharpe', 0):.3f}"
+        job_manager.update(
+            job_id, status=JobStatus.DONE, progress=100.0, message=done_msg,
+            result={"best": best, "all_results": results[:50], "strategy": req.strategy},
+        )
+    except Exception as exc:
+        _log.exception("Optimize failed  job=%s  error=%s", job_id, exc)
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _parse_dataset_id(path: Path) -> dict[str, str]:
-    """Parse exchange/symbol/timeframe/market_type from a Parquet filename."""
     parts = path.stem.split("_")
     if not parts:
         return {"exchange": "unknown", "symbol": path.stem, "timeframe": "?", "market_type": "spot"}
 
     timeframe = parts[-1] if parts[-1] in KNOWN_TF_SET else "unknown"
-    core = parts[:-1]  # everything before timeframe
+    core = parts[:-1]
 
-    # Detect exchange prefix (first part matches any known exchange)
     if core and core[0].lower() in _ALL_KNOWN_EXCHANGES:
         exchange = core[0].lower()
         rest = core[1:]
-        # Detect optional market_type token (futures/perp/spot)
         if rest and rest[0].lower() in ("futures", "perp", "perpetual", "spot", "um", "cm"):
             market_type = rest[0].lower()
             symbol = "_".join(rest[1:])
@@ -620,15 +755,14 @@ def _parse_dataset_id(path: Path) -> dict[str, str]:
 
 
 def _best_strategy_in_window(
-    win_df: pd.DataFrame, config: BacktestConfig
+    win_df: pd.DataFrame, config: BacktestConfig, allow_short: bool = False,
 ) -> tuple[str, float]:
-    """Return (strategy_name, sharpe) for the best strategy in a window."""
     backtester = VectorizedBacktester(config)
     best_name = "ema_trend"
     best_sharpe = -float("inf")
     for strat in ALL_STRATEGIES:
         try:
-            sigs = build_strategy_signals(win_df, strat)
+            sigs = build_strategy_signals(win_df, strat, allow_short=allow_short)
             res = backtester.run(win_df, sigs)
             sharpe = res.metrics.get("sharpe", -float("inf"))
             if sharpe > best_sharpe:
@@ -657,7 +791,6 @@ def _log_metrics(log_returns: pd.Series, ppy: int) -> dict[str, float]:
 
 
 def _return_distribution(returns: pd.Series, bins: int = 50) -> dict[str, Any]:
-    """Histogram data for return distribution chart."""
     try:
         r = returns.dropna()
         if len(r) < 10:
@@ -665,8 +798,7 @@ def _return_distribution(returns: pd.Series, bins: int = 50) -> dict[str, Any]:
         counts, edges = np.histogram(r, bins=bins)
         mid = ((edges[:-1] + edges[1:]) / 2 * 100).tolist()
         return {
-            "x": mid,
-            "y": counts.tolist(),
+            "x": mid, "y": counts.tolist(),
             "mean": float(r.mean() * 100),
             "std": float(r.std() * 100),
             "skew": float(r.skew()),
@@ -743,8 +875,14 @@ def _current_regime(df: pd.DataFrame) -> str:
     return "ranging"
 
 
-_TREND_STRATEGIES = frozenset({"ema_trend", "macd_cross", "atr_breakout", "donchian_breakout"})
-_MR_STRATEGIES = frozenset({"rsi_mean_reversion", "bollinger_mean_reversion", "stochastic_mr"})
+_TREND_STRATEGIES = frozenset({
+    "ema_trend", "macd_cross", "atr_breakout", "donchian_breakout",
+    "ichimoku", "supertrend", "cmf_trend",
+})
+_MR_STRATEGIES = frozenset({
+    "rsi_mean_reversion", "bollinger_mean_reversion", "stochastic_mr",
+    "vwap_deviation", "hammer_pattern", "engulfing",
+})
 
 _REGIME_FIT: dict[str, frozenset[str]] = {
     "trending_up": _TREND_STRATEGIES,
@@ -768,16 +906,12 @@ def _build_recommendation(
     windows: list[dict[str, Any]],
     recent_scores: dict[str, float],
 ) -> dict[str, Any]:
-    """Build an actionable next-day recommendation with confidence and reasoning."""
     reasons: list[str] = []
-
-    # 1. Consistency: how many of the last 5 windows did best_now win?
     last_wins = windows[-5:] if len(windows) >= 5 else windows
     win_count = sum(1 for w in last_wins if w["best_strategy"] == best_now)
     consistency = win_count / max(len(last_wins), 1)
     reasons.append(f"{win_count} از {len(last_wins)} پنجره اخیر بهترین بود")
 
-    # 2. Regime fit
     fit_strategies = _REGIME_FIT.get(regime, frozenset())
     regime_fit = best_now in fit_strategies
     regime_label = _REGIME_FA.get(regime, regime)
@@ -786,7 +920,6 @@ def _build_recommendation(
     else:
         reasons.append(f"رژیم «{regime_label}» با این استراتژی همخوانی ضعیف دارد")
 
-    # 3. Recent Sharpe vs runner-up
     sorted_scores = sorted(recent_scores.items(), key=lambda x: x[1], reverse=True)
     best_sharpe = sorted_scores[0][1] if sorted_scores else 0.0
     runner_up_sharpe = sorted_scores[1][1] if len(sorted_scores) > 1 else 0.0
@@ -798,11 +931,9 @@ def _build_recommendation(
     else:
         reasons.append("فاصله Sharpe با رقبا کم است — بازار در تغییر رژیم")
 
-    # Confidence: consistency (60%) + regime fit (30%) + margin (10%)
     margin_score = min(margin / 0.5, 1.0)
     confidence = int(consistency * 60 + (30 if regime_fit else 0) + margin_score * 10)
 
-    # Regime-based alternative if fit is poor
     alt_strat: str | None = None
     if not regime_fit and fit_strategies:
         alt_scores = {s: recent_scores.get(s, -999) for s in fit_strategies}
@@ -827,3 +958,150 @@ def _price_momentum(df: pd.DataFrame) -> float:
     if len(close) < 20:
         return 0.0
     return float((close.iloc[-1] / close.iloc[-20] - 1) * 100)
+
+
+def _estimate_hurst(returns: np.ndarray) -> float:
+    """Simplified R/S Hurst exponent estimation."""
+    try:
+        lags = [l for l in [2, 4, 8, 16, 32, 64] if l < len(returns) // 4]
+        if len(lags) < 2:
+            return 0.5
+        rs_values = []
+        for lag in lags:
+            sub = returns[: lag * (len(returns) // lag)]
+            if len(sub) < lag:
+                continue
+            chunks = sub.reshape(-1, lag)
+            rs_list = []
+            for chunk in chunks:
+                std = chunk.std()
+                if std < 1e-12:
+                    continue
+                cum = np.cumsum(chunk - chunk.mean())
+                rs_list.append((cum.max() - cum.min()) / std)
+            if rs_list:
+                rs_values.append(np.mean(rs_list))
+        if len(rs_values) < 2:
+            return 0.5
+        log_lags = np.log(lags[: len(rs_values)])
+        log_rs = np.log(rs_values)
+        hurst = float(np.polyfit(log_lags, log_rs, 1)[0])
+        return float(np.clip(hurst, 0.1, 0.9))
+    except Exception:
+        return 0.5
+
+
+def _compute_ml_rl_fitness(df: pd.DataFrame, ppy: int) -> dict[str, Any]:
+    """Score how suitable this dataset is for ML vs RL-based trading bots."""
+    close = df["close"]
+    returns = close.pct_change().dropna()
+    n = len(returns)
+    if n < 30:
+        return {"ml_score": 0, "rl_score": 0, "recommendation": "both",
+                "hint": "داده کافی برای ارزیابی نیست", "details": {}}
+
+    # Autocorrelation lag-1
+    autocorr_1 = float(returns.autocorr(lag=1)) if n > 5 else 0.0
+
+    # Hurst exponent
+    hurst = _estimate_hurst(returns.values)
+
+    # Information Coefficient (lagged correlation)
+    lag_ret = returns.shift(1).dropna()
+    fwd_ret = returns.iloc[1:].reset_index(drop=True)
+    if len(lag_ret) == len(fwd_ret) and len(lag_ret) > 10:
+        ic = float(lag_ret.reset_index(drop=True).corr(fwd_ret))
+    else:
+        ic = 0.0
+    ic = 0.0 if np.isnan(ic) else ic
+
+    # Stationarity proxy: coefficient of variation of rolling std
+    roll_std = returns.rolling(max(20, n // 10)).std().dropna()
+    cv_std = float(roll_std.std() / (roll_std.mean() + 1e-9)) if len(roll_std) > 2 else 1.0
+    stationarity_score = float(1.0 / (1.0 + cv_std))
+
+    # Sample adequacy
+    sample_ml = min(n / 1000.0, 1.0)
+    sample_rl = min(n / 5000.0, 1.0)
+
+    # Regime diversity (number of ema crossovers)
+    ema20 = close.ewm(span=20, adjust=False).mean()
+    ema50 = close.ewm(span=50, adjust=False).mean()
+    regime_changes = int(((ema20 > ema50).astype(int).diff().abs() > 0).sum())
+    regime_diversity = float(min(regime_changes / max(n / 50.0, 1.0), 1.0))
+
+    # Reward density: fraction of bars with moves > 1σ
+    big_moves = float((returns.abs() > returns.std()).mean())
+
+    # Volatility clustering (GARCH proxy)
+    sq_ret = returns ** 2
+    vol_autocorr = float(sq_ret.autocorr(lag=1)) if n > 5 else 0.0
+    vol_autocorr = max(0.0, vol_autocorr)
+
+    # Fat tails
+    kurt = float(returns.kurtosis()) if n > 10 else 0.0
+    return_diversity = float(min(max(kurt / 10.0, 0.0), 1.0))
+
+    # === ML Score ===
+    autocorr_score = float(min(abs(autocorr_1) * 5.0, 1.0))
+    # Hurst closer to 0 or 1 = more predictable
+    hurst_score = float(min(abs(hurst - 0.5) * 4.0, 1.0))
+    ml_score = int((
+        sample_ml * 0.25 +
+        autocorr_score * 0.25 +
+        stationarity_score * 0.25 +
+        hurst_score * 0.25
+    ) * 100)
+
+    # === RL Score ===
+    rl_score = int((
+        sample_rl * 0.20 +
+        regime_diversity * 0.30 +
+        big_moves * 0.20 +
+        vol_autocorr * 0.15 +
+        return_diversity * 0.15
+    ) * 100)
+
+    ml_score = max(0, min(100, ml_score))
+    rl_score = max(0, min(100, rl_score))
+
+    # Recommendation
+    gap = ml_score - rl_score
+    if gap > 15:
+        recommendation = "ml"
+        hint = (
+            f"ML مناسب‌تر است — داده با ثبات (stationarity={stationarity_score:.2f}), "
+            f"IC={ic:.3f}, Hurst={hurst:.2f}"
+        )
+        bot_hint = "پیشنهاد: یک مدل ML (مثل GBM یا XGBoost) با فیچرهای تکنیکال روی این جفت ارز"
+    elif gap < -15:
+        recommendation = "rl"
+        hint = (
+            f"RL مناسب‌تر است — تنوع رژیم ({regime_changes} تغییر), "
+            f"density={big_moves:.1%}, vol-clustering={vol_autocorr:.2f}"
+        )
+        bot_hint = "پیشنهاد: یک بات RL (مثل PPO یا SAC) برای یادگیری سوییچ رژیم روی این جفت ارز"
+    else:
+        recommendation = "both"
+        hint = f"هر دو ML و RL قابل استفاده هستند (ML={ml_score}, RL={rl_score})"
+        bot_hint = "می‌توانید هر دو رویکرد را آزمایش کنید"
+
+    return {
+        "ml_score": ml_score,
+        "rl_score": rl_score,
+        "recommendation": recommendation,
+        "hint": hint,
+        "bot_hint": bot_hint,
+        "details": {
+            "autocorrelation": round(autocorr_1, 4),
+            "hurst": round(hurst, 4),
+            "ic": round(ic, 4),
+            "stationarity": round(stationarity_score, 4),
+            "regime_changes": regime_changes,
+            "regime_diversity": round(regime_diversity, 4),
+            "reward_density": round(big_moves, 4),
+            "vol_clustering": round(vol_autocorr, 4),
+            "kurtosis": round(kurt, 4),
+            "sample_count": n,
+        },
+    }
