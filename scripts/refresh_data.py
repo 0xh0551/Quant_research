@@ -23,6 +23,19 @@ from src.data.downloader import CCXTFallbackDownloader, DownloadRequest  # noqa:
 PROCESSED = ROOT / "data" / "processed"
 BUFFER_DAYS = 5  # کمی هم‌پوشانی تا کندلِ ناقصِ آخر بازنویسی شود
 
+# جفت‌هایِ جدیدی که اگر پارکتِ آن‌ها وجود نداشت باید دانلود شوند.
+# فرمت: (ccxt_id, market_type, symbol, timeframe)
+BOOTSTRAP_PAIRS: list[tuple[str, str, str, str]] = [
+    ("gate", "futures", "DOGEUSDT", "4h"),
+    ("gate", "futures", "DOGEUSDT", "1h"),
+    ("gate", "futures", "DOGEUSDT", "15m"),
+    ("bybit", "futures", "DOGEUSDT", "4h"),
+    ("bybit", "futures", "DOGEUSDT", "1h"),
+    ("gate", "futures", "ETHUSDT", "4h"),
+    ("gate", "futures", "XRPUSDT", "4h"),
+]
+BOOTSTRAP_DAYS = 730  # ۲ سال دیتا برای اسکنِ walk-forward
+
 
 def _parse(stem: str) -> tuple[str, str, str, str]:
     """'bybit_futures_BTCUSDT_15m' → (ccxt_id, market_type, symbol, timeframe)."""
@@ -61,7 +74,35 @@ def refresh_one(path: Path) -> str:
     return f"ok   {path.name}  +{added} bars → {len(merged)} (to {merged['timestamp'].max():%Y-%m-%d})"
 
 
+def _stem(ccxt_id: str, market_type: str, symbol: str, tf: str) -> str:
+    return f"{ccxt_id}_{market_type}_{symbol}_{tf}"
+
+
+def bootstrap_one(ccxt_id: str, market_type: str, symbol: str, tf: str) -> str:
+    path = PROCESSED / f"{_stem(ccxt_id, market_type, symbol, tf)}.parquet"
+    if path.exists():
+        return f"exists {path.name} (skip bootstrap)"
+    start = (date.today() - timedelta(days=BOOTSTRAP_DAYS)).isoformat()
+    dl = CCXTFallbackDownloader(ccxt_id)
+    new = dl.fetch(DownloadRequest(symbol=symbol, timeframe=tf,
+                                   start=date.fromisoformat(start), end=date.today()))
+    if new is None or new.empty:
+        return f"WARN  {path.name}: no data returned"
+    PROCESSED.mkdir(parents=True, exist_ok=True)
+    new.to_parquet(path, index=False)
+    return f"bootstrap {path.name}  {len(new)} bars"
+
+
 def main() -> int:
+    # bootstrap: جفت‌های جدیدی که هنوز پارکت ندارند
+    print(f"bootstrapping {len(BOOTSTRAP_PAIRS)} new pairs…")
+    for args in BOOTSTRAP_PAIRS:
+        try:
+            print("  " + bootstrap_one(*args))
+        except Exception as exc:  # noqa: BLE001
+            print(f"  FAIL bootstrap {args}: {exc}")
+
+    # refresh: به‌روزرسانیِ پارکت‌های موجود
     files = sorted(PROCESSED.glob("*.parquet"))
     print(f"refreshing {len(files)} datasets…")
     for path in files:
