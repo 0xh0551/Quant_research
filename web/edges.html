@@ -16,7 +16,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;padding:24px;min-height:100vh}
 a{color:var(--cyan);text-decoration:none}
-.wrap{max-width:1180px;margin:0 auto}
+.wrap{max-width:1200px;margin:0 auto}
 header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
 h1{font-size:20px;font-weight:700;color:var(--cyan)}
 .sub{font-size:12px;color:var(--text3);margin-top:4px}
@@ -29,11 +29,14 @@ h1{font-size:20px;font-weight:700;color:var(--cyan)}
 .card .k{font-size:11px;color:var(--text3);letter-spacing:.3px}
 .card .v{font-size:24px;font-weight:700;margin-top:6px}
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:18px}
-.panel h2{font-size:14px;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.panel h2{font-size:14px;color:var(--text);margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px}
+@media(max-width:700px){.charts-row{grid-template-columns:1fr}}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--border)}
 th{color:var(--text3);font-weight:600;font-size:11px;letter-spacing:.3px}
 tr:last-child td{border-bottom:0}
+tr:hover td{background:rgba(255,255,255,.02)}
 .pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
 .pill.long{background:rgba(16,185,129,.15);color:var(--green)}
 .pill.short{background:rgba(239,68,68,.15);color:var(--red)}
@@ -41,13 +44,8 @@ tr:last-child td{border-bottom:0}
 .pos{color:var(--green)}.neg{color:var(--red)}.muted{color:var(--text3)}
 .alert{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:10px;
   padding:12px 14px;margin-bottom:10px;font-size:13px;line-height:1.7}
-.alert b{color:var(--yellow)}
 .ok{background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.3);border-radius:10px;padding:12px 14px;font-size:13px}
-.spark{height:42px;width:100%}
-.note{font-size:12px;color:var(--text3);line-height:1.8;margin-top:8px}
-.tf-bar{display:flex;gap:10px;flex-wrap:wrap}
-.tf-chip{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px}
-.tf-chip b{color:var(--cyan)}
+.note{font-size:12px;color:var(--text3);line-height:1.8;margin-top:10px}
 #status{font-size:12px;color:var(--text2);min-height:18px}
 .loading{color:var(--text3);padding:30px;text-align:center}
 </style>
@@ -57,7 +55,7 @@ tr:last-child td{border-bottom:0}
   <header>
     <div>
       <h1>🛰 لبه‌های اعتبارسنجی‌شده (Walk-Forward)</h1>
-      <div class="sub">خروجیِ اسکنِ خارج‌از‌نمونه که بات‌های زنده (مثل Mickey) فقط همین‌ها را اجرا می‌کنند · <a href="/">← داشبورد اصلی</a></div>
+      <div class="sub">خروجیِ اسکنِ خارج‌از‌نمونه — باتِ قاعده‌محور (Mickey، Wall_E) فقط همین‌ها را اجرا می‌کنند · <a href="/">← داشبورد اصلی</a></div>
     </div>
     <div style="display:flex;gap:10px;align-items:center">
       <span id="status"></span>
@@ -69,30 +67,152 @@ tr:last-child td{border-bottom:0}
   <div id="body"><div class="loading">در حال بارگیری…</div></div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
 <script>
+Chart.defaults.color = '#94a3b8';
+Chart.defaults.font.family = "'Vazirmatn','Tahoma',sans-serif";
+
 const fmtPct = x => (x==null?'—':(x>=0?'+':'')+(x*100).toFixed(1)+'%');
 const fmtNum = (x,d=2) => (x==null?'—':Number(x).toFixed(d));
 const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 
-function dirPill(short){ // short=True means strategy used short side too
+function dirPill(short){
   return short ? '<span class="pill both">دوطرفه</span>' : '<span class="pill long">فقط خرید</span>';
 }
 
-function sparkline(values){
-  if(!values || values.length<2) return '';
-  const w=260,h=42,pad=3;
-  const mn=Math.min(...values),mx=Math.max(...values),rng=(mx-mn)||1;
-  const pts=values.map((v,i)=>{
-    const x=pad+i*(w-2*pad)/(values.length-1);
-    const y=h-pad-((v-mn)/rng)*(h-2*pad);
-    return x.toFixed(1)+','+y.toFixed(1);
-  }).join(' ');
-  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
-    <polyline fill="none" stroke="#00d4ff" stroke-width="1.6" points="${pts}"/></svg>`;
+let _charts = [];
+function destroyCharts(){ _charts.forEach(c=>c.destroy()); _charts=[]; }
+
+function buildCharts(data){
+  const top = (data.report?.top || []).slice(0,15);
+  const tf = data.report?.by_timeframe || {};
+  const hist = data.history || [];
+
+  // ── نمودار ۱: Sharpe بهترین کاندیداها ──
+  const sharpeCtx = document.getElementById('sharpeChart');
+  if(sharpeCtx && top.length){
+    _charts.push(new Chart(sharpeCtx, {
+      type: 'bar',
+      data: {
+        labels: top.map(c=>`${c.symbol}\n${c.timeframe}`),
+        datasets:[{
+          label:'Sharpe OOS',
+          data: top.map(c=>c.oos_sharpe),
+          backgroundColor: top.map(c=> c.oos_sharpe>=0.5?'rgba(16,185,129,.78)': c.oos_sharpe>=0.2?'rgba(0,212,255,.65)':'rgba(245,158,11,.65)'),
+          borderRadius: 5,
+          borderSkipped: false,
+        }]
+      },
+      options:{
+        responsive:true, maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            title: ctx=>`${ctx[0].label.replace('\n',' / ')}`,
+            afterLabel: ctx=>{
+              const c=top[ctx.dataIndex];
+              return [`بازده OOS: ${(c.oos_total_return*100).toFixed(1)}%`,`استراتژی: ${c.strategy}`,`معاملات/پنجره: ${c.trades_per_split.toFixed(0)}`];
+            }
+          }}
+        },
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{font:{size:10},maxRotation:50}},
+          y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{font:{size:11}}}
+        }
+      }
+    }));
+  }
+
+  // ── نمودار ۲: تایم‌فریم دونات ──
+  const tfCtx = document.getElementById('tfChart');
+  const tfKeys = Object.keys(tf).sort();
+  if(tfCtx && tfKeys.length){
+    _charts.push(new Chart(tfCtx, {
+      type:'doughnut',
+      data:{
+        labels: tfKeys,
+        datasets:[{
+          data: tfKeys.map(k=>tf[k].passed),
+          backgroundColor:['rgba(0,212,255,.8)','rgba(124,58,237,.8)','rgba(16,185,129,.8)','rgba(245,158,11,.8)','rgba(239,68,68,.7)'],
+          borderWidth:2,borderColor:'#0a0b0f'
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{position:'right',labels:{font:{size:12},padding:12,boxWidth:12}},
+          tooltip:{callbacks:{
+            label:ctx=>`${ctx.label}: ${ctx.parsed} معتبر از ${tf[ctx.label].scanned}`
+          }}
+        }
+      }
+    }));
+  }
+
+  // ── نمودار ۳: بازده OOS scatter ──
+  const retCtx = document.getElementById('retChart');
+  if(retCtx && top.length){
+    _charts.push(new Chart(retCtx, {
+      type:'scatter',
+      data:{
+        datasets:[{
+          label:'کاندیداهای معتبر',
+          data: top.map(c=>({x:c.oos_sharpe, y:c.oos_total_return*100, r:Math.max(4,c.trades_per_split*0.6)})),
+          backgroundColor: top.map(c=>c.oos_total_return>=0?'rgba(16,185,129,.65)':'rgba(239,68,68,.6)'),
+          pointRadius: top.map(c=>Math.max(5, c.trades_per_split*0.6)),
+          pointHoverRadius: 8,
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{
+          legend:{display:false},
+          tooltip:{callbacks:{
+            label:ctx=>{
+              const c=top[ctx.dataIndex];
+              return [`${c.symbol} · ${c.timeframe}`,`Sharpe: ${c.oos_sharpe.toFixed(2)}`,`بازده: ${(c.oos_total_return*100).toFixed(1)}%`,`استراتژی: ${c.strategy}`];
+            }
+          }}
+        },
+        scales:{
+          x:{title:{display:true,text:'Sharpe OOS',font:{size:11}},grid:{color:'rgba(255,255,255,.04)'},ticks:{font:{size:11}}},
+          y:{title:{display:true,text:'بازده OOS (٪)',font:{size:11}},grid:{color:'rgba(255,255,255,.04)'},ticks:{callback:v=>v+'%',font:{size:11}}}
+        }
+      }
+    }));
+  }
+
+  // ── نمودار ۴: روند تعداد لبه‌ها ──
+  const histCtx = document.getElementById('histChart');
+  if(histCtx && hist.length > 1){
+    _charts.push(new Chart(histCtx, {
+      type:'line',
+      data:{
+        labels: hist.map(h=>h.generated_at?.slice(0,10)||''),
+        datasets:[{
+          label:'لبه‌های معتبر',
+          data: hist.map(h=>h.n_passed),
+          borderColor:'#00d4ff',borderWidth:2,
+          backgroundColor:'rgba(0,212,255,.08)',
+          fill:true, tension:0.35,
+          pointRadius:3,pointHoverRadius:5,
+        }]
+      },
+      options:{
+        responsive:true,maintainAspectRatio:false,
+        plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{color:'rgba(255,255,255,.04)'},ticks:{maxTicksLimit:8,font:{size:10}}},
+          y:{grid:{color:'rgba(255,255,255,.04)'},ticks:{font:{size:11}},beginAtZero:true}
+        }
+      }
+    }));
+  }
 }
 
 function render(data){
   const r=data.report||{};
+  destroyCharts();
   if(!r.generated_at){
     document.getElementById('body').innerHTML='<div class="panel">هنوز گزارشی تولید نشده. «اجرای اسکن دوباره» را بزنید.</div>';
     return;
@@ -100,28 +220,17 @@ function render(data){
   const tf=r.by_timeframe||{}, plan=r.live_plan||{}, top=r.top||[], alerts=r.alerts||[];
   const when=new Date(r.generated_at).toLocaleString('fa-IR');
 
-  let tfChips=Object.keys(tf).sort().map(k=>`<div class="tf-chip">${k}: <b>${tf[k].passed}</b>/${tf[k].scanned} معتبر</div>`).join('');
-
   let planRows=Object.keys(plan).map(sym=>{
     const p=plan[sym];
     return `<tr><td><b>${esc(sym)}</b></td><td>${esc(p.strategy)}</td><td>${dirPill(p.allow_short)}</td>
-      <td>${fmtNum(p.oos_sharpe)}</td><td>${fmtNum(p.oos_positive_frac*100,0)}%</td>
+      <td class="pos"><b>${fmtNum(p.oos_sharpe)}</b></td><td>${fmtNum(p.oos_positive_frac*100,0)}%</td>
       <td class="${p.oos_total_return>=0?'pos':'neg'}">${fmtPct(p.oos_total_return)}</td>
       <td class="muted">${esc(p.exchange)}</td></tr>`;
   }).join('') || '<tr><td colspan="7" class="muted">کاندیدی روی تایم‌فریم زنده نیست</td></tr>';
 
-  let topRows=top.map(c=>`<tr><td>${esc(c.exchange)}</td><td><b>${esc(c.symbol)}</b></td>
-    <td>${esc(c.timeframe)}</td><td>${esc(c.strategy)}</td><td>${dirPill(c.allow_short)}</td>
-    <td>${fmtNum(c.oos_sharpe)}</td><td>${fmtNum(c.oos_positive_frac*100,0)}%</td>
-    <td class="${c.oos_total_return>=0?'pos':'neg'}">${fmtPct(c.oos_total_return)}</td>
-    <td class="muted">${fmtNum(c.trades_per_split,0)}</td></tr>`).join('');
-
   let alertHtml = alerts.length
     ? alerts.map(a=>`<div class="alert"><b>⚠ تایم‌فریمِ بهتر:</b> ${esc(a.message)}</div>`).join('')
     : `<div class="ok">✅ هیچ تایم‌فریمِ بهتری از <b>${esc(r.live_timeframe)}</b> پیدا نشد — تنظیمِ فعلیِ بات بهینه است.</div>`;
-
-  const hist=data.history||[];
-  const passedSeries=hist.map(h=>h.n_passed);
 
   document.getElementById('body').innerHTML=`
     <div class="cards">
@@ -132,35 +241,53 @@ function render(data){
       <div class="card"><div class="k">آخرین اسکن</div><div class="v" style="font-size:13px;padding-top:8px">${when}</div></div>
     </div>
 
-    <div class="panel">
-      <h2>📡 پلنِ زندهٔ بات (تایم‌فریم ${esc(r.live_timeframe)})</h2>
-      <table><thead><tr><th>نماد</th><th>قاعده</th><th>جهت</th><th>Sharpe (OOS)</th><th>٪ پنجره‌های مثبت</th><th>بازده کل OOS</th><th>صرافیِ مرجع</th></tr></thead>
-      <tbody>${planRows}</tbody></table>
-      <div class="note">بات فقط نمادهایی را معامله می‌کند که هم در whitelistِ بات باشند و هم اینجا کاندیدِ معتبر داشته باشند؛ بقیه «بیرون» می‌مانند.</div>
+    <div class="charts-row">
+      <div class="panel">
+        <h2>📊 Sharpe بهترین کاندیداها</h2>
+        <div style="height:220px"><canvas id="sharpeChart"></canvas></div>
+      </div>
+      <div class="panel">
+        <h2>⏱ توزیعِ تایم‌فریم‌ها</h2>
+        <div style="height:220px"><canvas id="tfChart"></canvas></div>
+      </div>
+    </div>
+
+    <div class="charts-row">
+      <div class="panel">
+        <h2>🎯 Sharpe vs بازده (اندازه = تعداد معاملات)</h2>
+        <div style="height:220px"><canvas id="retChart"></canvas></div>
+        <div class="note">هر نقطه یک کاندیدِ معتبر است. سبز = بازدهٔ مثبت، قرمز = بازدهٔ منفی.</div>
+      </div>
+      <div class="panel">
+        <h2>📈 روندِ تعداد لبه‌های معتبر</h2>
+        <div style="height:220px"><canvas id="histChart"></canvas></div>
+        <div class="note">${(data.history||[]).length} اسکنِ ثبت‌شده</div>
+      </div>
     </div>
 
     <div class="panel">
       <h2>⚠ هشدارهای تغییرِ تایم‌فریم</h2>
       ${alertHtml}
-      <div class="note">تغییرِ تایم‌فریمِ یک باتِ فروخته‌شده خودکار نیست: نیازمندِ ری‌استارتِ کانتینر با <code>QR_TIMEFRAME</code>ِ جدید و تأییدِ انسانی است.</div>
     </div>
 
     <div class="panel">
-      <h2>📊 پراکندگیِ لبه‌ها بر حسب تایم‌فریم</h2>
-      <div class="tf-bar">${tfChips}</div>
+      <h2>📡 پلنِ زندهٔ بات (تایم‌فریم ${esc(r.live_timeframe)})</h2>
+      <table><thead><tr><th>نماد</th><th>قاعده</th><th>جهت</th><th>Sharpe (OOS)</th><th>٪ مثبت</th><th>بازده OOS</th><th>صرافیِ مرجع</th></tr></thead>
+      <tbody>${planRows}</tbody></table>
+      <div class="note">بات فقط نمادهایی را معامله می‌کند که هم در whitelist باشند و هم کاندیدِ معتبر داشته باشند.</div>
     </div>
 
     <div class="panel">
-      <h2>🏆 برترین کاندیداها (همهٔ تایم‌فریم‌ها)</h2>
+      <h2>🏆 همهٔ کاندیداهای معتبر (top 20)</h2>
       <table><thead><tr><th>صرافی</th><th>نماد</th><th>TF</th><th>قاعده</th><th>جهت</th><th>Sharpe</th><th>٪ مثبت</th><th>بازده OOS</th><th>معاملات/پنجره</th></tr></thead>
-      <tbody>${topRows}</tbody></table>
-    </div>
-
-    <div class="panel">
-      <h2>📈 روندِ تعدادِ لبه‌ها در اسکن‌های اخیر</h2>
-      ${sparkline(passedSeries) || '<div class="muted">تاریخچهٔ کافی نیست</div>'}
-      <div class="note">${hist.length} اسکنِ ثبت‌شده</div>
+      <tbody>${top.slice(0,20).map(c=>`<tr><td class="muted">${esc(c.exchange)}</td><td><b>${esc(c.symbol)}</b></td>
+        <td>${esc(c.timeframe)}</td><td>${esc(c.strategy)}</td><td>${dirPill(c.allow_short)}</td>
+        <td class="pos"><b>${fmtNum(c.oos_sharpe)}</b></td><td>${fmtNum(c.oos_positive_frac*100,0)}%</td>
+        <td class="${c.oos_total_return>=0?'pos':'neg'}">${fmtPct(c.oos_total_return)}</td>
+        <td class="muted">${fmtNum(c.trades_per_split,0)}</td></tr>`).join('')}</tbody></table>
     </div>`;
+
+  buildCharts(data);
 }
 
 async function load(){

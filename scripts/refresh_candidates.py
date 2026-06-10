@@ -5,19 +5,23 @@ walk-forward scan را روی data/processed (همهٔ صرافی‌ها/تای�
 اجرا می‌کند و خروجی را در چند مکان می‌نویسد:
   - outputs/wf_candidates.json            مانیفستِ بات (QuantResearchBridge)
   - outputs/wf_report.json + wf_history.jsonl   گزارش/تاریخچهٔ داشبورد QR
-  - <noches>/user_data/wf_candidates.json       مصرفِ بات‌های زنده
+  - <noches>/user_data/wf_candidates.json       مصرفِ Mickey
+  - <noches>/user_data/wf_candidates_walle.json مصرفِ Wall_E
   - <soodo>/app_db/qr_report.json               گزارش برای ادمین soodo
 
-اجرا (روزانه): .venv/bin/python scripts/refresh_candidates.py
+انتخابِ خودکارِ جفت‌ها (--top-n):
+  پس از اسکن، N جفتِ برتر بر اساسِ بهترین Sharpe OOS (در هر تایم‌فریم) انتخاب می‌شوند.
+  whitelist هر دو بات (Mickey → Gate USDT، Wall_E → Hyperliquid USDC) به‌صورتِ
+  خودکار در فایلِ کانفیگ نوشته می‌شود.
 
-تایم‌فریمِ خودکار: اسکن همهٔ تایم‌فریم‌ها را بررسی می‌کند؛ بهترین تایم‌فریمِ
-مجموعه‌ای برای جفت‌های Mickey (ماکزیمم‌کردنِ مجموعِ Sharpeِ OOS) به‌طورِ
-خودکار انتخاب می‌شود. اگر تایم‌فریم تغییر کند، mickey.env به‌روز می‌شود و
-Mickey با `docker compose up -d` بازسازی می‌شود (نه فقط restart). اگر فقط
-استراتژی/جهت تغییر کند، `docker restart Mickey` کافی است.
+تایم‌فریمِ خودکار:
+  بهترین تایم‌فریمِ مجموعه‌ای (ماکزیمم‌کردنِ مجموعِ Sharpe) انتخاب و در mickey.env /
+  walle.env نوشته می‌شود. اگر تایم‌فریم عوض شد: docker compose up -d (recreate).
+  اگر فقط استراتژی عوض شد: docker restart (سریع‌تر).
 """
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -31,22 +35,49 @@ from src.analysis.wf_scan import (  # noqa: E402
     scan_processed_dir, write_manifest, build_report, write_report,
 )
 
-# امضای پلنِ زنده: تنها وقتی این عوض شود، بات ری‌استارت یا بازسازی می‌شود.
 SIG_PATH = ROOT / "outputs" / ".live_plan_sig.json"
-MICKEY_ENV_PATH = Path("/home/h0551user/noches/mickey.env")
+WALLE_SIG_PATH = ROOT / "outputs" / ".walle_plan_sig.json"
+
 NOCHES_DIR = Path("/home/h0551user/noches")
+MICKEY_ENV_PATH = NOCHES_DIR / "mickey.env"
+WALLE_ENV_PATH = NOCHES_DIR / "walle.env"
+MICKEY_CONFIG_PATH = NOCHES_DIR / "user_data" / "mickey_config.json"
+WALLE_CONFIG_PATH = NOCHES_DIR / "user_data" / "walle_config.json"
+WALLE_MANIFEST_PATH = NOCHES_DIR / "user_data" / "wf_candidates_walle.json"
 
 
-def _copy(src: Path, dest: Path, label: str) -> None:
-    if dest.parent.exists():
-        shutil.copy(src, dest)
-        print(f"copied {label} -> {dest}")
-    else:
-        print(f"skip {label} copy (missing dir): {dest.parent}")
-
+# ── symbol helpers ─────────────────────────────────────────────────────────────
 
 def _norm_sym(sym: str) -> str:
-    return sym.replace("/", "").replace(":USDT", "").replace(":BTC", "").replace(":ETH", "")
+    """نرمال‌سازی به base: 'BTCUSDT', 'BTC/USDT:USDT', 'BTCUSDC' → 'BTC'"""
+    s = sym.split("/")[0].split(":")[0].upper()
+    for q in ("USDT", "USDC", "BUSD"):
+        if s.endswith(q) and len(s) > len(q):
+            return s[: -len(q)]
+    return s
+
+
+def _to_gate_pair(base: str) -> str:
+    return f"{_norm_sym(base)}/USDT:USDT"
+
+
+def _to_hyperliquid_pair(base: str) -> str:
+    return f"{_norm_sym(base)}/USDC:USDC"
+
+
+# ── best pairs / timeframe selection ──────────────────────────────────────────
+
+def _best_n_pairs(results: list, n: int = 5) -> list[str]:
+    """N base symbol برتر بر اساسِ بهترین Sharpe OOS (هر تایم‌فریم/استراتژی)."""
+    best: dict[str, float] = {}
+    for c in results:
+        if not c.get("passed"):
+            continue
+        base = _norm_sym(c.get("symbol", ""))
+        if not base:
+            continue
+        best[base] = max(best.get(base, 0.0), c.get("oos_sharpe", 0.0))
+    return sorted(best, key=lambda s: -best[s])[:n]
 
 
 def _best_collective_timeframe(results: list, pairs: list[str] | None) -> str:
@@ -68,98 +99,161 @@ def _best_collective_timeframe(results: list, pairs: list[str] | None) -> str:
 
 
 def _plan_signature(report: dict, pairs: list[str] | None) -> dict:
-    """امضای پایدارِ پلنِ زنده: {symbol: [strategy, allow_short]} برای جفت‌های موردِ نظر."""
+    """امضای پایدارِ پلنِ زنده: {base: [strategy, allow_short]}"""
     plan = report.get("live_plan", {})
+    norm_pairs = {_norm_sym(p) for p in pairs} if pairs else None
     sig = {}
     for sym, p in plan.items():
-        if pairs and _norm_sym(sym) not in {_norm_sym(p2) for p2 in pairs}:
+        base = _norm_sym(sym)
+        if norm_pairs and base not in norm_pairs:
             continue
-        sig[sym] = [p.get("strategy"), bool(p.get("allow_short"))]
+        sig[base] = [p.get("strategy"), bool(p.get("allow_short"))]
     return sig
 
 
-def _read_stored_sig() -> tuple[dict, str]:
-    """بارگذاریِ امضا و تایم‌فریمِ ذخیره‌شده."""
-    if not SIG_PATH.exists():
+# ── config whitelist update ────────────────────────────────────────────────────
+
+def _update_config_whitelist(config_path: Path, pairs: list[str]) -> None:
+    """به‌روزرسانیِ pair_whitelist در کانفیگِ freqtrade (با comments هم کار می‌کند)."""
+    if not config_path.exists():
+        return
+    text = config_path.read_text(encoding="utf-8")
+    formatted = ",\n            ".join(f'"{p}"' for p in pairs)
+    new_text = re.sub(
+        r'"pair_whitelist"\s*:\s*\[[^\]]*?\]',
+        f'"pair_whitelist": [\n            {formatted}\n        ]',
+        text,
+        flags=re.DOTALL,
+    )
+    if new_text != text:
+        config_path.write_text(new_text, encoding="utf-8")
+        print(f"  whitelist → {config_path.name}: {pairs}")
+    else:
+        print(f"  WARN: pair_whitelist pattern not found in {config_path.name}")
+
+
+# ── sig store ──────────────────────────────────────────────────────────────────
+
+def _read_sig(path: Path) -> tuple[dict, str]:
+    if not path.exists():
         return {}, "4h"
     try:
-        stored = json.loads(SIG_PATH.read_text(encoding="utf-8"))
+        stored = json.loads(path.read_text(encoding="utf-8"))
         tf = stored.pop("__timeframe__", "4h")
         return stored, tf
     except Exception:
         return {}, "4h"
 
 
-def _write_mickey_env(tf: str) -> None:
-    """به‌روزرسانیِ QR_TIMEFRAME در mickey.env."""
-    if not MICKEY_ENV_PATH.exists():
+def _write_sig(path: Path, tf: str, plan_sig: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"__timeframe__": tf, **plan_sig}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+
+# ── env file update ────────────────────────────────────────────────────────────
+
+def _write_env_tf(env_path: Path, tf: str) -> None:
+    if not env_path.exists():
         return
-    lines = [ln for ln in MICKEY_ENV_PATH.read_text(encoding="utf-8").splitlines()
+    lines = [ln for ln in env_path.read_text(encoding="utf-8").splitlines()
              if not ln.startswith("QR_TIMEFRAME=")]
     lines.append(f"QR_TIMEFRAME={tf}")
-    MICKEY_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"updated mickey.env → QR_TIMEFRAME={tf}")
+    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"  updated {env_path.name} → QR_TIMEFRAME={tf}")
 
 
-def _maybe_reload_mickey(results: list, report: dict, pairs: list[str] | None, force: bool) -> None:
+def _copy(src: Path, dest: Path, label: str) -> None:
+    if dest.parent.exists():
+        shutil.copy(src, dest)
+        print(f"copied {label} -> {dest}")
+    else:
+        print(f"skip {label} copy (missing dir): {dest.parent}")
+
+
+# ── generic bot reload ─────────────────────────────────────────────────────────
+
+def _maybe_reload_bot(
+    *,
+    bot_name: str,
+    results: list,
+    report: dict,
+    pairs: list[str] | None,
+    force: bool,
+    env_path: Path,
+    config_path: Path,
+    manifest_src: Path,
+    manifest_dst: Path | None,
+    sig_path: Path,
+    pair_formatter,
+) -> None:
     best_tf = _best_collective_timeframe(results, pairs)
-    new_sig = _plan_signature(report, pairs)
-    old_sig, old_tf = _read_stored_sig()
+    best_bases = pairs if pairs is not None else _best_n_pairs(results)
+    new_sig = _plan_signature(report, best_bases)
+    old_sig, old_tf = _read_sig(sig_path)
 
     tf_changed = best_tf != old_tf
     plan_changed = new_sig != old_sig
 
+    # همیشه whitelist و manifest رو به‌روز کن (حتی اگر restart نشود)
+    if best_bases and config_path.exists():
+        _update_config_whitelist(config_path, [pair_formatter(b) for b in best_bases])
+    if manifest_dst is not None:
+        _copy(manifest_src, manifest_dst, f"{bot_name} manifest")
+
     if not force and not tf_changed and not plan_changed:
-        print(f"Mickey unchanged (tf={best_tf}, plan={new_sig}) — no restart needed.")
+        print(f"{bot_name} unchanged (tf={best_tf}) — no restart needed.")
         return
 
-    stored = {"__timeframe__": best_tf, **new_sig}
-
     if tf_changed:
-        print(f"Mickey timeframe: {old_tf} → {best_tf}  (writing mickey.env + recreate)")
-        _write_mickey_env(best_tf)
+        print(f"{bot_name} timeframe: {old_tf} → {best_tf}  (env update + recreate)")
+        _write_env_tf(env_path, best_tf)
         try:
             subprocess.run(
-                ["docker", "compose", "up", "-d", "Mickey"],
+                ["docker", "compose", "up", "-d", bot_name],
                 check=True, timeout=180, cwd=str(NOCHES_DIR),
             )
-            print(f"recreated Mickey with QR_TIMEFRAME={best_tf}")
+            print(f"  reloaded {bot_name} (docker compose up -d)")
         except Exception as exc:  # noqa: BLE001
-            print(f"WARN: Mickey recreate failed: {exc}")
+            print(f"  WARN: {bot_name} recreate failed: {exc}")
     else:
-        print(f"Mickey plan changed (same tf={best_tf}): {old_sig} → {new_sig}")
+        print(f"{bot_name} plan changed (same tf={best_tf}) → docker restart")
         try:
-            subprocess.run(["docker", "restart", "Mickey"], check=True, timeout=120)
-            print("reloaded Mickey (docker restart)")
+            subprocess.run(["docker", "restart", bot_name], check=True, timeout=120)
+            print(f"  reloaded {bot_name} (docker restart)")
         except Exception as exc:  # noqa: BLE001
-            print(f"WARN: reload Mickey failed: {exc}")
+            print(f"  WARN: {bot_name} restart failed: {exc}")
 
-    SIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-    SIG_PATH.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
+    _write_sig(sig_path, best_tf, new_sig)
 
+
+# ── main ───────────────────────────────────────────────────────────────────────
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--symbols", nargs="*", default=None,
-                    help="فیلتر symbol (خالی = همهٔ دانلودشده‌ها)")
+    ap.add_argument("--symbols", nargs="*", default=None)
     ap.add_argument("--processed", default=str(ROOT / "data" / "processed"))
     ap.add_argument("--out", default=str(ROOT / "outputs" / "wf_candidates.json"))
     ap.add_argument("--report", default=str(ROOT / "outputs" / "wf_report.json"))
     ap.add_argument("--history", default=str(ROOT / "outputs" / "wf_history.jsonl"))
-    ap.add_argument("--noches", default="/home/h0551user/noches/user_data/wf_candidates.json",
-                    help="مقصدِ مانیفست برای بات‌ها (خالی = کپی نکن)")
-    ap.add_argument("--soodo-report", default="/home/h0551user/soodo/app_db/qr_report.json",
-                    help="مقصدِ گزارش برای ادمین soodo (خالی = کپی نکن)")
-    ap.add_argument("--live-timeframe", default="4h",
-                    help="تایم‌فریمی که بات زنده اجرا می‌کند (مبنای هشدارِ tfِ بهتر)")
+    ap.add_argument("--noches", default="/home/h0551user/noches/user_data/wf_candidates.json")
+    ap.add_argument("--soodo-report", default="/home/h0551user/soodo/app_db/qr_report.json")
+    ap.add_argument("--live-timeframe", default="4h")
     ap.add_argument("--min-positive-frac", type=float, default=0.55)
-    ap.add_argument("--reload-mickey", action="store_true",
-                    help="اگر پلنِ زندهٔ جفت‌های Mickey عوض شد، کانتینر را ری‌استارت کن")
-    ap.add_argument("--mickey-pairs", nargs="*",
-                    default=["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT"],
-                    help="جفت‌هایی که تغییرِ پلنِ آن‌ها باعثِ ری‌استارتِ Mickey می‌شود")
-    ap.add_argument("--force-reload", action="store_true",
-                    help="بدونِ بررسیِ تغییر، همیشه Mickey را ری‌استارت کن")
+    ap.add_argument("--top-n", type=int, default=5,
+                    help="N جفتِ برتر برای whitelist بات‌ها")
+    # Mickey
+    ap.add_argument("--reload-mickey", action="store_true")
+    ap.add_argument("--mickey-pairs", nargs="*", default=None,
+                    help="اگر تعیین شود، whitelist ثابت می‌ماند؛ خالی = auto top-N")
+    ap.add_argument("--force-reload", action="store_true")
+    # Wall_E
+    ap.add_argument("--reload-walle", action="store_true")
+    ap.add_argument("--walle-pairs", nargs="*", default=None,
+                    help="جفت‌های Wall_E (base مثل BTC)؛ خالی = auto top-N")
+    ap.add_argument("--force-reload-walle", action="store_true")
     args = ap.parse_args()
 
     results = scan_processed_dir(
@@ -169,13 +263,15 @@ def main() -> int:
     )
     out = write_manifest(results, Path(args.out))
 
-    # تایم‌فریمِ خودکار: اگر reload-mickey فعال است، بهترین tf را انتخاب کن.
+    # تایم‌فریم و جفت‌های خودکار
     live_tf = args.live_timeframe
     if args.reload_mickey or args.force_reload:
-        detected = _best_collective_timeframe(results, args.mickey_pairs)
-        if detected != live_tf:
-            print(f"auto-tf: {live_tf} → {detected} (better collective Sharpe for Mickey pairs)")
-        live_tf = detected
+        auto_pairs = args.mickey_pairs or _best_n_pairs(results, n=args.top_n)
+        detected_tf = _best_collective_timeframe(results, auto_pairs)
+        if detected_tf != live_tf:
+            print(f"auto-tf: {live_tf} → {detected_tf}")
+        live_tf = detected_tf
+        args.mickey_pairs = auto_pairs
 
     report = build_report(results, live_timeframe=live_tf)
     rep = write_report(report, Path(args.report), Path(args.history))
@@ -191,13 +287,41 @@ def main() -> int:
     for a in report["alerts"]:
         print(f"  ALERT  {a['message']}")
 
-    if args.noches:
-        _copy(out, Path(args.noches), "manifest")
     if args.soodo_report:
         _copy(rep, Path(args.soodo_report), "report")
 
     if args.reload_mickey or args.force_reload:
-        _maybe_reload_mickey(results, report, args.mickey_pairs, args.force_reload)
+        _maybe_reload_bot(
+            bot_name="Mickey",
+            results=results,
+            report=report,
+            pairs=args.mickey_pairs,
+            force=args.force_reload,
+            env_path=MICKEY_ENV_PATH,
+            config_path=MICKEY_CONFIG_PATH,
+            manifest_src=out,
+            manifest_dst=Path(args.noches) if args.noches else None,
+            sig_path=SIG_PATH,
+            pair_formatter=_to_gate_pair,
+        )
+    elif args.noches:
+        _copy(out, Path(args.noches), "Mickey manifest")
+
+    if args.reload_walle or args.force_reload_walle:
+        walle_pairs = args.walle_pairs or _best_n_pairs(results, n=args.top_n)
+        _maybe_reload_bot(
+            bot_name="Wall_E",
+            results=results,
+            report=report,
+            pairs=walle_pairs,
+            force=args.force_reload_walle,
+            env_path=WALLE_ENV_PATH,
+            config_path=WALLE_CONFIG_PATH,
+            manifest_src=out,
+            manifest_dst=WALLE_MANIFEST_PATH,
+            sig_path=WALLE_SIG_PATH,
+            pair_formatter=_to_hyperliquid_pair,
+        )
 
     return 0
 
