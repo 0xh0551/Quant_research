@@ -6,6 +6,8 @@ import asyncio
 import itertools
 import json
 import logging
+import subprocess
+import sys
 import threading
 import time
 from collections.abc import AsyncGenerator
@@ -38,6 +40,7 @@ ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = ROOT / "data" / "processed"
 WEB_DIR = ROOT / "web"
 LOG_DIR = ROOT / "logs"
+OUTPUTS_DIR = ROOT / "outputs"
 
 setup_logging(level="INFO", log_dir=LOG_DIR)
 logger = logging.getLogger(__name__)
@@ -283,6 +286,75 @@ def get_error_logs(n: int = 100) -> dict[str, Any]:
 @app.get("/api/jobs")
 def list_jobs() -> dict[str, Any]:
     return {"jobs": job_manager.list_recent(30)}
+
+
+# ── Edges (لبه‌های اعتبارسنجی‌شدهٔ walk-forward) ─────────────────────────────────
+
+@app.get("/edges")
+def edges_page() -> FileResponse:
+    return FileResponse(WEB_DIR / "edges.html")
+
+
+@app.get("/api/edges")
+def get_edges() -> dict[str, Any]:
+    """گزارشِ آخرین اسکن + تاریخچه + خودِ کاندیداها برای داشبوردِ لبه‌ها."""
+    report_path = OUTPUTS_DIR / "wf_report.json"
+    manifest_path = OUTPUTS_DIR / "wf_candidates.json"
+    history_path = OUTPUTS_DIR / "wf_history.jsonl"
+
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+
+    history: list[dict[str, Any]] = []
+    if history_path.exists():
+        for line in history_path.read_text(encoding="utf-8").splitlines()[-60:]:
+            line = line.strip()
+            if line:
+                try:
+                    history.append(json.loads(line))
+                except Exception:
+                    pass
+
+    return {
+        "report": report,
+        "history": history,
+        "n_candidates": len(manifest.get("candidates", [])),
+        "manifest_generated_at": manifest.get("generated_at"),
+    }
+
+
+@app.post("/api/edges/refresh")
+def refresh_edges(background_tasks: BackgroundTasks) -> dict[str, str]:
+    """اسکنِ walk-forward را به‌صورتِ job اجرا می‌کند (همان اسکریپتِ هفتگی)."""
+    job_id = job_manager.create("edges")
+    background_tasks.add_task(_run_edge_refresh, job_id)
+    return {"job_id": job_id}
+
+
+def _run_edge_refresh(job_id: str) -> None:
+    _log = logging.getLogger("quant.edges")
+    job_manager.update(job_id, status=JobStatus.RUNNING, message="اسکنِ walk-forward شروع شد...")
+    try:
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "scripts" / "refresh_candidates.py")],
+            capture_output=True, text=True, timeout=1800, cwd=str(ROOT),
+        )
+        report_path = OUTPUTS_DIR / "wf_report.json"
+        report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+        if proc.returncode != 0:
+            _log.error("edge refresh failed: %s", proc.stderr[-1000:])
+            job_manager.update(job_id, status=JobStatus.ERROR,
+                               error=(proc.stderr or proc.stdout)[-2000:], message="خطا در اسکن")
+            return
+        job_manager.update(
+            job_id, status=JobStatus.DONE, progress=100.0,
+            message=f"اسکن کامل شد — {report.get('n_passed', 0)} لبهٔ معتبر، "
+                    f"{len(report.get('alerts', []))} هشدار",
+            result=report,
+        )
+    except Exception as exc:
+        _log.exception("edge refresh crashed")
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
 
 
 @app.get("/api/insights")

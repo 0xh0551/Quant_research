@@ -43,6 +43,7 @@
 | **Report** | Interactive Plotly charts — equity curve with regime shading, drawdown panel, monthly heatmap, rolling Sharpe, sortable metrics table |
 | **Insights** | Deep analysis: 90-day rolling strategy scores, regime detection, strategy rotation on price chart, ML/RL fitness scoring with bot hints |
 | **Lab** | Customize strategy parameters with sliders, run instant backtests, and run Grid Search optimizer to find best params |
+| **Edges** | Walk-forward out-of-sample survivors that live bots actually trade: live plan per symbol, per-timeframe edge distribution, timeframe-change alerts, scan history, and a one-click re-scan ([details](#walk-forward-edge-scan--live-bot-bridge)) |
 | **Logs** | Live log viewer with level filtering |
 
 Language: FA/EN toggle in the top bar.
@@ -208,6 +209,71 @@ For each downloaded dataset, the Insights section analyses the **most recent 90 
 
 This is a statistical, rule-based system with no machine learning or LLM components. It is intended as a quick signal, not a trading recommendation.
 
+## Walk-Forward Edge Scan → Live Bot Bridge
+
+This is the part that turns research into a **deployable, automatically-refreshed edge**. The motivation: ML/RL trading bots tend to overfit — they look great in-sample and lose out-of-sample. This pipeline only promotes **rule strategies that stay positive across rolling out-of-sample windows**, with realistic futures costs (fees + slippage + **perpetual funding**) and short selling enabled, and then feeds those survivors to live freqtrade bots.
+
+```
+data/processed/*.parquet                    ← every downloaded exchange × symbol × timeframe
+        │
+        ▼  src/analysis/wf_scan.py
+  walk-forward scan  (rolling train/test splits, no lookahead)
+   • each strategy × direction × dataset
+   • funding-aware backtest on every OOS test window
+   • keep only: OOS mean > 0, ≥55% positive windows, Sharpe > 0
+        │
+        ├──►  outputs/wf_candidates.json   (manifest — the live bot reads this)
+        └──►  outputs/wf_report.json       (dashboard report + alerts)  →  copied to soodo admin
+        │
+        ▼  scripts/refresh_candidates.py   (weekly cron)
+  copy manifest → noches/user_data/wf_candidates.json
+  reload bot5  →  QuantResearchBridge picks best validated rule per pair
+```
+
+### What it scans
+
+The scan runs over **every Parquet in `data/processed/` that has enough bars** (≥ one full train+test split). It is **exchange-agnostic and timeframe-agnostic** — it does not look at which exchange a live bot uses; instead it treats *consistency of an edge across independent venues* as the robustness signal. A representative run:
+
+| Timeframe | Combos scanned | Edges passed |
+|---|---|---|
+| 15m | 44 | 0 |
+| 1h | 66 | 1 |
+| 4h | 176 | 32 |
+
+→ robust edges concentrate on **4h** (e.g. BTC `donchian_breakout` consistent across 5 exchanges). 1d datasets are skipped automatically (too few bars for a valid split).
+
+### Live bot (freqtrade) — `QuantResearchBridge`
+
+`noches/user_data/strategies/QuantResearchBridge.py` is a freqtrade `IStrategy` that **reads the manifest and trades only validated rules** (pure-pandas, matching the research engine exactly). For each pair it picks the highest-Sharpe candidate **matching its live timeframe**; if a pair has no validated candidate, it stays flat. The live timeframe comes from the `QR_TIMEFRAME` env var (default `4h`).
+
+### Automation & the timeframe policy
+
+The full loop runs **daily** via one cron (`scripts/refresh_candidates.sh` at 23:00):
+
+1. **Data refresh** (`scripts/refresh_data.py`) — incrementally appends fresh candles to every dataset in `data/processed` (dedup by timestamp; nothing is deleted) so edges are never computed on stale data.
+2. **Re-scan** — rewrites the manifest + report, copies the manifest to the bots and the report to the soodo admin.
+3. **Conditional reload** — bot5 is restarted **only when its live plan actually changes**, not on a fixed schedule. The script keeps a signature `{symbol: [strategy, allow_short]}` for the bot's pairs (`outputs/.live_plan_sig.json`); if today's scan yields the same plan, **no restart happens** (zero needless downtime); if the chosen rule/direction for a pair changes, it `docker restart`s and saves the new signature. So the restart cadence is driven by *how often the edge changes* — could be never, could be several days running — which is exactly "keep the bot in its best state automatically." (`--force-reload` overrides; `--bot5-pairs` sets which pairs count.)
+
+**Switching the timeframe is deliberately *not* automatic.** If a stronger edge appears on a different timeframe, the scan emits a `better_timeframe` **alert** in `wf_report.json` (surfaced on both dashboards) rather than silently re-pointing a live, sold product. Changing the timeframe means restarting the container with a new `QR_TIMEFRAME` — a human-approved action, because it changes the character and risk profile of the bot.
+
+### Edges dashboard
+
+The **`/edges`** page (linked from the main dashboard sidebar) visualises the latest scan: live plan per symbol, per-timeframe edge distribution, top candidates, timeframe alerts, and scan history. It also exposes a **“run scan again”** button that triggers the same pipeline as a background job. A read-only mirror of the report is also rendered inside the **soodo admin** panel (`/admin/qr-edges`) so the business side can see what changed and when.
+
+```bash
+# run a scan manually (writes manifest + report, copies to bots, reloads bot5)
+.venv/bin/python scripts/refresh_candidates.py --reload-bot5
+
+# scan only — write outputs but don't copy to bots or reload (for inspection)
+.venv/bin/python scripts/refresh_candidates.py --noches "" --soodo-report ""
+```
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /edges` | Edges dashboard page |
+| `GET /api/edges` | Latest report + history + manifest summary |
+| `POST /api/edges/refresh` | Trigger a fresh walk-forward scan (background job) |
+
 ## Repository Layout
 
 ```
@@ -229,6 +295,7 @@ Quant_research/
 │   ├── analysis/
 │   │   ├── global_report.py   # Multi-dataset HTML dashboard generator
 │   │   ├── walk_forward.py    # Time-series cross-validation
+│   │   ├── wf_scan.py         # Walk-forward edge scan + manifest/report/alerts
 │   │   ├── monte_carlo.py     # Bootstrap robustness analysis
 │   │   ├── regime.py          # Market regime detection
 │   │   └── portfolio.py       # Cross-asset aggregation
@@ -243,7 +310,11 @@ Quant_research/
 │   │   └── app.py             # Typer CLI entrypoint
 │   └── config.py              # Pydantic project configuration models
 ├── web/
-│   └── dashboard.html         # Single-page browser dashboard
+│   ├── dashboard.html         # Single-page browser dashboard
+│   └── edges.html             # Walk-forward edges dashboard (/edges)
+├── scripts/
+│   ├── refresh_candidates.py  # Re-scan, write manifest+report, copy to bots, reload
+│   └── refresh_candidates.sh  # Weekly cron wrapper (host)
 ├── data/
 │   ├── processed/             # OHLCV Parquet files ({exchange}_{symbol}_{tf}.parquet)
 │   └── research/              # Feature matrices and research artefacts
