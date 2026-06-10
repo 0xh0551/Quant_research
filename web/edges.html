@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>لبه‌های اعتبارسنجی‌شده — Quant Research</title>
+<style>
+:root{
+  --bg:#0a0b0f;--bg2:#0f1117;--bg3:#161b27;--bg4:#1e2537;
+  --border:#252d3d;--border2:#2e3a52;
+  --cyan:#00d4ff;--purple:#7c3aed;--green:#10b981;--red:#ef4444;
+  --yellow:#f59e0b;--orange:#f97316;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --font:'Inter','Vazirmatn','Tahoma',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;padding:24px;min-height:100vh}
+a{color:var(--cyan);text-decoration:none}
+.wrap{max-width:1180px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
+h1{font-size:20px;font-weight:700;color:var(--cyan)}
+.sub{font-size:12px;color:var(--text3);margin-top:4px}
+.btn{background:linear-gradient(135deg,var(--cyan),#0099cc);color:#04121a;border:0;border-radius:10px;
+  padding:10px 18px;font-weight:700;cursor:pointer;font-family:inherit;font-size:13px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.ghost{background:transparent;border:1px solid var(--border2);color:var(--text2)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:16px}
+.card .k{font-size:11px;color:var(--text3);letter-spacing:.3px}
+.card .v{font-size:24px;font-weight:700;margin-top:6px}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:18px}
+.panel h2{font-size:14px;color:var(--text);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:right;padding:9px 10px;border-bottom:1px solid var(--border)}
+th{color:var(--text3);font-weight:600;font-size:11px;letter-spacing:.3px}
+tr:last-child td{border-bottom:0}
+.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
+.pill.long{background:rgba(16,185,129,.15);color:var(--green)}
+.pill.short{background:rgba(239,68,68,.15);color:var(--red)}
+.pill.both{background:rgba(124,58,237,.15);color:#a78bfa}
+.pos{color:var(--green)}.neg{color:var(--red)}.muted{color:var(--text3)}
+.alert{background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:10px;
+  padding:12px 14px;margin-bottom:10px;font-size:13px;line-height:1.7}
+.alert b{color:var(--yellow)}
+.ok{background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.3);border-radius:10px;padding:12px 14px;font-size:13px}
+.spark{height:42px;width:100%}
+.note{font-size:12px;color:var(--text3);line-height:1.8;margin-top:8px}
+.tf-bar{display:flex;gap:10px;flex-wrap:wrap}
+.tf-chip{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:8px 12px;font-size:12px}
+.tf-chip b{color:var(--cyan)}
+#status{font-size:12px;color:var(--text2);min-height:18px}
+.loading{color:var(--text3);padding:30px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>🛰 لبه‌های اعتبارسنجی‌شده (Walk-Forward)</h1>
+      <div class="sub">خروجیِ اسکنِ خارج‌از‌نمونه که بات‌های زنده (مثل Mickey) فقط همین‌ها را اجرا می‌کنند · <a href="/">← داشبورد اصلی</a></div>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <span id="status"></span>
+      <button class="btn ghost" onclick="load()">↻ بارگیری</button>
+      <button class="btn" id="scanBtn" onclick="rescan()">اجرای اسکن دوباره</button>
+    </div>
+  </header>
+
+  <div id="body"><div class="loading">در حال بارگیری…</div></div>
+</div>
+
+<script>
+const fmtPct = x => (x==null?'—':(x>=0?'+':'')+(x*100).toFixed(1)+'%');
+const fmtNum = (x,d=2) => (x==null?'—':Number(x).toFixed(d));
+const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+function dirPill(short){ // short=True means strategy used short side too
+  return short ? '<span class="pill both">دوطرفه</span>' : '<span class="pill long">فقط خرید</span>';
+}
+
+function sparkline(values){
+  if(!values || values.length<2) return '';
+  const w=260,h=42,pad=3;
+  const mn=Math.min(...values),mx=Math.max(...values),rng=(mx-mn)||1;
+  const pts=values.map((v,i)=>{
+    const x=pad+i*(w-2*pad)/(values.length-1);
+    const y=h-pad-((v-mn)/rng)*(h-2*pad);
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  return `<svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    <polyline fill="none" stroke="#00d4ff" stroke-width="1.6" points="${pts}"/></svg>`;
+}
+
+function render(data){
+  const r=data.report||{};
+  if(!r.generated_at){
+    document.getElementById('body').innerHTML='<div class="panel">هنوز گزارشی تولید نشده. «اجرای اسکن دوباره» را بزنید.</div>';
+    return;
+  }
+  const tf=r.by_timeframe||{}, plan=r.live_plan||{}, top=r.top||[], alerts=r.alerts||[];
+  const when=new Date(r.generated_at).toLocaleString('fa-IR');
+
+  let tfChips=Object.keys(tf).sort().map(k=>`<div class="tf-chip">${k}: <b>${tf[k].passed}</b>/${tf[k].scanned} معتبر</div>`).join('');
+
+  let planRows=Object.keys(plan).map(sym=>{
+    const p=plan[sym];
+    return `<tr><td><b>${esc(sym)}</b></td><td>${esc(p.strategy)}</td><td>${dirPill(p.allow_short)}</td>
+      <td>${fmtNum(p.oos_sharpe)}</td><td>${fmtNum(p.oos_positive_frac*100,0)}%</td>
+      <td class="${p.oos_total_return>=0?'pos':'neg'}">${fmtPct(p.oos_total_return)}</td>
+      <td class="muted">${esc(p.exchange)}</td></tr>`;
+  }).join('') || '<tr><td colspan="7" class="muted">کاندیدی روی تایم‌فریم زنده نیست</td></tr>';
+
+  let topRows=top.map(c=>`<tr><td>${esc(c.exchange)}</td><td><b>${esc(c.symbol)}</b></td>
+    <td>${esc(c.timeframe)}</td><td>${esc(c.strategy)}</td><td>${dirPill(c.allow_short)}</td>
+    <td>${fmtNum(c.oos_sharpe)}</td><td>${fmtNum(c.oos_positive_frac*100,0)}%</td>
+    <td class="${c.oos_total_return>=0?'pos':'neg'}">${fmtPct(c.oos_total_return)}</td>
+    <td class="muted">${fmtNum(c.trades_per_split,0)}</td></tr>`).join('');
+
+  let alertHtml = alerts.length
+    ? alerts.map(a=>`<div class="alert"><b>⚠ تایم‌فریمِ بهتر:</b> ${esc(a.message)}</div>`).join('')
+    : `<div class="ok">✅ هیچ تایم‌فریمِ بهتری از <b>${esc(r.live_timeframe)}</b> پیدا نشد — تنظیمِ فعلیِ بات بهینه است.</div>`;
+
+  const hist=data.history||[];
+  const passedSeries=hist.map(h=>h.n_passed);
+
+  document.getElementById('body').innerHTML=`
+    <div class="cards">
+      <div class="card"><div class="k">تایم‌فریمِ زنده</div><div class="v" style="color:var(--cyan)">${esc(r.live_timeframe)}</div></div>
+      <div class="card"><div class="k">ترکیب‌های اسکن‌شده</div><div class="v">${r.n_scanned}</div></div>
+      <div class="card"><div class="k">لبه‌های معتبر (OOS)</div><div class="v pos">${r.n_passed}</div></div>
+      <div class="card"><div class="k">هشدارها</div><div class="v" style="color:${alerts.length?'var(--yellow)':'var(--green)'}">${alerts.length}</div></div>
+      <div class="card"><div class="k">آخرین اسکن</div><div class="v" style="font-size:13px;padding-top:8px">${when}</div></div>
+    </div>
+
+    <div class="panel">
+      <h2>📡 پلنِ زندهٔ بات (تایم‌فریم ${esc(r.live_timeframe)})</h2>
+      <table><thead><tr><th>نماد</th><th>قاعده</th><th>جهت</th><th>Sharpe (OOS)</th><th>٪ پنجره‌های مثبت</th><th>بازده کل OOS</th><th>صرافیِ مرجع</th></tr></thead>
+      <tbody>${planRows}</tbody></table>
+      <div class="note">بات فقط نمادهایی را معامله می‌کند که هم در whitelistِ بات باشند و هم اینجا کاندیدِ معتبر داشته باشند؛ بقیه «بیرون» می‌مانند.</div>
+    </div>
+
+    <div class="panel">
+      <h2>⚠ هشدارهای تغییرِ تایم‌فریم</h2>
+      ${alertHtml}
+      <div class="note">تغییرِ تایم‌فریمِ یک باتِ فروخته‌شده خودکار نیست: نیازمندِ ری‌استارتِ کانتینر با <code>QR_TIMEFRAME</code>ِ جدید و تأییدِ انسانی است.</div>
+    </div>
+
+    <div class="panel">
+      <h2>📊 پراکندگیِ لبه‌ها بر حسب تایم‌فریم</h2>
+      <div class="tf-bar">${tfChips}</div>
+    </div>
+
+    <div class="panel">
+      <h2>🏆 برترین کاندیداها (همهٔ تایم‌فریم‌ها)</h2>
+      <table><thead><tr><th>صرافی</th><th>نماد</th><th>TF</th><th>قاعده</th><th>جهت</th><th>Sharpe</th><th>٪ مثبت</th><th>بازده OOS</th><th>معاملات/پنجره</th></tr></thead>
+      <tbody>${topRows}</tbody></table>
+    </div>
+
+    <div class="panel">
+      <h2>📈 روندِ تعدادِ لبه‌ها در اسکن‌های اخیر</h2>
+      ${sparkline(passedSeries) || '<div class="muted">تاریخچهٔ کافی نیست</div>'}
+      <div class="note">${hist.length} اسکنِ ثبت‌شده</div>
+    </div>`;
+}
+
+async function load(){
+  document.getElementById('status').textContent='';
+  try{
+    const res=await fetch('/api/edges'); const data=await res.json(); render(data);
+  }catch(e){ document.getElementById('body').innerHTML='<div class="panel neg">خطا در بارگیری: '+esc(e)+'</div>'; }
+}
+
+async function rescan(){
+  const btn=document.getElementById('scanBtn'); btn.disabled=true;
+  const st=document.getElementById('status'); st.textContent='شروع اسکن…';
+  try{
+    const res=await fetch('/api/edges/refresh',{method:'POST'}); const {job_id}=await res.json();
+    const ev=new EventSource('/api/jobs/'+job_id+'/events');
+    ev.onmessage=e=>{
+      const d=JSON.parse(e.data);
+      st.textContent=(d.message||'')+(d.progress?` (${d.progress}%)`:'');
+      if(d.status==='done'){ ev.close(); btn.disabled=false; load(); }
+      if(d.status==='error'){ ev.close(); btn.disabled=false; st.textContent='خطا: '+(d.error||d.message||''); }
+    };
+    ev.onerror=()=>{ ev.close(); btn.disabled=false; setTimeout(load,1500); };
+  }catch(e){ st.textContent='خطا: '+esc(e); btn.disabled=false; }
+}
+
+load();
+</script>
+</body>
+</html>

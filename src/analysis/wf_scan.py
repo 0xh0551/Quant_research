@@ -184,3 +184,121 @@ def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return output_path
+
+
+# ── reporting (برای داشبورد Quant_research و گزارش ادمین soodo) ──────────────────
+
+def _best_per_symbol(survivors: list[ScanResult], timeframe: str | None = None):
+    """بهترین کاندید (بیشترین Sharpe) به ازای هر symbol، اختیاراً محدود به یک tf."""
+    best: dict[str, ScanResult] = {}
+    for r in survivors:
+        if timeframe is not None and r.timeframe != timeframe:
+            continue
+        cur = best.get(r.symbol)
+        if cur is None or r.oos_sharpe > cur.oos_sharpe:
+            best[r.symbol] = r
+    return best
+
+
+def build_report(
+    results: list[ScanResult],
+    *,
+    live_timeframe: str = "4h",
+    better_tf_abs_margin: float = 0.1,
+    better_tf_rel_margin: float = 0.25,
+) -> dict:
+    """گزارشِ خوانا برای داشبورد: شمارش‌ها، تفکیک tf/symbol، پلنِ زندهٔ بات و هشدارها.
+
+    هشدارِ «تایم‌فریمِ بهتر»: اگر برای یک symbol بهترین کاندید روی tfِ دیگری به‌قدرِ
+    کافی قوی‌تر از بهترین کاندیدِ tfِ زنده باشد، علامت‌گذاری می‌شود تا انسان دربارهٔ
+    ری‌استارتِ بات (با تایم‌فریمِ جدید) تصمیم بگیرد — تغییر تایم‌فریم خودکار نیست.
+    """
+    survivors = sorted((r for r in results if r.passed),
+                       key=lambda r: r.oos_sharpe, reverse=True)
+
+    by_tf: dict[str, dict] = {}
+    by_symbol: dict[str, dict] = {}
+    for r in results:
+        t = by_tf.setdefault(r.timeframe, {"scanned": 0, "passed": 0})
+        t["scanned"] += 1
+        t["passed"] += int(r.passed)
+        s = by_symbol.setdefault(r.symbol, {"scanned": 0, "passed": 0})
+        s["scanned"] += 1
+        s["passed"] += int(r.passed)
+
+    live_best = _best_per_symbol(survivors, timeframe=live_timeframe)
+    global_best = _best_per_symbol(survivors, timeframe=None)
+
+    live_plan = {
+        sym: {
+            "strategy": r.strategy,
+            "allow_short": r.allow_short,
+            "oos_sharpe": r.oos_sharpe,
+            "oos_positive_frac": r.oos_positive_frac,
+            "oos_total_return": r.oos_total_return,
+            "exchange": r.exchange,
+        }
+        for sym, r in live_best.items()
+    }
+
+    alerts: list[dict] = []
+    for sym, gb in global_best.items():
+        if gb.timeframe == live_timeframe:
+            continue
+        lb = live_best.get(sym)
+        live_sharpe = lb.oos_sharpe if lb else 0.0
+        gap = gb.oos_sharpe - live_sharpe
+        rel = gap / abs(live_sharpe) if live_sharpe else float("inf")
+        if gap >= better_tf_abs_margin and rel >= better_tf_rel_margin:
+            alerts.append({
+                "type": "better_timeframe",
+                "symbol": sym,
+                "live_timeframe": live_timeframe,
+                "live_strategy": lb.strategy if lb else None,
+                "live_sharpe": live_sharpe,
+                "candidate_timeframe": gb.timeframe,
+                "candidate_strategy": gb.strategy,
+                "candidate_sharpe": gb.oos_sharpe,
+                "candidate_short": gb.allow_short,
+                "gap": round(gap, 3),
+                "message": (
+                    f"{sym}: لبهٔ قوی‌تری روی {gb.timeframe} پیدا شد "
+                    f"(Sharpe {gb.oos_sharpe:.2f} با {gb.strategy}) نسبت به تایم‌فریم زندهٔ "
+                    f"{live_timeframe} (Sharpe {live_sharpe:.2f}). برای فعال‌سازی، بات باید با "
+                    f"تایم‌فریم {gb.timeframe} ری‌استارت شود — این تغییر دستی/تأییدی است."
+                ),
+            })
+
+    return {
+        "version": 1,
+        "generated_at": pd.Timestamp.now("UTC").isoformat(),
+        "live_timeframe": live_timeframe,
+        "n_scanned": len(results),
+        "n_passed": len(survivors),
+        "by_timeframe": by_tf,
+        "by_symbol": by_symbol,
+        "live_plan": live_plan,
+        "top": [asdict(r) for r in survivors[:20]],
+        "alerts": alerts,
+    }
+
+
+def write_report(report: dict, output_path: Path,
+                 history_path: Path | None = None) -> Path:
+    """گزارش را می‌نویسد و یک خط خلاصه به history (JSONL) اضافه می‌کند."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if history_path is not None:
+        history_path.parent.mkdir(parents=True, exist_ok=True)
+        line = json.dumps({
+            "generated_at": report["generated_at"],
+            "n_scanned": report["n_scanned"],
+            "n_passed": report["n_passed"],
+            "n_alerts": len(report.get("alerts", [])),
+            "live_timeframe": report.get("live_timeframe"),
+            "top_symbol": report["top"][0]["symbol"] if report.get("top") else None,
+            "top_sharpe": report["top"][0]["oos_sharpe"] if report.get("top") else None,
+        }, ensure_ascii=False)
+        with history_path.open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    return output_path

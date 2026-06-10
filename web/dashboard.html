@@ -397,6 +397,13 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
       <span data-t="lab_nav">آزمایشگاه</span>
       <span class="nav-badge" style="background:var(--purple)">NEW</span>
     </div>
+    <div class="nav-item" onclick="location.href='/edges'">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>
+      </svg>
+      <span data-t="edges_nav">لبه‌ها</span>
+      <span class="nav-badge" style="background:var(--green)">LIVE</span>
+    </div>
     <div class="nav-item" onclick="showSection('logs')">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/>
@@ -1006,6 +1013,26 @@ tbody td{padding:10px 14px;color:var(--text);white-space:nowrap}
 </div><!-- /app -->
 
 <script>
+// Auto-detect deployment path prefix so API calls work at any base URL (e.g. /admin/quant/)
+(function() {
+  var base = window.location.pathname.replace(/\/$/, '');
+  if (!base) return;
+  var _f = window.fetch.bind(window);
+  window.fetch = function(url) {
+    var args = Array.prototype.slice.call(arguments);
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(base))
+      args[0] = base + url;
+    return _f.apply(null, args);
+  };
+  var _ES = window.EventSource;
+  window.EventSource = function(url) {
+    var args = Array.prototype.slice.call(arguments);
+    if (typeof url === 'string' && url.startsWith('/') && !url.startsWith(base))
+      args[0] = base + url;
+    return new (Function.prototype.bind.apply(_ES, [null].concat(args)));
+  };
+})();
+
 // ═══════════════════════════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════════════════════════
