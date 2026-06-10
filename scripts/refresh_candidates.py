@@ -8,19 +8,20 @@ walk-forward scan را روی data/processed (همهٔ صرافی‌ها/تای�
   - <noches>/user_data/wf_candidates.json       مصرفِ بات‌های زنده
   - <soodo>/app_db/qr_report.json               گزارش برای ادمین soodo
 
-اجرا (هفتگی، بعد از هایپراپتِ شبانه):
-  .venv/bin/python scripts/refresh_candidates.py
+اجرا (روزانه): .venv/bin/python scripts/refresh_candidates.py
 
-نکته دربارهٔ تایم‌فریم: اسکن همهٔ تایم‌فریم‌ها را بررسی می‌کند، اما بات زنده فقط
-کاندیداهای `--live-timeframe` (پیش‌فرض 4h) را اجرا می‌کند. اگر لبهٔ قوی‌تری روی
-تایم‌فریمِ دیگری پیدا شود، در گزارش به‌صورتِ «هشدار» می‌آید؛ تغییرِ تایم‌فریمِ بات
-دستی/تأییدی است (نیازمند ری‌استارتِ کانتینر با کانفیگِ جدید) و خودکار نیست.
+تایم‌فریمِ خودکار: اسکن همهٔ تایم‌فریم‌ها را بررسی می‌کند؛ بهترین تایم‌فریمِ
+مجموعه‌ای برای جفت‌های bot5 (ماکزیمم‌کردنِ مجموعِ Sharpeِ OOS) به‌طورِ
+خودکار انتخاب می‌شود. اگر تایم‌فریم تغییر کند، bot5.env به‌روز می‌شود و
+bot5 با `docker compose up -d` بازسازی می‌شود (نه فقط restart). اگر فقط
+استراتژی/جهت تغییر کند، `docker restart bot5` کافی است.
 """
 import argparse
 import json
 import shutil
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -30,8 +31,10 @@ from src.analysis.wf_scan import (  # noqa: E402
     scan_processed_dir, write_manifest, build_report, write_report,
 )
 
-# امضای پلنِ زنده: تنها وقتی این عوض شود، بات ری‌استارت می‌شود (نه طبقِ یک زمان‌بندیِ ثابت).
+# امضای پلنِ زنده: تنها وقتی این عوض شود، بات ری‌استارت یا بازسازی می‌شود.
 SIG_PATH = ROOT / "outputs" / ".live_plan_sig.json"
+bot5_ENV_PATH = Path("/home/h0551user/noches/bot5.env")
+NOCHES_DIR = Path("/home/h0551user/noches")
 
 
 def _copy(src: Path, dest: Path, label: str) -> None:
@@ -42,38 +45,97 @@ def _copy(src: Path, dest: Path, label: str) -> None:
         print(f"skip {label} copy (missing dir): {dest.parent}")
 
 
+def _norm_sym(sym: str) -> str:
+    return sym.replace("/", "").replace(":USDT", "").replace(":BTC", "").replace(":ETH", "")
+
+
+def _best_collective_timeframe(results: list, pairs: list[str] | None) -> str:
+    """بهترین تایم‌فریمِ مجموعه‌ای: ماکزیمم‌کردنِ مجموعِ بهترین Sharpe برای هر جفت."""
+    norm = {_norm_sym(p) for p in (pairs or [])} if pairs else set()
+    best_per: dict[tuple, float] = {}
+    for c in results:
+        if not c.get("passed"):
+            continue
+        sym = _norm_sym(c.get("symbol", ""))
+        if norm and sym not in norm:
+            continue
+        key = (sym, c.get("timeframe", ""))
+        best_per[key] = max(best_per.get(key, 0.0), c.get("oos_sharpe", 0.0))
+    tf_total: dict[str, float] = defaultdict(float)
+    for (_, tf), sh in best_per.items():
+        tf_total[tf] += sh
+    return max(tf_total, key=lambda t: tf_total[t]) if tf_total else "4h"
+
+
 def _plan_signature(report: dict, pairs: list[str] | None) -> dict:
     """امضای پایدارِ پلنِ زنده: {symbol: [strategy, allow_short]} برای جفت‌های موردِ نظر."""
     plan = report.get("live_plan", {})
     sig = {}
     for sym, p in plan.items():
-        if pairs and sym not in pairs:
+        if pairs and _norm_sym(sym) not in {_norm_sym(p2) for p2 in pairs}:
             continue
         sig[sym] = [p.get("strategy"), bool(p.get("allow_short"))]
     return sig
 
 
-def _maybe_reload_bot5(report: dict, pairs: list[str] | None, force: bool) -> None:
-    new_sig = _plan_signature(report, pairs)
-    old_sig = {}
-    if SIG_PATH.exists():
-        try:
-            old_sig = json.loads(SIG_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            old_sig = {}
+def _read_stored_sig() -> tuple[dict, str]:
+    """بارگذاریِ امضا و تایم‌فریمِ ذخیره‌شده."""
+    if not SIG_PATH.exists():
+        return {}, "4h"
+    try:
+        stored = json.loads(SIG_PATH.read_text(encoding="utf-8"))
+        tf = stored.pop("__timeframe__", "4h")
+        return stored, tf
+    except Exception:
+        return {}, "4h"
 
-    if not force and new_sig == old_sig:
-        print(f"bot5 plan unchanged ({new_sig}) — no restart needed.")
+
+def _write_bot5_env(tf: str) -> None:
+    """به‌روزرسانیِ QR_TIMEFRAME در bot5.env."""
+    if not bot5_ENV_PATH.exists():
+        return
+    lines = [ln for ln in bot5_ENV_PATH.read_text(encoding="utf-8").splitlines()
+             if not ln.startswith("QR_TIMEFRAME=")]
+    lines.append(f"QR_TIMEFRAME={tf}")
+    bot5_ENV_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"updated bot5.env → QR_TIMEFRAME={tf}")
+
+
+def _maybe_reload_bot5(results: list, report: dict, pairs: list[str] | None, force: bool) -> None:
+    best_tf = _best_collective_timeframe(results, pairs)
+    new_sig = _plan_signature(report, pairs)
+    old_sig, old_tf = _read_stored_sig()
+
+    tf_changed = best_tf != old_tf
+    plan_changed = new_sig != old_sig
+
+    if not force and not tf_changed and not plan_changed:
+        print(f"bot5 unchanged (tf={best_tf}, plan={new_sig}) — no restart needed.")
         return
 
-    print(f"bot5 plan changed: {old_sig} → {new_sig}")
-    try:
-        subprocess.run(["docker", "restart", "bot5"], check=True, timeout=120)
-        print("reloaded bot5 (docker restart)")
-        SIG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        SIG_PATH.write_text(json.dumps(new_sig, ensure_ascii=False), encoding="utf-8")
-    except Exception as exc:  # noqa: BLE001
-        print(f"WARN: reload bot5 failed: {exc}")
+    stored = {"__timeframe__": best_tf, **new_sig}
+
+    if tf_changed:
+        print(f"bot5 timeframe: {old_tf} → {best_tf}  (writing bot5.env + recreate)")
+        _write_bot5_env(best_tf)
+        try:
+            subprocess.run(
+                ["docker", "compose", "up", "-d", "bot5"],
+                check=True, timeout=180, cwd=str(NOCHES_DIR),
+            )
+            print(f"recreated bot5 with QR_TIMEFRAME={best_tf}")
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARN: bot5 recreate failed: {exc}")
+    else:
+        print(f"bot5 plan changed (same tf={best_tf}): {old_sig} → {new_sig}")
+        try:
+            subprocess.run(["docker", "restart", "bot5"], check=True, timeout=120)
+            print("reloaded bot5 (docker restart)")
+        except Exception as exc:  # noqa: BLE001
+            print(f"WARN: reload bot5 failed: {exc}")
+
+    SIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    SIG_PATH.write_text(json.dumps(stored, ensure_ascii=False), encoding="utf-8")
 
 
 def main() -> int:
@@ -94,7 +156,7 @@ def main() -> int:
     ap.add_argument("--reload-bot5", action="store_true",
                     help="اگر پلنِ زندهٔ جفت‌های bot5 عوض شد، کانتینر را ری‌استارت کن")
     ap.add_argument("--bot5-pairs", nargs="*",
-                    default=["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT"],
+                    default=["BTCUSDT", "ETHUSDT", "SOLUSDT", "XRPUSDT", "DOGEUSDT"],
                     help="جفت‌هایی که تغییرِ پلنِ آن‌ها باعثِ ری‌استارتِ bot5 می‌شود")
     ap.add_argument("--force-reload", action="store_true",
                     help="بدونِ بررسیِ تغییر، همیشه bot5 را ری‌استارت کن")
@@ -106,7 +168,16 @@ def main() -> int:
         min_positive_frac=args.min_positive_frac,
     )
     out = write_manifest(results, Path(args.out))
-    report = build_report(results, live_timeframe=args.live_timeframe)
+
+    # تایم‌فریمِ خودکار: اگر reload-bot5 فعال است، بهترین tf را انتخاب کن.
+    live_tf = args.live_timeframe
+    if args.reload_bot5 or args.force_reload:
+        detected = _best_collective_timeframe(results, args.bot5_pairs)
+        if detected != live_tf:
+            print(f"auto-tf: {live_tf} → {detected} (better collective Sharpe for bot5 pairs)")
+        live_tf = detected
+
+    report = build_report(results, live_timeframe=live_tf)
     rep = write_report(report, Path(args.report), Path(args.history))
 
     n_pass = report["n_passed"]
@@ -126,7 +197,7 @@ def main() -> int:
         _copy(rep, Path(args.soodo_report), "report")
 
     if args.reload_bot5 or args.force_reload:
-        _maybe_reload_bot5(report, args.bot5_pairs, args.force_reload)
+        _maybe_reload_bot5(results, report, args.bot5_pairs, args.force_reload)
 
     return 0
 
