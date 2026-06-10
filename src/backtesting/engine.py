@@ -20,6 +20,14 @@ class BacktestConfig:
     execution_delay: int = 1
     periods_per_year: int = 365
     allow_short: bool = False  # enables -1 (short) positions for futures
+    # ── Perpetual funding (futures) ──────────────────────────────────────
+    # Funding is paid/received on the held notional every ~8h. With a positive
+    # rate longs pay shorts (the common regime). We approximate it per-bar so
+    # short and long carry costs become realistically asymmetric — important
+    # because the noches bots trade perpetual futures, mostly short.
+    apply_funding: bool = False
+    funding_rate_8h: float = 0.0001   # ≈ 0.01% per 8h (typical neutral funding)
+    hours_per_bar: float = 24.0       # set per timeframe (e.g. 0.25 for 15m, 1 for 1h)
 
 
 @dataclass(frozen=True)
@@ -47,7 +55,12 @@ class VectorizedBacktester:
         turnover = position.diff().abs().fillna(position.abs())
         cost_bps = self.config.fee_bps + self.config.slippage_bps + self.config.spread_bps
         costs = turnover * (cost_bps / 10_000)
-        strategy_returns = position.shift(1).fillna(0.0) * close_returns - costs
+        held = position.shift(1).fillna(0.0)
+        strategy_returns = held * close_returns - costs
+        if self.config.apply_funding and self.config.funding_rate_8h:
+            # per-bar funding on the held position; long (+) pays, short (−) receives
+            funding_per_bar = self.config.funding_rate_8h * (self.config.hours_per_bar / 8.0)
+            strategy_returns = strategy_returns - held * funding_per_bar
         equity = self.config.initial_capital * (1 + strategy_returns).cumprod()
         return BacktestResult(equity, strategy_returns, position, calculate_metrics(strategy_returns, equity, self.config.periods_per_year))
 
