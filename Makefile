@@ -1,7 +1,15 @@
-.PHONY: install demo test lint typecheck quality web
+.PHONY: install setup lang demo test lint typecheck quality web
 
 install:
 	uv sync --extra dev
+
+# Full first-run setup: installs deps and prompts for the dashboard language.
+setup:
+	./scripts/setup.sh
+
+# Re-pick the default dashboard language without reinstalling.
+lang:
+	QR_DEFAULT_LANG= ./scripts/setup.sh
 
 demo:
 	uv run quant-research demo
