@@ -10,9 +10,9 @@ Three layers communicate through well-defined interfaces:
 
 1. **Data store** — Parquet files in `data/processed/` named `{exchange}_{symbol}_{timeframe}.parquet`
 2. **Python library** — `src/` modules for data acquisition, validation, features, strategies, backtesting, analysis, ML
-3. **Web dashboard** — FastAPI backend (`src/web/app.py`) serving a single-page HTML UI (`web/dashboard.html`)
+3. **Web dashboard** — FastAPI backend (`src/web/app.py`) serving a single-page UI split into `web/dashboard.html` (shell) + `styles.css` (Midnight Aurora theme) + `i18n.js` (FA/EN dictionary) + `app.js` (logic). Static assets are referenced with relative paths so the app works both at the domain root and behind the `/admin/quant/` reverse proxy.
 
-Background jobs (downloads and backtests) run in threads and report progress to the browser via Server-Sent Events.
+Background jobs (downloads and backtests) run in threads and report progress to the browser via Server-Sent Events. Progress messages, recommendation reasons, regime labels, and ML/RL hints are sent as **language-neutral codes** and localized in the browser, so the dashboard is fully bilingual with no Persian leaking in EN mode. The default language is chosen at install (`make setup` → `configs/app.json`, served via `GET /api/config`).
 
 ## Data Coverage
 

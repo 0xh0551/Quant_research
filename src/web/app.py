@@ -154,6 +154,23 @@ def root() -> FileResponse:
     return FileResponse(WEB_DIR / "dashboard.html")
 
 
+def _load_app_config() -> dict[str, Any]:
+    """User-facing app settings (e.g. install-time default language)."""
+    cfg_path = ROOT / "configs" / "app.json"
+    if cfg_path.exists():
+        try:
+            return json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
+
+@app.get("/api/config")
+def get_app_config() -> dict[str, Any]:
+    cfg = _load_app_config()
+    return {"default_language": cfg.get("default_language", "fa")}
+
+
 @app.get("/api/exchanges")
 def list_exchanges() -> dict[str, Any]:
     return {"exchanges": ["nobitex", *sorted(_ccxt.exchanges)]}
@@ -288,16 +305,18 @@ def list_jobs() -> dict[str, Any]:
     return {"jobs": job_manager.list_recent(30)}
 
 
-# ── Edges (لبه‌های اعتبارسنجی‌شدهٔ walk-forward) ─────────────────────────────────
+# ── Edges (walk-forward validated edges) ───────────────────────────────────────
 
 @app.get("/edges")
 def edges_page() -> FileResponse:
-    return FileResponse(WEB_DIR / "edges.html")
+    # Edges is now a section of the single-page dashboard; the SPA detects the
+    # /edges suffix on boot and opens that section (keeps old links working).
+    return FileResponse(WEB_DIR / "dashboard.html")
 
 
 @app.get("/api/edges")
 def get_edges() -> dict[str, Any]:
-    """گزارشِ آخرین اسکن + تاریخچه + خودِ کاندیداها برای داشبوردِ لبه‌ها."""
+    """Latest scan report + history + candidate count for the Edges dashboard."""
     report_path = OUTPUTS_DIR / "wf_report.json"
     manifest_path = OUTPUTS_DIR / "wf_candidates.json"
     history_path = OUTPUTS_DIR / "wf_history.jsonl"
@@ -325,7 +344,7 @@ def get_edges() -> dict[str, Any]:
 
 @app.post("/api/edges/refresh")
 def refresh_edges(background_tasks: BackgroundTasks) -> dict[str, str]:
-    """اسکنِ walk-forward را به‌صورتِ job اجرا می‌کند (همان اسکریپتِ هفتگی)."""
+    """Run the walk-forward scan as a background job (same weekly script)."""
     job_id = job_manager.create("edges")
     background_tasks.add_task(_run_edge_refresh, job_id)
     return {"job_id": job_id}
@@ -333,7 +352,8 @@ def refresh_edges(background_tasks: BackgroundTasks) -> dict[str, str]:
 
 def _run_edge_refresh(job_id: str) -> None:
     _log = logging.getLogger("quant.edges")
-    job_manager.update(job_id, status=JobStatus.RUNNING, message="اسکنِ walk-forward شروع شد...")
+    job_manager.update(job_id, status=JobStatus.RUNNING,
+                       message="Walk-forward scan started", message_code="job_edge_start")
     try:
         proc = subprocess.run(
             [sys.executable, str(ROOT / "scripts" / "refresh_candidates.py")],
@@ -344,17 +364,22 @@ def _run_edge_refresh(job_id: str) -> None:
         if proc.returncode != 0:
             _log.error("edge refresh failed: %s", proc.stderr[-1000:])
             job_manager.update(job_id, status=JobStatus.ERROR,
-                               error=(proc.stderr or proc.stdout)[-2000:], message="خطا در اسکن")
+                               error=(proc.stderr or proc.stdout)[-2000:],
+                               message="Scan failed", message_code="job_edge_error")
             return
+        n_passed = report.get("n_passed", 0)
+        n_alerts = len(report.get("alerts", []))
         job_manager.update(
             job_id, status=JobStatus.DONE, progress=100.0,
-            message=f"اسکن کامل شد — {report.get('n_passed', 0)} لبهٔ معتبر، "
-                    f"{len(report.get('alerts', []))} هشدار",
+            message=f"Scan complete — {n_passed} valid edges, {n_alerts} alerts",
+            message_code="job_edge_done", message_params={"passed": n_passed, "alerts": n_alerts},
             result=report,
         )
     except Exception as exc:
         _log.exception("edge refresh crashed")
-        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
+                           message=f"Error: {exc}", message_code="job_error",
+                           message_params={"error": str(exc)})
 
 
 @app.get("/api/insights")
@@ -584,7 +609,8 @@ def _run_download(job_id: str, req: DownloadRequestBody) -> None:
     _log = logging.getLogger("quant.download")
     _log.info("Download started  job=%s  exchange=%s  symbol=%s  market=%s  tfs=%s",
               job_id, req.exchange, req.symbol, req.market_type, req.timeframes)
-    job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع دانلود...")
+    job_manager.update(job_id, status=JobStatus.RUNNING,
+                       message="Starting download", message_code="job_dl_start")
     try:
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         total = len(req.timeframes)
@@ -592,9 +618,14 @@ def _run_download(job_id: str, req: DownloadRequestBody) -> None:
         end_date = date.fromisoformat(req.end) if req.end else None
 
         for i, tf in enumerate(req.timeframes):
-            msg = f"دانلود {req.symbol} {tf} ({req.market_type}) از {req.exchange}..."
+            msg = f"download {req.symbol} {tf} ({req.market_type}) from {req.exchange}"
             _log.info("  [%d/%d] %s", i + 1, total, msg)
-            job_manager.update(job_id, progress=round(i / total * 100, 1), message=msg)
+            job_manager.update(
+                job_id, progress=round(i / total * 100, 1), message=msg,
+                message_code="job_dl_tf",
+                message_params={"symbol": req.symbol, "tf": tf,
+                                "market": req.market_type, "exchange": req.exchange},
+            )
             store = _ExchangePrefixedStore(DATA_DIR, req.exchange, req.market_type)
             if req.exchange == "nobitex":
                 dl = NobitexDataIngestionPipeline(store)
@@ -615,19 +646,24 @@ def _run_download(job_id: str, req: DownloadRequestBody) -> None:
                 )
                 pipeline.run(DownloadRequest(symbol=req.symbol, timeframe=tf, start=start_date, end=end_date))
 
-        done_msg = f"دانلود {req.symbol} کامل شد ({total} تایم‌فریم)"
+        done_msg = f"Download of {req.symbol} complete ({total} timeframes)"
         _log.info("Download done  job=%s  %s", job_id, done_msg)
-        job_manager.update(job_id, status=JobStatus.DONE, progress=100.0, message=done_msg)
+        job_manager.update(job_id, status=JobStatus.DONE, progress=100.0, message=done_msg,
+                           message_code="job_dl_done",
+                           message_params={"symbol": req.symbol, "n": total})
     except Exception as exc:
         _log.exception("Download failed  job=%s  error=%s", job_id, exc)
-        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
+                           message=f"Error: {exc}", message_code="job_error",
+                           message_params={"error": str(exc)})
 
 
 def _run_research(job_id: str, req: ResearchRequest) -> None:
     _log = logging.getLogger("quant.research")
     _log.info("Research started  job=%s  datasets=%d  strategies=%s",
               job_id, len(req.datasets), req.strategies)
-    job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع بک‌تست...")
+    job_manager.update(job_id, status=JobStatus.RUNNING,
+                       message="Starting backtest", message_code="job_res_start")
     try:
         total = len(req.datasets) * len(req.strategies)
         step = 0
@@ -703,10 +739,14 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
 
             for strategy in req.strategies:
                 step += 1
+                short_tag = "  [Short/Long]" if allow_short else ""
                 job_manager.update(
                     job_id,
                     progress=round(step / total * 90, 1),
-                    message=f"بک‌تست {STRATEGY_LABELS.get(strategy, strategy)} روی {symbol} {tf}{'  [Short/Long]' if allow_short else ''}...",
+                    message=f"backtest {STRATEGY_LABELS.get(strategy, strategy)} on {symbol} {tf}{short_tag}",
+                    message_code="job_res_bt",
+                    message_params={"strategy": STRATEGY_LABELS.get(strategy, strategy),
+                                    "symbol": symbol, "tf": tf, "short": short_tag},
                 )
                 try:
                     signals = build_strategy_signals(df, strategy, allow_short=allow_short)
@@ -729,17 +769,23 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
 
             all_results.append(dataset_entry)
 
-        done_msg = f"ریسرچ کامل شد — {len(all_results)} دیتاست، {len(req.strategies)} استراتژی"
+        done_msg = f"Research complete — {len(all_results)} datasets, {len(req.strategies)} strategies"
         _log.info("Research done  job=%s  %s", job_id, done_msg)
-        job_manager.update(job_id, status=JobStatus.DONE, progress=100.0, message=done_msg, result={"datasets": all_results})
+        job_manager.update(job_id, status=JobStatus.DONE, progress=100.0, message=done_msg,
+                           message_code="job_res_done",
+                           message_params={"datasets": len(all_results), "strategies": len(req.strategies)},
+                           result={"datasets": all_results})
     except Exception as exc:
         _log.exception("Research failed  job=%s  error=%s", job_id, exc)
-        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
+                           message=f"Error: {exc}", message_code="job_error",
+                           message_params={"error": str(exc)})
 
 
 def _run_optimize(job_id: str, req: LabOptRequest) -> None:
     _log = logging.getLogger("quant.optimize")
-    job_manager.update(job_id, status=JobStatus.RUNNING, message="شروع بهینه‌سازی...")
+    job_manager.update(job_id, status=JobStatus.RUNNING,
+                       message="Starting optimization", message_code="job_opt_start")
     try:
         path = DATA_DIR / req.filename
         df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
@@ -765,7 +811,9 @@ def _run_optimize(job_id: str, req: LabOptRequest) -> None:
             job_manager.update(
                 job_id,
                 progress=round(i / total * 95, 1),
-                message=f"ترکیب {i+1}/{total}: {params}",
+                message=f"combo {i+1}/{total}: {params}",
+                message_code="job_opt_combo",
+                message_params={"i": i + 1, "total": total, "params": str(params)},
             )
             try:
                 sigs = build_strategy_signals_with_params(df, req.strategy, params, allow_short=allow_short)
@@ -783,14 +831,19 @@ def _run_optimize(job_id: str, req: LabOptRequest) -> None:
 
         results.sort(key=lambda x: x["sharpe"], reverse=True)
         best = results[0] if results else {}
-        done_msg = f"بهینه‌سازی کامل شد — {len(results)} ترکیب، بهترین Sharpe: {best.get('sharpe', 0):.3f}"
+        best_sharpe = best.get("sharpe", 0)
+        done_msg = f"Optimization complete — {len(results)} combos, best Sharpe: {best_sharpe:.3f}"
         job_manager.update(
             job_id, status=JobStatus.DONE, progress=100.0, message=done_msg,
+            message_code="job_opt_done",
+            message_params={"n": len(results), "sharpe": f"{best_sharpe:.3f}"},
             result={"best": best, "all_results": results[:50], "strategy": req.strategy},
         )
     except Exception as exc:
         _log.exception("Optimize failed  job=%s  error=%s", job_id, exc)
-        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc), message=f"خطا: {exc}")
+        job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
+                           message=f"Error: {exc}", message_code="job_error",
+                           message_params={"error": str(exc)})
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -963,45 +1016,35 @@ _REGIME_FIT: dict[str, frozenset[str]] = {
     "mean_reverting": _MR_STRATEGIES,
 }
 
-_REGIME_FA: dict[str, str] = {
-    "trending_up": "ترند صعودی",
-    "trending_down": "ترند نزولی",
-    "ranging": "رنجینگ",
-    "mean_reverting": "میانگین‌گرا",
-    "unknown": "نامشخص",
-}
-
-
 def _build_recommendation(
     best_now: str,
     regime: str,
     windows: list[dict[str, Any]],
     recent_scores: dict[str, float],
 ) -> dict[str, Any]:
-    reasons: list[str] = []
+    # Reasons are emitted as language-neutral {code, ...params}; the frontend
+    # localizes them (and the embedded regime code) via its i18n layer.
+    reasons: list[dict[str, Any]] = []
     last_wins = windows[-5:] if len(windows) >= 5 else windows
     win_count = sum(1 for w in last_wins if w["best_strategy"] == best_now)
     consistency = win_count / max(len(last_wins), 1)
-    reasons.append(f"{win_count} از {len(last_wins)} پنجره اخیر بهترین بود")
+    reasons.append({"code": "reason_window_wins", "n": win_count, "total": len(last_wins)})
 
     fit_strategies = _REGIME_FIT.get(regime, frozenset())
     regime_fit = best_now in fit_strategies
-    regime_label = _REGIME_FA.get(regime, regime)
-    if regime_fit:
-        reasons.append(f"رژیم «{regime_label}» با این استراتژی همخوانی دارد")
-    else:
-        reasons.append(f"رژیم «{regime_label}» با این استراتژی همخوانی ضعیف دارد")
+    reasons.append({"code": "reason_regime_fit" if regime_fit else "reason_regime_misfit",
+                    "regime": regime})
 
     sorted_scores = sorted(recent_scores.items(), key=lambda x: x[1], reverse=True)
     best_sharpe = sorted_scores[0][1] if sorted_scores else 0.0
     runner_up_sharpe = sorted_scores[1][1] if len(sorted_scores) > 1 else 0.0
     margin = best_sharpe - runner_up_sharpe
     if margin > 0.3:
-        reasons.append(f"Sharpe فاصله {margin:.2f} از استراتژی دوم")
+        reasons.append({"code": "reason_margin_strong", "margin": f"{margin:.2f}"})
     elif margin > 0.1:
-        reasons.append(f"Sharpe کمی بهتر از رقبا (فاصله {margin:.2f})")
+        reasons.append({"code": "reason_margin_mild", "margin": f"{margin:.2f}"})
     else:
-        reasons.append("فاصله Sharpe با رقبا کم است — بازار در تغییر رژیم")
+        reasons.append({"code": "reason_margin_weak"})
 
     margin_score = min(margin / 0.5, 1.0)
     confidence = int(consistency * 60 + (30 if regime_fit else 0) + margin_score * 10)
@@ -1016,7 +1059,6 @@ def _build_recommendation(
         "label": STRATEGY_LABELS.get(best_now, best_now),
         "confidence": confidence,
         "regime": regime,
-        "regime_label": regime_label,
         "regime_fit": regime_fit,
         "reasons": reasons,
         "sharpe_score": round(best_sharpe, 3),
@@ -1069,8 +1111,9 @@ def _compute_ml_rl_fitness(df: pd.DataFrame, ppy: int) -> dict[str, Any]:
     returns = close.pct_change().dropna()
     n = len(returns)
     if n < 30:
-        return {"ml_score": 0, "rl_score": 0, "recommendation": "both",
-                "hint": "داده کافی برای ارزیابی نیست", "details": {}}
+        return {"ml_score": 0, "rl_score": 0, "recommendation": "",
+                "hint": "Not enough data to assess", "hint_code": "mlrl_insufficient",
+                "bot_hint_code": "mlrl_insufficient", "hint_params": {}, "details": {}}
 
     # Autocorrelation lag-1
     autocorr_1 = float(returns.autocorr(lag=1)) if n > 5 else 0.0
@@ -1137,26 +1180,30 @@ def _compute_ml_rl_fitness(df: pd.DataFrame, ppy: int) -> dict[str, Any]:
     ml_score = max(0, min(100, ml_score))
     rl_score = max(0, min(100, rl_score))
 
-    # Recommendation
+    # Recommendation — emit language-neutral hint codes + params; the frontend
+    # localizes them. (Plain `hint`/`bot_hint` kept as an EN fallback only.)
     gap = ml_score - rl_score
+    hint_params: dict[str, Any] = {
+        "stationarity": f"{stationarity_score:.2f}", "ic": f"{ic:.3f}",
+        "hurst": f"{hurst:.2f}", "regime_changes": regime_changes,
+        "density": f"{big_moves * 100:.1f}", "vol": f"{vol_autocorr:.2f}",
+        "ml": ml_score, "rl": rl_score,
+    }
     if gap > 15:
         recommendation = "ml"
-        hint = (
-            f"ML مناسب‌تر است — داده با ثبات (stationarity={stationarity_score:.2f}), "
-            f"IC={ic:.3f}, Hurst={hurst:.2f}"
-        )
-        bot_hint = "پیشنهاد: یک مدل ML (مثل GBM یا XGBoost) با فیچرهای تکنیکال روی این جفت ارز"
+        hint_code, bot_hint_code = "mlrl_ml", "mlrl_ml_bot"
+        hint = f"ML is a better fit — stationarity={stationarity_score:.2f}, IC={ic:.3f}, Hurst={hurst:.2f}"
+        bot_hint = "Suggestion: an ML model (e.g. GBM/XGBoost) with technical features on this pair"
     elif gap < -15:
         recommendation = "rl"
-        hint = (
-            f"RL مناسب‌تر است — تنوع رژیم ({regime_changes} تغییر), "
-            f"density={big_moves:.1%}, vol-clustering={vol_autocorr:.2f}"
-        )
-        bot_hint = "پیشنهاد: یک بات RL (مثل PPO یا SAC) برای یادگیری سوییچ رژیم روی این جفت ارز"
+        hint_code, bot_hint_code = "mlrl_rl", "mlrl_rl_bot"
+        hint = f"RL is a better fit — regime diversity ({regime_changes}), density={big_moves:.1%}, vol-clustering={vol_autocorr:.2f}"
+        bot_hint = "Suggestion: an RL bot (e.g. PPO/SAC) to learn regime switching on this pair"
     else:
         recommendation = "both"
-        hint = f"هر دو ML و RL قابل استفاده هستند (ML={ml_score}, RL={rl_score})"
-        bot_hint = "می‌توانید هر دو رویکرد را آزمایش کنید"
+        hint_code, bot_hint_code = "mlrl_both", "mlrl_both_bot"
+        hint = f"Both ML and RL are usable (ML={ml_score}, RL={rl_score})"
+        bot_hint = "You can experiment with both approaches"
 
     return {
         "ml_score": ml_score,
@@ -1164,6 +1211,9 @@ def _compute_ml_rl_fitness(df: pd.DataFrame, ppy: int) -> dict[str, Any]:
         "recommendation": recommendation,
         "hint": hint,
         "bot_hint": bot_hint,
+        "hint_code": hint_code,
+        "bot_hint_code": bot_hint_code,
+        "hint_params": hint_params,
         "details": {
             "autocorrelation": round(autocorr_1, 4),
             "hurst": round(hurst, 4),
