@@ -1,5 +1,33 @@
 # Changelog
 
+## [1.2.0] — 2026-06-11
+
+### UI redesign — "Midnight Aurora" + full bilingual support
+
+#### Unified, consistent layout
+- **Edges is now a section of the single-page dashboard** (sidebar + topbar like every other tab) instead of a separate full-screen page. The old `/edges` URL still works — it serves the SPA and deep-links to the Edges section on boot.
+- Edges charts re-implemented in **Plotly** (was Chart.js) so the whole app uses one charting engine and one visual language.
+- New **Midnight Aurora** theme: deep slate-indigo canvas, teal-emerald primary, soft-violet accent, amber alerts. Added hover lifts, smooth section transitions, a glass top bar, and an aurora-gradient brand mark.
+
+#### Real internationalization (FA / EN)
+- New `web/i18n.js`: a single `I18N` dictionary (264 keys × 2 languages, full parity) with `t()`, `applyI18n()`, and `setLang()`. **Switching to English now translates every string** — static markup (`data-i18n*` attributes) and all JS-rendered content — with **zero Persian leaking** (verified across all sections).
+- Layout is fully bidirectional via CSS **logical properties**, so toggling language flips RTL↔LTR correctly (sidebar side, borders, alignment).
+- **Backend emits language-neutral codes**, not display text: recommendation reasons, regime labels, ML/RL hints, and job progress messages are now `{code, params}` resolved on the client. Edge alerts render from their structured fields.
+
+#### Install-time language selection
+- `scripts/setup.sh` (and `make setup`) installs dependencies and **prompts for the default dashboard language**, persisting it to `configs/app.json`.
+- New `GET /api/config` serves the default language; the frontend resolves language as: explicit user toggle (localStorage) → install default → `fa`.
+- `make lang` re-runs just the language picker.
+
+#### Refactor
+- The 2,543-line monolithic `dashboard.html` was split into `dashboard.html` (shell) + `styles.css` + `i18n.js` + `app.js`, served as prefix-aware relative static assets (works behind the `/admin/quant/` reverse proxy).
+- `web/edges.html` removed (folded into the SPA).
+
+### API Endpoints Added
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/config` | GET | Returns the install-time default dashboard language |
+
 ## [1.1.0] — 2026-06-06
 
 ### Added

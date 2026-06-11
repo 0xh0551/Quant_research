@@ -6,7 +6,7 @@
 ![CCXT](https://img.shields.io/badge/CCXT-111%20exchanges-orange)
 ![Parquet](https://img.shields.io/badge/storage-Parquet-blueviolet)
 
-**v1.1** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families** (including Ichimoku, SuperTrend, and crypto-native strategies), full **long/short futures support**, an interactive **Strategy Lab** with grid-search optimizer, and **ML/RL fitness scoring** — all in a professional browser-based dashboard.
+**v1.2** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families** (including Ichimoku, SuperTrend, and crypto-native strategies), full **long/short futures support**, an interactive **Strategy Lab** with grid-search optimizer, and **ML/RL fitness scoring** — all in a fully **bilingual (FA/EN)** browser dashboard with the **Midnight Aurora** theme.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -46,7 +46,7 @@
 | **Edges** | Walk-forward out-of-sample survivors that live bots actually trade: live plan per symbol, per-timeframe edge distribution, timeframe-change alerts, scan history, and a one-click re-scan ([details](#walk-forward-edge-scan--live-bot-bridge)) |
 | **Logs** | Live log viewer with level filtering |
 
-Language: FA/EN toggle in the top bar.
+**Language (FA/EN):** every string is fully translated via a single `web/i18n.js` dictionary — switching to English leaves no Persian behind, and the layout flips RTL↔LTR via CSS logical properties. The default language is chosen at install time (`make setup`) and stored in `configs/app.json`; a per-user choice in the top bar overrides it. The whole frontend is split into `dashboard.html` (shell) + `styles.css` + `i18n.js` + `app.js` and served as prefix-aware static assets, so it also works behind the `/admin/quant/` reverse proxy.
 
 ### Python Library
 
@@ -67,8 +67,14 @@ Language: FA/EN toggle in the top bar.
 ```bash
 git clone https://github.com/<your-org>/Quant_research
 cd Quant_research
+make setup          # installs deps and asks for the default dashboard language (EN/FA)
+# or, non-interactive:
+QR_DEFAULT_LANG=en ./scripts/setup.sh
+# or just deps, keeping the FA default:
 uv sync
 ```
+
+`make setup` writes your language choice to `configs/app.json`. Re-pick it any time with `make lang`.
 
 ### Launch the web dashboard
 

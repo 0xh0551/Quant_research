@@ -24,6 +24,10 @@ class Job:
     status: JobStatus = JobStatus.PENDING
     progress: float = 0.0
     message: str = ""
+    # Language-neutral message identifier + params; the frontend resolves these
+    # via its i18n layer so progress text is never hard-coded to one language.
+    message_code: str = ""
+    message_params: dict[str, Any] = field(default_factory=dict)
     result: Any = None
     error: str = ""
     created_at: float = field(default_factory=time.time)
@@ -36,6 +40,8 @@ class Job:
             "status": self.status.value,
             "progress": self.progress,
             "message": self.message,
+            "message_code": self.message_code,
+            "message_params": self.message_params,
             "error": self.error,
             "created_at": self.created_at,
             "updated_at": self.updated_at,
@@ -60,6 +66,8 @@ class JobManager:
         status: JobStatus | None = None,
         progress: float | None = None,
         message: str | None = None,
+        message_code: str | None = None,
+        message_params: dict[str, Any] | None = None,
         result: Any = None,
         error: str | None = None,
     ) -> None:
@@ -73,6 +81,9 @@ class JobManager:
                 job.progress = progress
             if message is not None:
                 job.message = message
+            if message_code is not None:
+                job.message_code = message_code
+                job.message_params = message_params or {}
             if result is not None:
                 job.result = result
             if error is not None:

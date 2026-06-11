@@ -21,3 +21,4 @@ reports/**/*.html
 !outputs/.gitkeep
 !outputs/figures/.gitkeep
 
+configs/app.json
