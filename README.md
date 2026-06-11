@@ -6,7 +6,7 @@
 ![CCXT](https://img.shields.io/badge/CCXT-111%20exchanges-orange)
 ![Parquet](https://img.shields.io/badge/storage-Parquet-blueviolet)
 
-**v1.2** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families** (including Ichimoku, SuperTrend, and crypto-native strategies), full **long/short futures support**, an interactive **Strategy Lab** with grid-search optimizer, and **ML/RL fitness scoring** — all in a fully **bilingual (FA/EN)** browser dashboard with the **Midnight Aurora** theme.
+**v1.3** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families**, full **long/short futures support**, and — new in v1.3 — **statistical-rigor selection-bias defences** (Deflated/Probabilistic Sharpe, PBO, bootstrap CIs), a **cross-exchange edge suite** (lead-lag, cointegration, basis), **portfolio construction & sizing** (HRP, fractional Kelly), **leakage-free ML evaluation** (purged CV + triple-barrier) and **RL coin recommendation**, plus **MLOps** (experiment tracking, forward-test attribution, data-quality monitoring) — all in a fully **bilingual (FA/EN)** **Midnight Aurora** dashboard (Vazirmatn font).
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -43,7 +43,11 @@
 | **Report** | Interactive Plotly charts — equity curve with regime shading, drawdown panel, monthly heatmap, rolling Sharpe, sortable metrics table |
 | **Insights** | Deep analysis: 90-day rolling strategy scores, regime detection, strategy rotation on price chart, ML/RL fitness scoring with bot hints |
 | **Lab** | Customize strategy parameters with sliders, run instant backtests, and run Grid Search optimizer to find best params |
-| **Edges** | Walk-forward out-of-sample survivors that live bots actually trade: live plan per symbol, per-timeframe edge distribution, timeframe-change alerts, scan history, and a one-click re-scan ([details](#walk-forward-edge-scan--live-bot-bridge)) |
+| **Edges** | Walk-forward out-of-sample survivors that live bots actually trade — now with **Deflated/Probabilistic Sharpe, PBO and bootstrap Sharpe CIs** per candidate plus a rigor summary, so cherry-picked Sharpe is correctly discounted ([details](#walk-forward-edge-scan--live-bot-bridge)) |
+| **Cross-Exchange** | Edges that exist *between* venues: lead-lag (latency), cointegration / stat-arb spreads, perp-vs-spot basis, and comparative liquidity for any symbol on ≥2 exchanges |
+| **Portfolio** | Correlation-aware allocation across selected datasets — HRP / risk-parity / inverse-vol weights with fractional-Kelly and vol-target sizing |
+| **Models** | Honest, leakage-free ML evaluation (triple-barrier labels + purged/embargoed CV, optional Optuna), an RL coin recommender for 15m futures (Bybit/OKX/Gate), and the experiment ledger |
+| **Data Quality** | Fleet-wide feed-health monitor (gaps/dupes/malformed) and forward-test attribution (expected vs realized PnL from the live bots) |
 | **Logs** | Live log viewer with level filtering |
 
 **Language (FA/EN):** every string is fully translated via a single `web/i18n.js` dictionary — switching to English leaves no Persian behind, and the layout flips RTL↔LTR via CSS logical properties. The default language is chosen at install time (`make setup`) and stored in `configs/app.json`; a per-user choice in the top bar overrides it. The whole frontend is split into `dashboard.html` (shell) + `styles.css` + `i18n.js` + `app.js` and served as prefix-aware static assets, so it also works behind the `/admin/quant/` reverse proxy.

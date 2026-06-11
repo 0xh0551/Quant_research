@@ -1,0 +1,42 @@
+name: Scheduled Research
+
+# Nightly data refresh + walk-forward edge scan, publishing the report and
+# candidate manifest as build artifacts. Mirrors `scripts/refresh_data.py` +
+# `scripts/refresh_candidates.py` so edges stay current without a babysitter.
+
+on:
+  schedule:
+    - cron: "0 23 * * *"   # 23:00 UTC daily
+  workflow_dispatch:        # allow manual runs
+
+jobs:
+  refresh-and-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Install Python
+        run: uv python install 3.12
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Refresh data (best-effort; public OHLCV)
+        run: uv run python scripts/refresh_data.py || echo "data refresh skipped/failed (non-fatal)"
+        continue-on-error: true
+
+      - name: Walk-forward edge scan
+        run: uv run python scripts/refresh_candidates.py || echo "scan produced no new candidates"
+        continue-on-error: true
+
+      - name: Upload reports + manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: research-output
+          path: |
+            outputs/wf_report.json
+            outputs/wf_candidates.json
+            outputs/wf_history.jsonl
+            outputs/experiments.jsonl
+          if-no-files-found: ignore
+          retention-days: 30
