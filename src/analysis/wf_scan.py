@@ -14,13 +14,19 @@ read it without importing this package.
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
-from src.backtesting.engine import BacktestConfig, VectorizedBacktester
+from src.analysis.statistics import (
+    bootstrap_metric_ci,
+    probability_of_backtest_overfitting,
+    sharpe_significance,
+)
 from src.analysis.walk_forward import rolling_walk_forward_splits
+from src.backtesting.engine import BacktestConfig, VectorizedBacktester
 from src.strategies.rules import build_strategy_signals
 
 # هر بار چند ساعت است → برای محاسبهٔ funding و سالانه‌سازی Sharpe
@@ -50,6 +56,13 @@ class ScanResult:
     oos_total_return: float      # بازده مرکب کل روی همهٔ پنجره‌های تست
     trades_per_split: float
     passed: bool
+    # ── statistical-rigor fields (selection-bias defences) ──────────────
+    psr: float = 0.0                 # P(true Sharpe > 0)
+    dsr: float = float("nan")        # deflated Sharpe (multiple-testing aware)
+    pbo: float = float("nan")        # dataset-level Prob. of Backtest Overfitting
+    sharpe_ci_low: float = 0.0       # bootstrap 95% CI on annualized Sharpe
+    sharpe_ci_high: float = 0.0
+    deflated_pass: bool = False      # DSR ≥ 0.95 (true edge after deflation)
 
 
 def _bars_per_year(timeframe: str) -> int:
@@ -90,6 +103,7 @@ def scan_dataset(
         return []
 
     results: list[ScanResult] = []
+    stitched_by_result: list[np.ndarray] = []   # parallel to `results`, for DSR/PBO
     for strategy in strategies:
         for allow_short in (False, True):
             try:
@@ -148,7 +162,44 @@ def scan_dataset(
                 trades_per_split=round(trades_avg, 1),
                 passed=passed,
             ))
+            stitched_by_result.append(stitched.to_numpy(dtype=float))
+
+    _attach_rigor_stats(results, stitched_by_result, bars_year)
     return results
+
+
+def _attach_rigor_stats(
+    results: list[ScanResult], stitched: list[np.ndarray], bars_year: int,
+) -> None:
+    """Compute PSR / Deflated-Sharpe / PBO / bootstrap-CI for a dataset's combos.
+
+    These are the selection-bias defences: with N combos tried, a high Sharpe is
+    only credible if it survives deflation (DSR≥0.95) and the dataset's PBO is low.
+    """
+    if not results:
+        return
+    n_trials = len(results)
+    per_bar = [sharpe_significance(s, bars_year).sharpe_per_bar for s in stitched]
+    sr_var = float(np.var(per_bar, ddof=1)) if n_trials > 1 else 0.0
+
+    # dataset-level PBO across all combos (align to shortest stitched series)
+    pbo = float("nan")
+    if n_trials >= 2:
+        min_len = min(s.size for s in stitched)
+        if min_len >= 16:
+            matrix = np.column_stack([s[:min_len] for s in stitched])
+            pbo = probability_of_backtest_overfitting(matrix).get("pbo", float("nan"))
+
+    for res, series in zip(results, stitched, strict=True):
+        sig = sharpe_significance(series, bars_year, n_trials=n_trials, sr_variance=sr_var)
+        res.psr = round(sig.psr, 4)
+        res.dsr = round(sig.dsr, 4) if np.isfinite(sig.dsr) else float("nan")
+        res.pbo = round(pbo, 4) if np.isfinite(pbo) else float("nan")
+        res.deflated_pass = bool(np.isfinite(sig.dsr) and sig.dsr >= 0.95)
+        if res.passed:
+            ci = bootstrap_metric_ci(series, bars_year, n_boot=400)["sharpe"]
+            res.sharpe_ci_low = round(ci["low"], 3)
+            res.sharpe_ci_high = round(ci["high"], 3)
 
 
 def scan_processed_dir(
@@ -269,8 +320,18 @@ def build_report(
                 ),
             })
 
+    # ── statistical-rigor summary (selection-bias dashboard) ────────────
+    pbos = [r.pbo for r in results if r.pbo == r.pbo]  # drop NaN
+    n_deflated = sum(1 for r in survivors if r.deflated_pass)
+    rigor = {
+        "n_trials": len(results),
+        "median_pbo": round(float(pd.Series(pbos).median()), 4) if pbos else None,
+        "n_deflated_pass": n_deflated,
+        "deflated_frac": round(n_deflated / len(survivors), 3) if survivors else 0.0,
+    }
+
     return {
-        "version": 1,
+        "version": 2,
         "generated_at": pd.Timestamp.now("UTC").isoformat(),
         "live_timeframe": live_timeframe,
         "n_scanned": len(results),
@@ -280,6 +341,7 @@ def build_report(
         "live_plan": live_plan,
         "top": [asdict(r) for r in survivors[:20]],
         "alerts": alerts,
+        "rigor": rigor,
     }
 
 
