@@ -1,5 +1,68 @@
 # Changelog
 
+## [1.3.0] — 2026-06-11
+
+### Quant rigor, cross-exchange alpha, portfolio, ML/RL, MLOps
+
+A professional-grade upgrade addressing the platform's biggest gaps. New Python
+modules are pure/tested; the user-facing ones are wired into four new dashboard
+sections (fully bilingual). Optional accelerators (`optuna`, `mlflow`,
+`gymnasium`, `stable-baselines3`) are import-guarded — everything degrades
+gracefully without them. Dashboard font switched to **Vazirmatn**.
+
+#### Tier 0 — statistical rigor (selection-bias defences)
+- `src/analysis/statistics.py`: **Probabilistic** & **Deflated Sharpe Ratio**
+  (Bailey & López de Prado), **moving-block bootstrap CIs**, and **CSCV PBO**
+  (Probability of Backtest Overfitting).
+- The walk-forward scan (`wf_scan.py`) now reports `psr`, `dsr`, `pbo`,
+  `sharpe_ci_*` and `deflated_pass` per candidate + a dataset-level `rigor`
+  summary — surfaced as new columns and a rigor card in the **Edges** section.
+- `src/ml/labeling.py` (triple-barrier + meta-labels) and `src/ml/cv.py`
+  (**PurgedKFold** + embargo, purged walk-forward) fix the leakage in the
+  single-bar ML labels.
+- Report metrics table now shows a bootstrap **Sharpe 95% CI** row.
+
+#### Tier 1 — cross-exchange suite (new **Cross-Exchange** section)
+- `src/analysis/cross_exchange.py`: **lead-lag**, **cointegration** (Engle-Granger
+  + hedge ratio), **basis** (perp-vs-spot), and **liquidity** comparison across
+  every venue holding the same symbol.
+- `src/data/funding.py`: funding-rate / open-interest ingestion via CCXT.
+
+#### Tier 2 — portfolio & risk (new **Portfolio** section)
+- `src/portfolio/`: vol-targeting + **fractional Kelly** sizing, **HRP** /
+  risk-parity / inverse-vol construction, and a risk overlay (drawdown control,
+  regime gate, square-root **capacity** model).
+- Backtest engine gains a realistic cost model: explicit **taker fee** and a
+  **volatility/liquidity-aware dynamic slippage** model (`slippage_model="dynamic"`),
+  on top of the existing perpetual-funding accrual.
+
+#### Tier 3 — real ML/RL (new **Models** section)
+- `src/ml/model_eval.py`: honest **purged-CV AUC** (triple-barrier labels) that
+  replaces the heuristic "ML fitness", with optional **Optuna** tuning.
+- `src/rl/env.py`: a gym-style trading env whose reward nets fees + funding;
+  `src/rl/recommend.py`: ranks the best **RL coins on 15m futures (Bybit/OKX/Gate)**.
+
+#### Tier 4 — MLOps (new **Data Quality** section + CI)
+- `src/tracking/experiments.py`: file-based experiment ledger (+ optional MLflow),
+  global seeding and dataset fingerprinting for reproducibility.
+- `src/analysis/forward_test.py`: expected-vs-realized attribution from the live
+  bots' freqtrade DBs, with divergence alerts.
+- `src/validation/monitor.py`: fleet-wide data-quality health report.
+- `.github/workflows/scheduled-research.yml`: nightly data refresh + edge scan,
+  publishing reports as artifacts.
+
+### API Endpoints Added
+| Endpoint | Method | Description |
+|---|---|---|
+| `/api/cross-exchange/symbols` | GET | Symbols available on ≥2 venues |
+| `/api/cross-exchange` | GET | Lead-lag / cointegration / basis / liquidity for a symbol |
+| `/api/portfolio` | POST | HRP/risk-parity weights + Kelly/vol-target sizing |
+| `/api/ml/evaluate` | POST | Purged-CV AUC for a dataset (optional Optuna tuning) |
+| `/api/rl/recommend` | GET | Best RL coins on 15m futures (Bybit/OKX/Gate) |
+| `/api/quality` | GET | Fleet-wide data-quality report |
+| `/api/forward-test` | GET | Expected-vs-realized PnL attribution |
+| `/api/experiments` | GET | Recent experiment-ledger runs |
+
 ## [1.2.0] — 2026-06-11
 
 ### UI redesign — "Midnight Aurora" + full bilingual support

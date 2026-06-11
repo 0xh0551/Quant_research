@@ -209,6 +209,66 @@ const I18N = {
     edges_valid_candidates: 'کاندیداهای معتبر',
     edges_valid_of: '{passed} معتبر از {scanned}',
 
+    /* ── new navigation + sections (Tiers 0-4) ────────────────────── */
+    nav_crossex: 'بین‌صرافی', nav_portfolio: 'پرتفوی', nav_models: 'مدل‌ها', nav_quality: 'کیفیت داده',
+    title_crossex: 'تحلیل بین‌صرافی', sub_crossex: 'لبه‌های بین صرافی‌ها — lead-lag، هم‌انباشتگی، بیسیس',
+    title_portfolio: 'ساخت پرتفوی', sub_portfolio: 'وزن‌دهی و سایزینگ آگاه از همبستگی',
+    title_models: 'مدل‌ها (ML/RL)', sub_models: 'ارزیابی واقعی ML با CV پاک‌سازی‌شده + پیشنهاد RL',
+    title_quality: 'کیفیت داده و فوروارد-تست', sub_quality: 'سلامت داده + مقایسهٔ انتظار با تحقق',
+    analyze: 'تحلیل', build: 'ساخت', evaluate: 'ارزیابی', optimize: 'بهینه‌سازی',
+    timeframe: 'تایم‌فریم', symbol_label: 'نماد', running: 'در حال اجرا…',
+
+    /* edges — statistical rigor */
+    edges_rigor_title: 'اعتبار آماری (دفاع در برابر سوگیری انتخاب)',
+    edges_rigor_hint: 'با اسکن صدها ترکیب، شارپ بالا تنها وقتی معتبر است که شارپِ تعدیل‌شده (DSR) بالای ۰٫۹۵ بماند و PBO پایین باشد.',
+    edges_rigor_trials: 'تعداد آزمون', edges_rigor_pbo: 'PBO میانه', edges_rigor_deflated: 'عبور از Deflated',
+    edges_col_psr: 'PSR', edges_col_dsr: 'Deflated SR', edges_col_pbo: 'PBO', edges_col_ci: 'بازهٔ شارپ (۹۵٪)',
+    edges_deflated_yes: 'معتبر', edges_deflated_no: 'مشکوک',
+    rep_ci_sharpe: 'بازهٔ اطمینان شارپ (۹۵٪)',
+
+    /* cross-exchange */
+    cx_pick: 'نماد و تایم‌فریم را انتخاب کنید (نمادهای موجود روی ۲+ صرافی)',
+    cx_insufficient: 'این نماد روی کمتر از دو صرافی موجود است',
+    cx_venues: 'صرافی‌ها/بازارها', cx_bars: 'تعداد کندل مشترک',
+    cx_leadlag: 'پیشرو-پیرو (Lead-Lag)', cx_leadlag_hint: 'لگِ مثبت = ستون A پیشروی B است؛ آربیتراژ تأخیر',
+    cx_coint: 'هم‌انباشتگی (Cointegration / Stat-Arb)', cx_coint_hint: 'p-value پایین = اسپرد بازگشت‌به‌میانگین؛ z فعلی فاصله از میانگین',
+    cx_basis: 'بیسیس (پرپ در برابر اسپات)', cx_basis_hint: 'اختلاف قیمت مشتقه و اسپات؛ پایهٔ کری/برداشت فاندینگ',
+    cx_liquidity: 'نقدینگی (حجم دلاری)',
+    cx_col_pair: 'جفت', cx_col_lag: 'لگ', cx_col_corr: 'همبستگی', cx_col_leader: 'پیشرو',
+    cx_col_pvalue: 'p-value', cx_col_hedge: 'نسبت هج', cx_col_z: 'z اسپرد', cx_col_coint: 'هم‌انباشته',
+    cx_col_spot: 'اسپات', cx_col_deriv: 'مشتقه', cx_col_basis_now: 'بیسیس فعلی', cx_col_basis_mean: 'میانگین', cx_col_basis_std: 'انحراف',
+    cx_col_venue: 'صرافی', cx_col_dvol: 'حجم دلاری',
+
+    /* portfolio */
+    pf_select: 'دیتاست‌ها را انتخاب کنید (حداقل ۲)', pf_method: 'روش وزن‌دهی',
+    pf_hrp: 'HRP (سلسله‌مراتبی)', pf_risk_parity: 'هم‌ریسک', pf_inverse_vol: 'وارون نوسان', pf_equal: 'وزن برابر',
+    pf_build: 'ساخت پرتفوی', pf_need_two: 'حداقل دو دیتاستِ هم‌بازه انتخاب کنید',
+    pf_weights: 'وزن‌ها', pf_metrics: 'مشخصات پرتفوی', pf_sizing: 'سایزینگ (Kelly کسری و هدف‌گیری نوسان)',
+    pf_div_ratio: 'نسبت تنوع‌بخشی', pf_avg_corr: 'همبستگی میانگین', pf_port_vol: 'نوسان پرتفوی (هر کندل)', pf_n_assets: 'تعداد دارایی',
+    pf_col_asset: 'دارایی', pf_col_weight: 'وزن', pf_col_kelly: 'Kelly کسری', pf_col_vol_lev: 'اهرم هدف‌گیری نوسان',
+
+    /* models */
+    mdl_rl_title: 'پیشنهاد ارز برای RL', mdl_rl_hint: 'مناسب‌ترین ارزها برای ایجنت RL روی فیوچرز ۱۵ دقیقه (Bybit / OKX / Gate)',
+    mdl_rl_evaluated: 'دیتاست بررسی‌شده', mdl_rl_col_score: 'امتیاز RL', mdl_rl_col_regimes: 'تغییرات رژیم',
+    mdl_rl_col_density: 'چگالی پاداش', mdl_rl_col_pred: 'پیش‌بینی‌ناپذیری',
+    mdl_ml_title: 'ارزیابی واقعی ML (CV پاک‌سازی‌شده + امبارگو)',
+    mdl_ml_hint: 'لیبل سه‌مانعی + Purged K-Fold؛ AUC خارج‌نمونه، بدون نشت اطلاعات (جایگزین امتیاز هیوریستیک).',
+    mdl_ml_optimize: 'بهینه‌سازی هایپرپارامتر (Optuna)',
+    mdl_ml_auc: 'میانگین AUC', mdl_ml_acc: 'دقت', mdl_ml_folds: 'AUC هر فولد', mdl_ml_verdict: 'حکم',
+    verdict_predictable: 'قابل پیش‌بینی', verdict_weak: 'ضعیف', verdict_noise: 'نویز',
+    mdl_exp_title: 'دفترچهٔ آزمایش‌ها (بازتولیدپذیری)', mdl_exp_empty: 'هنوز آزمایشی ثبت نشده',
+    mdl_exp_col_name: 'نام', mdl_exp_col_metrics: 'متریک‌ها', mdl_exp_col_when: 'زمان', mdl_exp_col_seed: 'seed',
+
+    /* quality + forward-test */
+    q_health: 'سلامت داده', q_datasets: 'دیتاست‌ها', q_clean: 'سالم', q_with_gaps: 'دارای شکاف', q_with_malformed: 'خراب',
+    q_col_dataset: 'دیتاست', q_col_rows: 'کندل', q_col_coverage: 'پوشش (روز)', q_col_gaps: 'شکاف',
+    q_col_dupes: 'تکراری', q_col_malformed: 'خراب', q_col_status: 'وضعیت', q_clean_badge: 'سالم', q_issue_badge: 'مشکل‌دار',
+    fwd_title: 'فوروارد-تست: انتظار در برابر تحقق', fwd_hint: 'مقایسهٔ بازده موردانتظار (OOS) با بازده واقعیِ بات‌های زنده (Mickey/Wall_E).',
+    fwd_col_symbol: 'نماد', fwd_col_expected: 'موردانتظار (تقریبی)', fwd_col_realized: 'محقق‌شده',
+    fwd_col_trades: 'معاملات', fwd_col_divergence: 'واگرایی', fwd_col_status: 'وضعیت',
+    fwd_status_ok: 'منطبق', fwd_status_diverging: 'واگرا', fwd_status_no_trades: 'بدون معامله',
+    fwd_no_alerts: 'واگرایی معناداری نیست', fwd_no_data: 'هنوز داده‌ای از بات‌ها نیست',
+
     /* ── regimes ──────────────────────────────────────────────────── */
     regime_trending_up: 'ترند صعودی',
     regime_trending_down: 'ترند نزولی',
@@ -447,6 +507,66 @@ const I18N = {
     edges_oos_return: 'OOS return', edges_strategy: 'Strategy', edges_trades_split: 'Trades/window',
     edges_valid_candidates: 'Valid candidates',
     edges_valid_of: '{passed} valid of {scanned}',
+
+    /* ── new navigation + sections (Tiers 0-4) ────────────────────── */
+    nav_crossex: 'Cross-Exchange', nav_portfolio: 'Portfolio', nav_models: 'Models', nav_quality: 'Data Quality',
+    title_crossex: 'Cross-Exchange Analysis', sub_crossex: 'Edges across venues — lead-lag, cointegration, basis',
+    title_portfolio: 'Portfolio Construction', sub_portfolio: 'Correlation-aware weighting & sizing',
+    title_models: 'Models (ML/RL)', sub_models: 'Honest ML eval with purged CV + RL recommendation',
+    title_quality: 'Data Quality & Forward-Test', sub_quality: 'Feed health + expected-vs-realized attribution',
+    analyze: 'Analyze', build: 'Build', evaluate: 'Evaluate', optimize: 'Optimize',
+    timeframe: 'Timeframe', symbol_label: 'Symbol', running: 'Running…',
+
+    /* edges — statistical rigor */
+    edges_rigor_title: 'Statistical rigor (selection-bias defences)',
+    edges_rigor_hint: 'After scanning hundreds of combos, a high Sharpe is only credible if its Deflated Sharpe (DSR) stays above 0.95 and PBO is low.',
+    edges_rigor_trials: 'Trials', edges_rigor_pbo: 'Median PBO', edges_rigor_deflated: 'Pass deflation',
+    edges_col_psr: 'PSR', edges_col_dsr: 'Deflated SR', edges_col_pbo: 'PBO', edges_col_ci: 'Sharpe CI (95%)',
+    edges_deflated_yes: 'credible', edges_deflated_no: 'suspect',
+    rep_ci_sharpe: 'Sharpe confidence interval (95%)',
+
+    /* cross-exchange */
+    cx_pick: 'Pick a symbol and timeframe (symbols available on 2+ venues)',
+    cx_insufficient: 'This symbol is available on fewer than two venues',
+    cx_venues: 'Venues/markets', cx_bars: 'Common bars',
+    cx_leadlag: 'Lead-Lag', cx_leadlag_hint: 'Positive lag = column A leads B; latency arbitrage',
+    cx_coint: 'Cointegration (Stat-Arb)', cx_coint_hint: 'Low p-value = mean-reverting spread; z = current distance from mean',
+    cx_basis: 'Basis (perp vs spot)', cx_basis_hint: 'Derivative-vs-spot price gap; basis of carry / funding harvest',
+    cx_liquidity: 'Liquidity (dollar volume)',
+    cx_col_pair: 'Pair', cx_col_lag: 'Lag', cx_col_corr: 'Corr', cx_col_leader: 'Leader',
+    cx_col_pvalue: 'p-value', cx_col_hedge: 'Hedge ratio', cx_col_z: 'Spread z', cx_col_coint: 'Cointegrated',
+    cx_col_spot: 'Spot', cx_col_deriv: 'Derivative', cx_col_basis_now: 'Basis now', cx_col_basis_mean: 'Mean', cx_col_basis_std: 'Std',
+    cx_col_venue: 'Venue', cx_col_dvol: 'Dollar volume',
+
+    /* portfolio */
+    pf_select: 'Select datasets (at least 2)', pf_method: 'Weighting method',
+    pf_hrp: 'HRP (hierarchical)', pf_risk_parity: 'Risk Parity', pf_inverse_vol: 'Inverse Vol', pf_equal: 'Equal Weight',
+    pf_build: 'Build Portfolio', pf_need_two: 'Select at least two time-overlapping datasets',
+    pf_weights: 'Weights', pf_metrics: 'Portfolio profile', pf_sizing: 'Sizing (fractional Kelly & vol-targeting)',
+    pf_div_ratio: 'Diversification ratio', pf_avg_corr: 'Avg correlation', pf_port_vol: 'Portfolio vol (per bar)', pf_n_assets: 'Assets',
+    pf_col_asset: 'Asset', pf_col_weight: 'Weight', pf_col_kelly: 'Fractional Kelly', pf_col_vol_lev: 'Vol-target leverage',
+
+    /* models */
+    mdl_rl_title: 'RL Coin Recommendation', mdl_rl_hint: 'Best coins for an RL agent on 15m futures (Bybit / OKX / Gate)',
+    mdl_rl_evaluated: 'datasets evaluated', mdl_rl_col_score: 'RL score', mdl_rl_col_regimes: 'Regime changes',
+    mdl_rl_col_density: 'Reward density', mdl_rl_col_pred: 'Unpredictability',
+    mdl_ml_title: 'Honest ML Evaluation (purged + embargoed CV)',
+    mdl_ml_hint: 'Triple-barrier labels + Purged K-Fold; out-of-sample AUC with no leakage (replaces the heuristic score).',
+    mdl_ml_optimize: 'Tune hyperparameters (Optuna)',
+    mdl_ml_auc: 'Mean AUC', mdl_ml_acc: 'Accuracy', mdl_ml_folds: 'Per-fold AUC', mdl_ml_verdict: 'Verdict',
+    verdict_predictable: 'predictable', verdict_weak: 'weak', verdict_noise: 'noise',
+    mdl_exp_title: 'Experiment ledger (reproducibility)', mdl_exp_empty: 'No experiments logged yet',
+    mdl_exp_col_name: 'Name', mdl_exp_col_metrics: 'Metrics', mdl_exp_col_when: 'When', mdl_exp_col_seed: 'seed',
+
+    /* quality + forward-test */
+    q_health: 'Data health', q_datasets: 'Datasets', q_clean: 'Clean', q_with_gaps: 'With gaps', q_with_malformed: 'Malformed',
+    q_col_dataset: 'Dataset', q_col_rows: 'Bars', q_col_coverage: 'Coverage (days)', q_col_gaps: 'Gaps',
+    q_col_dupes: 'Dupes', q_col_malformed: 'Malformed', q_col_status: 'Status', q_clean_badge: 'clean', q_issue_badge: 'issues',
+    fwd_title: 'Forward-Test: expected vs realized', fwd_hint: 'Compares expected (OOS) return with the live bots’ (Mickey/Wall_E) realized return.',
+    fwd_col_symbol: 'Symbol', fwd_col_expected: 'Expected (approx)', fwd_col_realized: 'Realized',
+    fwd_col_trades: 'Trades', fwd_col_divergence: 'Divergence', fwd_col_status: 'Status',
+    fwd_status_ok: 'on-track', fwd_status_diverging: 'diverging', fwd_status_no_trades: 'no trades',
+    fwd_no_alerts: 'no meaningful divergence', fwd_no_data: 'no live bot data yet',
 
     /* ── regimes ──────────────────────────────────────────────────── */
     regime_trending_up: 'Trending Up',

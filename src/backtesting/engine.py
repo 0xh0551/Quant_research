@@ -20,6 +20,15 @@ class BacktestConfig:
     execution_delay: int = 1
     periods_per_year: int = 365
     allow_short: bool = False  # enables -1 (short) positions for futures
+    # ── realistic cost model (optional) ──────────────────────────────────
+    # Override fee_bps with an explicit taker fee (entries/exits cross the book).
+    taker_fee_bps: float | None = None
+    # "fixed"  → flat slippage_bps per unit turnover (default; backward-compatible)
+    # "dynamic"→ slippage scales with recent bar-range volatility and inverse
+    #            liquidity (volume), i.e. trading is costlier in fast/thin markets.
+    slippage_model: str = "fixed"
+    impact_coef: float = 0.15          # share of avg bar-range charged as impact
+    max_slippage_bps: float = 60.0     # cap so the dynamic model can't explode
     # ── Perpetual funding (futures) ──────────────────────────────────────
     # Funding is paid/received on the held notional every ~8h. With a positive
     # rate longs pay shorts (the common regime). We approximate it per-bar so
@@ -53,7 +62,12 @@ class VectorizedBacktester:
         clip_min = -1.0 if self.config.allow_short else 0.0
         position = target_position.shift(self.config.execution_delay).fillna(0.0).clip(clip_min, 1.0)
         turnover = position.diff().abs().fillna(position.abs())
-        cost_bps = self.config.fee_bps + self.config.slippage_bps + self.config.spread_bps
+        fee = self.config.taker_fee_bps if self.config.taker_fee_bps is not None else self.config.fee_bps
+        if self.config.slippage_model == "dynamic":
+            slip_bps = self._dynamic_slippage_bps(data)
+        else:
+            slip_bps = self.config.slippage_bps
+        cost_bps = fee + slip_bps + self.config.spread_bps
         costs = turnover * (cost_bps / 10_000)
         held = position.shift(1).fillna(0.0)
         strategy_returns = held * close_returns - costs
@@ -63,6 +77,20 @@ class VectorizedBacktester:
             strategy_returns = strategy_returns - held * funding_per_bar
         equity = self.config.initial_capital * (1 + strategy_returns).cumprod()
         return BacktestResult(equity, strategy_returns, position, calculate_metrics(strategy_returns, equity, self.config.periods_per_year))
+
+    def _dynamic_slippage_bps(self, data: pd.DataFrame) -> pd.Series:
+        """Per-bar slippage that scales with recent volatility and inverse
+        liquidity. In fast or thin markets, crossing the book costs more."""
+        close = data["close"].clip(lower=1e-9)
+        bar_range = ((data["high"] - data["low"]) / close).fillna(0.0)
+        range_bps = bar_range.rolling(20, min_periods=1).mean() * 10_000
+        if "volume" in data.columns:
+            vol = data["volume"].clip(lower=1e-9)
+            liq = (vol.rolling(50, min_periods=1).mean() / vol).clip(0.3, 4.0).fillna(1.0)
+        else:
+            liq = 1.0
+        dyn = self.config.slippage_bps + self.config.impact_coef * range_bps * liq
+        return dyn.clip(upper=self.config.max_slippage_bps)
 
     def write_report(self, result: BacktestResult, output_path: Path) -> Path:
         """Write a Markdown performance report."""

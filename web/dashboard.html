@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>Quant Research</title>
 <link rel="preconnect" href="https://cdn.plot.ly"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap"/>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="stylesheet" href="static/styles.css"/>
 </head>
@@ -48,6 +51,24 @@
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>
         <span data-i18n="nav_edges">لبه‌ها</span>
         <span class="nav-badge" style="background:var(--green);color:#04211d">LIVE</span>
+      </div>
+      <div class="nav-item" data-section="crossex" onclick="showSection('crossex')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 16V4M7 4L3 8M7 4l4 4M17 8v12M17 20l4-4M17 20l-4-4"/></svg>
+        <span data-i18n="nav_crossex">بین‌صرافی</span>
+        <span class="nav-badge" style="background:var(--cyan);color:#04211d">α</span>
+      </div>
+      <div class="nav-item" data-section="portfolio" onclick="showSection('portfolio')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
+        <span data-i18n="nav_portfolio">پرتفوی</span>
+      </div>
+      <div class="nav-item" data-section="models" onclick="showSection('models')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4M5 5l3 3M16 16l3 3M19 5l-3 3M8 16l-3 3"/></svg>
+        <span data-i18n="nav_models">مدل‌ها</span>
+        <span class="nav-badge" style="background:var(--purple)">ML</span>
+      </div>
+      <div class="nav-item" data-section="quality" onclick="showSection('quality')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        <span data-i18n="nav_quality">کیفیت داده</span>
       </div>
       <div class="nav-item" data-section="logs" onclick="showSection('logs')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
@@ -354,6 +375,85 @@
           <div style="display:flex;gap:10px;align-items:center"><span id="edges-status" style="font-size:12px;color:var(--text2)"></span><button class="btn btn-secondary btn-sm" onclick="loadEdges()">↻ <span data-i18n="reload">بارگیری</span></button><button class="btn btn-primary btn-sm" id="edges-rescan-btn" onclick="rescanEdges()" data-i18n="edges_rescan">اجرای اسکن دوباره</button></div>
         </div>
         <div id="edges-body"><div class="empty-state"><span class="spinner" style="width:28px;height:28px"></span></div></div>
+      </div>
+
+      <!-- ═══ CROSS-EXCHANGE ═══ -->
+      <div class="section" id="sec-crossex">
+        <div class="card">
+          <div class="card-title"><span class="dot"></span><span data-i18n="cx_pick">نماد و تایم‌فریم را انتخاب کنید</span></div>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <div style="flex:1;min-width:160px"><label data-i18n="symbol_label">نماد</label><select id="cx-symbol" onchange="onCxSymbolChange()"></select></div>
+            <div style="flex:1;min-width:120px"><label data-i18n="timeframe">تایم‌فریم</label><select id="cx-tf"></select></div>
+            <button class="btn btn-primary" onclick="runCrossExchange()"><span data-i18n="analyze">تحلیل</span></button>
+          </div>
+        </div>
+        <div id="crossex-body"></div>
+      </div>
+
+      <!-- ═══ PORTFOLIO ═══ -->
+      <div class="section" id="sec-portfolio">
+        <div class="grid-2">
+          <div>
+            <div class="card">
+              <div class="card-title"><span class="dot"></span><span data-i18n="pf_select">دیتاست‌ها را انتخاب کنید</span></div>
+              <div class="dataset-picker" id="pf-datasets"></div>
+            </div>
+            <div class="card">
+              <div class="card-title"><span class="dot"></span><span data-i18n="pf_method">روش وزن‌دهی</span></div>
+              <div class="toggle-group" id="pf-method" style="flex-wrap:wrap">
+                <button class="toggle-btn active" data-method="hrp" onclick="setPfMethod('hrp',this)" data-i18n="pf_hrp">HRP</button>
+                <button class="toggle-btn" data-method="risk_parity" onclick="setPfMethod('risk_parity',this)" data-i18n="pf_risk_parity">هم‌ریسک</button>
+                <button class="toggle-btn" data-method="inverse_vol" onclick="setPfMethod('inverse_vol',this)" data-i18n="pf_inverse_vol">وارون نوسان</button>
+                <button class="toggle-btn" data-method="equal_weight" onclick="setPfMethod('equal_weight',this)" data-i18n="pf_equal">وزن برابر</button>
+              </div>
+              <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:12px" onclick="runPortfolio()"><span data-i18n="pf_build">ساخت پرتفوی</span></button>
+            </div>
+          </div>
+          <div id="pf-body"></div>
+        </div>
+      </div>
+
+      <!-- ═══ MODELS (ML/RL) ═══ -->
+      <div class="section" id="sec-models">
+        <div class="card">
+          <div class="card-title"><span class="dot"></span><span data-i18n="mdl_rl_title">پیشنهاد ارز برای RL</span></div>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px" data-i18n="mdl_rl_hint"></p>
+          <div id="rl-reco-body"><div class="empty-state" style="padding:24px"><span class="spinner"></span></div></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot"></span><span data-i18n="mdl_ml_title">ارزیابی واقعی ML</span></div>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px" data-i18n="mdl_ml_hint"></p>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+            <select id="ml-dataset" style="flex:1;min-width:200px"></select>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;font-size:12px;cursor:pointer"><input type="checkbox" id="ml-optimize"/><span data-i18n="mdl_ml_optimize">بهینه‌سازی</span></label>
+            <button class="btn btn-primary" onclick="runMlEval()" id="ml-eval-btn"><span data-i18n="evaluate">ارزیابی</span></button>
+          </div>
+          <div id="ml-eval-body" style="margin-top:14px"></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span><span data-i18n="mdl_exp_title">دفترچهٔ آزمایش‌ها</span></div>
+            <button class="btn btn-secondary btn-sm" onclick="loadExperiments()">↻ <span data-i18n="refresh">رفرش</span></button>
+          </div>
+          <div id="experiments-body"></div>
+        </div>
+      </div>
+
+      <!-- ═══ DATA QUALITY + FORWARD-TEST ═══ -->
+      <div class="section" id="sec-quality">
+        <div class="card">
+          <div class="card-title" style="justify-content:space-between;display:flex;align-items:center">
+            <div style="display:flex;align-items:center;gap:8px"><span class="dot"></span><span data-i18n="q_health">سلامت داده</span></div>
+            <button class="btn btn-secondary btn-sm" onclick="loadQuality()">↻ <span data-i18n="refresh">رفرش</span></button>
+          </div>
+          <div class="metric-grid" id="quality-stats" style="margin-bottom:12px"></div>
+          <div class="table-wrap" id="quality-table" style="max-height:380px;overflow-y:auto"></div>
+        </div>
+        <div class="card">
+          <div class="card-title"><span class="dot"></span><span data-i18n="fwd_title">فوروارد-تست</span></div>
+          <p style="font-size:12px;color:var(--text3);margin-bottom:12px" data-i18n="fwd_hint"></p>
+          <div id="forward-test-body"></div>
+        </div>
       </div>
 
       <!-- ═══ LOGS ═══ -->

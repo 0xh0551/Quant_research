@@ -17,7 +17,7 @@
   /* text */
   --text:#e7ecf3; --text2:#97a3b6; --text3:#64748b;
   /* effects */
-  --font:'Inter','Vazirmatn','Tahoma',sans-serif;
+  --font:'Vazirmatn','Inter','Tahoma',sans-serif;
   --glow:0 0 24px rgba(45,212,191,.18);
   --glow-violet:0 0 24px rgba(129,140,248,.18);
   --shadow:0 8px 30px rgba(0,0,0,.45);

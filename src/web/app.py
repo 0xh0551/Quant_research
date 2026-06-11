@@ -23,8 +23,17 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from src.analysis import cross_exchange as _cx
+from src.analysis import forward_test as _fwd
+from src.analysis.statistics import bootstrap_metric_ci
 from src.backtesting.engine import BacktestConfig, VectorizedBacktester
 from src.data.downloader import CCXTFallbackDownloader, DataIngestionPipeline, DownloadRequest
+from src.ml import model_eval as _ml_eval
+from src.portfolio import construction as _pf
+from src.portfolio import sizing as _sizing
+from src.rl.recommend import recommend_rl_coins
+from src.tracking.experiments import log_run, recent_runs
+from src.validation.monitor import quality_report
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
 from src.data.storage import ParquetDataStore
 from src.logging_config import setup_logging, tail_log
@@ -589,6 +598,114 @@ def lab_optimize(req: LabOptRequest, background_tasks: BackgroundTasks) -> dict[
     return {"job_id": job_id}
 
 
+# ── Cross-exchange edge suite (Tier 1) ──────────────────────────────────────────
+
+@app.get("/api/cross-exchange/symbols")
+def cross_exchange_symbols() -> dict[str, Any]:
+    return {"symbols": _cx.list_symbols(DATA_DIR)}
+
+
+@app.get("/api/cross-exchange")
+def cross_exchange_analyze(symbol: str, timeframe: str) -> dict[str, Any]:
+    return _cx.analyze_symbol(DATA_DIR, symbol, timeframe)
+
+
+# ── Portfolio construction & sizing (Tier 2) ────────────────────────────────────
+
+class PortfolioRequest(BaseModel):
+    files: list[str]
+    method: str = "hrp"          # hrp | risk_parity | inverse_vol | equal_weight
+    lookback: int = 1500
+    target_vol: float = 0.15
+
+
+@app.post("/api/portfolio")
+def build_portfolio(req: PortfolioRequest) -> dict[str, Any]:
+    series: dict[str, pd.Series] = {}
+    bars_year = 365
+    for f in req.files:
+        path = DATA_DIR / f
+        if not path.exists():
+            continue
+        info = _parse_dataset_id(path)
+        bars_year = PERIODS_PER_YEAR.get(info["timeframe"], bars_year)
+        df = pd.read_parquet(path).sort_values("timestamp").tail(req.lookback)
+        label = f"{info['symbol']}·{info['exchange']}"
+        series[label] = df.set_index("timestamp")["close"].pct_change()
+    if len(series) < 2:
+        raise HTTPException(status_code=422, detail="Need ≥2 datasets for a portfolio")
+    returns = pd.DataFrame(series).dropna()
+    if returns.empty or returns.shape[1] < 2:
+        raise HTTPException(status_code=422, detail="Datasets do not overlap in time")
+    portfolio = _pf.build_portfolio(returns, req.method)
+    sizing = {
+        col: {
+            "vol_target_leverage": round(_sizing.vol_target_leverage(returns[col], req.target_vol, bars_year), 3),
+            "kelly": _sizing.fractional_kelly(returns[col], 0.5, bars_year),
+        }
+        for col in returns.columns
+    }
+    return {**portfolio, "sizing": sizing, "bars_per_year": bars_year,
+            "n_bars": int(returns.shape[0])}
+
+
+# ── ML evaluation (purged CV) & RL recommendation (Tier 3) ──────────────────────
+
+class MLEvalRequest(BaseModel):
+    filename: str
+    optimize: bool = False
+
+
+@app.post("/api/ml/evaluate")
+def ml_evaluate(req: MLEvalRequest) -> dict[str, Any]:
+    path = DATA_DIR / req.filename
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+    res = _ml_eval.optimize_hyperparams(df) if req.optimize else _ml_eval.evaluate_dataset(df)
+    out = {
+        "filename": req.filename,
+        "mean_auc": round(res.mean_auc, 4),
+        "std_auc": round(res.std_auc, 4),
+        "mean_accuracy": round(res.mean_accuracy, 4),
+        "n_splits": res.n_splits,
+        "n_samples": res.n_samples,
+        "fold_auc": res.fold_auc,
+        "best_params": res.best_params,
+        "note": res.note,
+        "verdict": ("predictable" if res.mean_auc >= 0.55
+                    else "weak" if res.mean_auc >= 0.52 else "noise"),
+    }
+    log_run("ml_evaluate", {"filename": req.filename, "optimize": req.optimize},
+            {"mean_auc": res.mean_auc, "mean_accuracy": res.mean_accuracy},
+            seed=42, dataset=path)
+    return out
+
+
+@app.get("/api/rl/recommend")
+def rl_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
+    return recommend_rl_coins(DATA_DIR, timeframe=timeframe, top_n=top_n)
+
+
+# ── Data quality + forward-test attribution + experiments (Tier 4) ──────────────
+
+@app.get("/api/quality")
+def data_quality() -> dict[str, Any]:
+    return quality_report(DATA_DIR, max_files=300)
+
+
+@app.get("/api/forward-test")
+def forward_test() -> dict[str, Any]:
+    report_path = OUTPUTS_DIR / "wf_report.json"
+    report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
+    return _fwd.attribution(report)
+
+
+@app.get("/api/experiments")
+def experiments() -> dict[str, Any]:
+    return {"runs": recent_runs(50)}
+
+
 # ── Exchange-prefixed store ────────────────────────────────────────────────────
 
 class _ExchangePrefixedStore(ParquetDataStore):
@@ -754,6 +871,8 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                     log_returns = np.log1p(result.returns)
                     equity_ds = _downsample(result.equity.tolist(), 1000)
                     dd_ds = _downsample((result.equity / result.equity.cummax() - 1).tolist(), 1000)
+                    sharpe_ci = bootstrap_metric_ci(
+                        result.returns.to_numpy(), ppy, n_boot=300)["sharpe"]
                     dataset_entry["strategies"].append({
                         "name": strategy,
                         "label": STRATEGY_LABELS.get(strategy, strategy),
@@ -762,6 +881,8 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                         "equity": equity_ds,
                         "drawdown": dd_ds,
                         "return_dist": _return_distribution(result.returns),
+                        "sharpe_ci": {"low": round(sharpe_ci["low"], 2),
+                                      "high": round(sharpe_ci["high"], 2)},
                     })
                 except Exception as exc:
                     _log.warning("Strategy %s failed on %s: %s", strategy, symbol, exc)

@@ -59,5 +59,7 @@ Given the same Parquet input files, every backtest, report, and insights computa
 
 The platform is production-ready for personal and institutional research use. The web dashboard (`make web`) provides a complete self-serve research environment. The Python library can also be used programmatically or via the CLI for automated pipelines.
 
-**Ready:** data acquisition, validation, feature library, strategy backtesting, walk-forward, Monte Carlo, web dashboard, insights engine.
-**Planned:** Bayesian parameter optimisation, HMM regime detection, GitHub Actions CI for scheduled data refresh and report publishing.
+**Ready:** data acquisition, validation, feature library, strategy backtesting, walk-forward, Monte Carlo, web dashboard, insights engine; **statistical-rigor toolkit** (Deflated/Probabilistic Sharpe, PBO, bootstrap CIs), **purged/embargoed CV + triple-barrier labelling**, **cross-exchange analytics** (lead-lag, cointegration, basis, liquidity), **portfolio construction & sizing** (HRP/risk-parity, fractional Kelly, vol-targeting), **realistic cost model** (taker fees + dynamic slippage + funding), **leakage-free ML evaluation** + Optuna tuning, **RL env + coin recommender**, **experiment tracking**, **forward-test attribution**, **data-quality monitor**, and a **scheduled GitHub Actions** research job.
+**Planned:** trained RL agents (SB3) in production, HMM regime detection, live order-book/on-chain ingestion, multi-user auth.
+
+> Caveat: cross-exchange, ML and RL features operate on whatever OHLCV is already in the store; funding/OI ingestion and RL training require the optional `[ml]`/`[rl]` extras and live API access. Expected-vs-realized attribution reads the freqtrade bot DBs when present.
