@@ -96,11 +96,31 @@ class BinanceBulkDownloader:
 class CCXTFallbackDownloader:
     """Fetch OHLCV candles through CCXT when bulk files are unavailable."""
 
-    def __init__(self, exchange_id: str = "binance") -> None:
+    def __init__(self, exchange_id: str = "binance", market_type: str = "spot") -> None:
         import ccxt
 
         exchange_class = getattr(ccxt, exchange_id)
-        self.exchange = exchange_class({"enableRateLimit": True})
+        options: dict = {"enableRateLimit": True}
+        if market_type in ("futures", "swap", "perp", "perpetual"):
+            options["options"] = {"defaultType": "swap"}
+        self.exchange = exchange_class(options)
+        self.market_type = market_type
+
+    @staticmethod
+    def _ccxt_symbol(raw: str, market_type: str) -> str:
+        """'BTCUSDT' → 'BTC/USDT' (spot) یا 'BTC/USDT:USDT' (futures/swap).
+
+        فرمت کامل ccxt برای perp/swap لازم است (BASE/QUOTE:SETTLE) تا ccxt
+        بتواند مارکت درست را پیدا کند — بدون suffix برخی صرافی‌ها (Hyperliquid)
+        برای جفت‌های کم‌حجم‌تر داده برنمی‌گردانند.
+        """
+        for quote in ("USDT", "USDC", "BUSD"):
+            if raw.endswith(quote) and len(raw) > len(quote):
+                base = raw[: -len(quote)]
+                if market_type in ("futures", "swap", "perp", "perpetual"):
+                    return f"{base}/{quote}:{quote}"
+                return f"{base}/{quote}"
+        return raw  # already normalised or unknown format
 
     def fetch(self, request: DownloadRequest, limit: int = 1000) -> pd.DataFrame:
         """Fetch candles from CCXT using paginated requests."""
@@ -111,9 +131,14 @@ class CCXTFallbackDownloader:
         end_ms = int(datetime.combine(end_date, datetime.min.time(), UTC).timestamp() * 1000)
         step = timeframe_to_milliseconds(request.timeframe)
         rows: list[list[float]] = []
-        symbol = request.symbol.replace("USDT", "/USDT")
+        symbol = self._ccxt_symbol(request.symbol, self.market_type)
         while since < end_ms:
-            batch = self.exchange.fetch_ohlcv(symbol, request.timeframe, since=since, limit=limit)
+            try:
+                batch = self.exchange.fetch_ohlcv(symbol, request.timeframe, since=since, limit=limit)
+            except Exception:
+                # برخی صرافی‌ها (مثل Hyperliquid) وقتی since از آخر تاریخ موجود رد می‌شود
+                # 500 یا خطای مشابه می‌دهند؛ به جای crash، pagination متوقف می‌شود.
+                break
             if not batch:
                 break
             rows.extend(batch)
