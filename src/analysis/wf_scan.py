@@ -63,6 +63,15 @@ class ScanResult:
     sharpe_ci_low: float = 0.0       # bootstrap 95% CI on annualized Sharpe
     sharpe_ci_high: float = 0.0
     deflated_pass: bool = False      # DSR ≥ 0.95 (true edge after deflation)
+    # توزیع بازده OOS هر کندل — برای باندِ انتظار کیل‌سوییچ (edge_killswitch)
+    oos_mu_bar: float = 0.0
+    oos_sigma_bar: float = 0.0
+    n_oos_bars: int = 0
+    # ── robustness gate (apply_robustness پر می‌کند) ─────────────────────
+    venues_passed: int = 0           # این قاعده روی چند صرافی pass شده
+    venues_available: int = 0        # برای symbol×tf چند صرافی دیتا داریم
+    robust: bool = False             # گیت استحکام (دفاع در برابر نفرین برنده)
+    deployable: bool = False         # robust + قاعده در QuantResearchBridge پشتیبانی می‌شود
 
 
 def _bars_per_year(timeframe: str) -> int:
@@ -161,6 +170,9 @@ def scan_dataset(
                 oos_total_return=round(oos_total, 5),
                 trades_per_split=round(trades_avg, 1),
                 passed=passed,
+                oos_mu_bar=round(float(mu), 8),
+                oos_sigma_bar=round(float(sd), 8),
+                n_oos_bars=int(len(stitched)),
             ))
             stitched_by_result.append(stitched.to_numpy(dtype=float))
 
@@ -202,12 +214,25 @@ def _attach_rigor_stats(
             res.sharpe_ci_high = round(ci["high"], 3)
 
 
+# حداقل بار برای اسکنِ کامل (train=4000, test=1000) و اسکنِ کوتاه (train=2000, test=500)
+_FULL_MIN_BARS = 6000
+_SHORT_MIN_BARS = 2500
+_SHORT_TRAIN = 2000
+_SHORT_TEST = 500
+
+
 def scan_processed_dir(
     processed_dir: Path,
     *,
     only_symbols: list[str] | None = None,
     **kwargs,
 ) -> list[ScanResult]:
+    """دیتاهای کوتاه‌تر از ۶۰۰۰ کندل (مثل Hyperliquid) با پنجرهٔ کوچک‌تر اسکن می‌شوند.
+
+    این امکان را می‌دهد که صرافی‌هایی با تاریخچهٔ کمتر (مثل Hyperliquid با ~۵۰۰۰ کندل)
+    در robustness gate به عنوان venue مستقل شمرده شوند؛ نتایج آن‌ها split کمتری دارند
+    و DSR deflation قدرت آن‌ها را به‌درستی تعدیل می‌کند.
+    """
     out: list[ScanResult] = []
     for path in sorted(Path(processed_dir).glob("*.parquet")):
         stem = path.stem
@@ -215,9 +240,13 @@ def scan_processed_dir(
         if only_symbols and symbol not in only_symbols:
             continue
         df = pd.read_parquet(path)
-        if len(df) < 6000:
-            continue
-        out.extend(scan_dataset(df, stem, **kwargs))
+        n = len(df)
+        if n >= _FULL_MIN_BARS:
+            out.extend(scan_dataset(df, stem, **kwargs))
+        elif n >= _SHORT_MIN_BARS:
+            # تاریخچهٔ محدود: پنجرهٔ کوچک‌تر تا حداقل ۵ split حاصل شود
+            short_kwargs = {**kwargs, "train_size": _SHORT_TRAIN, "test_size": _SHORT_TEST}
+            out.extend(scan_dataset(df, stem, **short_kwargs))
     return out
 
 
@@ -235,6 +264,88 @@ def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     return output_path
+
+
+# ── robustness gate (دفاع در برابر «نفرین برنده») ────────────────────────────────
+# با ~۶۶۰۰ آزمون (دیتاست×استراتژی×جهت)، بیشترین Sharpe تقریباً قطعاً خوش‌شانس‌ترین
+# است نه بهترین. این گیت برای «استقرار روی بات» (نه برای گزارش پژوهشی) است:
+#   1) سازگاری بین‌صرافی: قاعده باید روی ≥ min_venues صرافیِ دارای دیتا pass شود
+#      (وقتی فقط یک صرافی دیتا دارد، همان یکی کافی است ولی بقیهٔ گیت‌ها سختگیرند)
+#   2) حداقل min_splits پنجرهٔ OOS و min_positive_frac از پنجره‌ها مثبت
+#   3) DSR (تصحیح چندآزمونی Bailey & López de Prado) ≥ min_dsr
+# `deployable` علاوه بر robust، فقط قواعدی که QuantResearchBridge پیاده کرده.
+
+BRIDGE_SUPPORTED_STRATEGIES = {
+    "ema_trend", "macd_cross", "donchian_breakout", "atr_breakout",
+}
+
+
+def _base_sym(symbol: str) -> str:
+    """'BTCUSDT' / 'BTCUSDC' → 'BTC' — برای گروه‌بندی cross-venue.
+
+    Hyperliquid USDC و Bybit/Gate USDT هر دو همان دارایی پایه را معامله می‌کنند؛
+    نرمال‌سازی به base باعث می‌شود robustness gate بتواند این دو را به عنوان دو
+    venue مستقل برای همان symbol بشمارد.
+    """
+    for q in ("USDT", "USDC", "BUSD"):
+        if symbol.endswith(q) and len(symbol) > len(q):
+            return symbol[: -len(q)]
+    return symbol
+
+
+def apply_robustness(
+    results: list[ScanResult],
+    *,
+    min_venues: int = 2,
+    min_splits: int = 4,
+    min_positive_frac: float = 0.70,
+    min_dsr: float = 0.50,
+    supported: set[str] | None = None,
+) -> dict:
+    """نتایج را in-place حاشیه‌نویسی می‌کند و خلاصهٔ گیت را برمی‌گرداند."""
+    supported = supported if supported is not None else BRIDGE_SUPPORTED_STRATEGIES
+
+    # گروه‌بندی بر اساس base symbol (BTC نه BTCUSDT/BTCUSDC) تا USDT و USDC
+    # صرافی‌های مختلف به عنوان venue های مستقل برای همان دارایی شمرده شوند.
+    venues_avail: dict[tuple, set] = {}
+    venues_pass: dict[tuple, set] = {}
+    for r in results:
+        base = _base_sym(r.symbol)
+        venues_avail.setdefault((base, r.timeframe), set()).add(r.exchange)
+        if r.passed:
+            venues_pass.setdefault(
+                (base, r.timeframe, r.strategy, r.allow_short), set()
+            ).add(r.exchange)
+
+    n_robust = n_deployable = 0
+    for r in results:
+        base = _base_sym(r.symbol)
+        avail = venues_avail.get((base, r.timeframe), set())
+        passed_on = venues_pass.get((base, r.timeframe, r.strategy, r.allow_short), set())
+        r.venues_available = len(avail)
+        r.venues_passed = len(passed_on)
+        need_venues = min(min_venues, max(1, len(avail)))
+        dsr_ok = (r.dsr == r.dsr) and r.dsr >= min_dsr  # NaN-safe
+        r.robust = bool(
+            r.passed
+            and r.n_splits >= min_splits
+            and r.oos_positive_frac >= min_positive_frac
+            and dsr_ok
+            and r.venues_passed >= need_venues
+        )
+        r.deployable = bool(r.robust and r.strategy in supported)
+        n_robust += int(r.robust)
+        n_deployable += int(r.deployable)
+
+    return {
+        "min_venues": min_venues,
+        "min_splits": min_splits,
+        "min_positive_frac": min_positive_frac,
+        "min_dsr": min_dsr,
+        "supported_strategies": sorted(supported),
+        "n_robust": n_robust,
+        "n_deployable": n_deployable,
+    }
 
 
 # ── reporting (برای داشبورد Quant_research و گزارش ادمین soodo) ──────────────────
@@ -257,6 +368,8 @@ def build_report(
     live_timeframe: str = "4h",
     better_tf_abs_margin: float = 0.1,
     better_tf_rel_margin: float = 0.25,
+    plan_pool: str = "passed",      # "passed" | "robust" | "deployable"
+    gate: dict | None = None,       # خروجی apply_robustness برای echo در گزارش
 ) -> dict:
     """گزارشِ خوانا برای داشبورد: شمارش‌ها، تفکیک tf/symbol، پلنِ زندهٔ بات و هشدارها.
 
@@ -266,19 +379,27 @@ def build_report(
     """
     survivors = sorted((r for r in results if r.passed),
                        key=lambda r: r.oos_sharpe, reverse=True)
+    if plan_pool == "deployable":
+        plan_candidates = [r for r in survivors if r.deployable]
+    elif plan_pool == "robust":
+        plan_candidates = [r for r in survivors if r.robust]
+    else:
+        plan_candidates = survivors
 
     by_tf: dict[str, dict] = {}
     by_symbol: dict[str, dict] = {}
     for r in results:
-        t = by_tf.setdefault(r.timeframe, {"scanned": 0, "passed": 0})
+        t = by_tf.setdefault(r.timeframe, {"scanned": 0, "passed": 0, "robust": 0})
         t["scanned"] += 1
         t["passed"] += int(r.passed)
-        s = by_symbol.setdefault(r.symbol, {"scanned": 0, "passed": 0})
+        t["robust"] += int(r.robust)
+        s = by_symbol.setdefault(r.symbol, {"scanned": 0, "passed": 0, "robust": 0})
         s["scanned"] += 1
         s["passed"] += int(r.passed)
+        s["robust"] += int(r.robust)
 
-    live_best = _best_per_symbol(survivors, timeframe=live_timeframe)
-    global_best = _best_per_symbol(survivors, timeframe=None)
+    live_best = _best_per_symbol(plan_candidates, timeframe=live_timeframe)
+    global_best = _best_per_symbol(plan_candidates, timeframe=None)
 
     live_plan = {
         sym: {
@@ -288,6 +409,12 @@ def build_report(
             "oos_positive_frac": r.oos_positive_frac,
             "oos_total_return": r.oos_total_return,
             "exchange": r.exchange,
+            "dsr": r.dsr if r.dsr == r.dsr else None,
+            "venues_passed": r.venues_passed,
+            "venues_available": r.venues_available,
+            "n_splits": r.n_splits,
+            "robust": r.robust,
+            "deployable": r.deployable,
         }
         for sym, r in live_best.items()
     }
@@ -332,6 +459,10 @@ def build_report(
 
     return {
         "version": 2,
+        "plan_pool": plan_pool,
+        "gate": gate,
+        "n_robust": sum(1 for r in results if r.robust),
+        "n_deployable": sum(1 for r in results if r.deployable),
         "generated_at": pd.Timestamp.now("UTC").isoformat(),
         "live_timeframe": live_timeframe,
         "n_scanned": len(results),
