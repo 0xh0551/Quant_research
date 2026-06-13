@@ -1014,22 +1014,100 @@ function buildEdgeCharts(data) {
     }], { ...base, xaxis: { gridcolor: GRID, tickfont: { size: 10 } }, yaxis: { gridcolor: GRID, rangemode: 'tozero' } }, { responsive: true, displayModeBar: false });
   }
 }
+// ── Pipeline progress bar helpers ────────────────────────────────────────────
+const EPB_STAGES = ['data_refresh', 'wf_scan', 'pair_rotation'];
+const EPB_STAGE_FA = { data_refresh: '↓ دانلود دیتا', wf_scan: '🔬 اسکن walk-forward', pair_rotation: '🔄 چرخش جفت‌ارز' };
+let _epbPollTimer = null;
+
+function epbShow(step, mins) {
+  document.getElementById('edges-pipeline-bar').style.display = 'block';
+  EPB_STAGES.forEach(s => {
+    const el = document.getElementById('epb-' + s);
+    if (!el) return;
+    const idx = EPB_STAGES.indexOf(s), cur = EPB_STAGES.indexOf(step || '');
+    if (idx < cur) {
+      el.style.background = 'rgba(34,197,94,.15)'; el.style.color = 'var(--green)';
+    } else if (idx === cur) {
+      el.style.background = 'rgba(251,191,36,.22)'; el.style.color = '#fbbf24';
+    } else {
+      el.style.background = 'var(--bg2)'; el.style.color = 'var(--text2)';
+    }
+  });
+  const det = document.getElementById('epb-detail');
+  if (det) det.textContent = mins != null ? `مدت اجرا: ${mins} دقیقه${mins > 60 ? ' — اسکن کامل ۲-۵ ساعت طول می‌کشد' : ''}` : '';
+}
+
+function epbHide() {
+  const bar = document.getElementById('edges-pipeline-bar');
+  if (bar) bar.style.display = 'none';
+  if (_epbPollTimer) { clearInterval(_epbPollTimer); _epbPollTimer = null; }
+}
+
+function epbStartPolling() {
+  if (_epbPollTimer) clearInterval(_epbPollTimer);
+  _epbPollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/edges/pipeline-status');
+      const ps = await r.json();
+      if (ps.state === 'running') {
+        epbShow(ps.step, ps.running_minutes);
+      } else if (ps.state === 'idle') {
+        epbHide();
+        document.getElementById('edges-rescan-btn').disabled = false;
+        document.getElementById('edges-status').textContent = ps.last_run?.ok ? t('edges_scan_done_short') || 'اسکن کامل شد' : t('edges_scan_failed_short') || 'اسکن ناموفق';
+        loadEdges();
+      }
+    } catch (_) { /* ignore transient fetch errors */ }
+  }, 20000);  // poll every 20 s
+}
+
 async function rescanEdges() {
   const btn = document.getElementById('edges-rescan-btn');
   const st = document.getElementById('edges-status');
   btn.disabled = true; st.textContent = t('edges_scanning');
+
+  // Check current pipeline state before firing
+  try {
+    const psR = await fetch('/api/edges/pipeline-status');
+    const ps = await psR.json();
+    if (ps.state === 'running' && !ps.stale) {
+      epbShow(ps.step, ps.running_minutes);
+      epbStartPolling();
+      st.textContent = `مرحله: ${EPB_STAGE_FA[ps.step] || ps.step || '...'} (${ps.running_minutes || 0} دقیقه)`;
+      return;
+    }
+  } catch (_) { /* fall through to start */ }
+
   try {
     const r = await fetch('/api/edges/refresh', { method: 'POST' });
     const { job_id } = await r.json();
     const ev = new EventSource('/api/jobs/' + job_id + '/events');
     ev.onmessage = e => {
       const d = JSON.parse(e.data);
-      st.textContent = jobMessage(d) + (d.progress ? ` (${Math.round(d.progress)}%)` : '');
-      if (d.status === 'done') { ev.close(); btn.disabled = false; loadEdges(); }
-      if (d.status === 'error') { ev.close(); btn.disabled = false; st.textContent = t('error_colon') + (d.error || jobMessage(d)); }
+      const step = d.message_params?.step;
+      const mins = d.message_params?.minutes;
+      if (step) epbShow(step, mins);
+      st.textContent = jobMessage(d) + (d.progress && d.progress < 100 ? ` (${Math.round(d.progress)}%)` : '');
+      if (d.status === 'done') { ev.close(); epbHide(); btn.disabled = false; loadEdges(); }
+      if (d.status === 'error') { ev.close(); epbHide(); btn.disabled = false; st.textContent = t('error_colon') + (d.error || jobMessage(d)); }
     };
-    ev.onerror = () => { ev.close(); btn.disabled = false; setTimeout(loadEdges, 1500); };
-  } catch (e) { st.textContent = t('error_colon') + e.message; btn.disabled = false; }
+    ev.onerror = () => {
+      ev.close();
+      // SSE closed (normal after ~3 min) — switch to polling the pipeline-status endpoint
+      epbStartPolling();
+      fetch('/api/edges/pipeline-status').then(r2 => r2.json()).then(ps => {
+        if (ps.state === 'running') {
+          epbShow(ps.step, ps.running_minutes);
+          st.textContent = `مرحله: ${EPB_STAGE_FA[ps.step] || ps.step || '...'} (${ps.running_minutes || 0} دقیقه)`;
+        } else {
+          btn.disabled = false;
+        }
+      }).catch(() => { btn.disabled = false; });
+    };
+  } catch (e) { st.textContent = t('error_colon') + e.message; btn.disabled = false; epbHide(); }
+
+  // Show the bar immediately with "init" step
+  epbShow('init', 0);
 }
 
 // ═══════════════════════════════════════════════════════════════ EDGES RIGOR CARD

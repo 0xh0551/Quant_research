@@ -11,7 +11,7 @@ import sys
 import threading
 import time
 from collections.abc import AsyncGenerator
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -351,9 +351,43 @@ def get_edges() -> dict[str, Any]:
     }
 
 
+_PIPELINE_STAGE_FA = {
+    "init": "شروع",
+    "data_refresh": "دانلود دیتا",
+    "wf_scan": "اسکن walk-forward",
+    "pair_rotation": "چرخش جفت‌ارز",
+}
+_PIPELINE_STAGE_PROGRESS = {"init": 2.0, "data_refresh": 10.0, "wf_scan": 30.0, "pair_rotation": 90.0}
+
+
+def _pipeline_status_now() -> dict:
+    """Read pipeline_status.json and compute running_minutes + stale flag."""
+    status_path = ROOT / "outputs" / "pipeline_status.json"
+    try:
+        status = json.loads(status_path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"state": "unknown"}
+    if status.get("state") == "running":
+        try:
+            started = datetime.fromisoformat(status["started_at"].replace("Z", "").split("+")[0])
+            mins = (datetime.now(UTC).replace(tzinfo=None) - started).total_seconds() / 60
+            status["running_minutes"] = round(mins)
+            if mins > 360:
+                status["stale"] = True
+        except Exception:
+            pass
+    return status
+
+
+@app.get("/api/edges/pipeline-status")
+def get_edges_pipeline_status() -> dict:
+    """Current pipeline execution state from pipeline_status.json."""
+    return _pipeline_status_now()
+
+
 @app.post("/api/edges/refresh")
 def refresh_edges(background_tasks: BackgroundTasks) -> dict[str, str]:
-    """Run the walk-forward scan as a background job (same weekly script)."""
+    """Fire the pipeline script in background and track progress via pipeline_status.json."""
     job_id = job_manager.create("edges")
     background_tasks.add_task(_run_edge_refresh, job_id)
     return {"job_id": job_id}
@@ -361,34 +395,104 @@ def refresh_edges(background_tasks: BackgroundTasks) -> dict[str, str]:
 
 def _run_edge_refresh(job_id: str) -> None:
     _log = logging.getLogger("quant.edges")
-    job_manager.update(job_id, status=JobStatus.RUNNING,
-                       message="Walk-forward scan started", message_code="job_edge_start")
-    try:
-        proc = subprocess.run(
-            [sys.executable, str(ROOT / "scripts" / "refresh_candidates.py")],
-            capture_output=True, text=True, timeout=1800, cwd=str(ROOT),
-        )
-        report_path = OUTPUTS_DIR / "wf_report.json"
-        report = json.loads(report_path.read_text(encoding="utf-8")) if report_path.exists() else {}
-        if proc.returncode != 0:
-            _log.error("edge refresh failed: %s", proc.stderr[-1000:])
-            job_manager.update(job_id, status=JobStatus.ERROR,
-                               error=(proc.stderr or proc.stdout)[-2000:],
-                               message="Scan failed", message_code="job_edge_error")
-            return
-        n_passed = report.get("n_passed", 0)
-        n_alerts = len(report.get("alerts", []))
+
+    # Guard: refuse if pipeline is already running (and not stale after 6h)
+    ps = _pipeline_status_now()
+    if ps.get("state") == "running" and not ps.get("stale"):
+        mins = ps.get("running_minutes", 0)
+        step_fa = _PIPELINE_STAGE_FA.get(ps.get("step", ""), ps.get("step", "?"))
         job_manager.update(
-            job_id, status=JobStatus.DONE, progress=100.0,
-            message=f"Scan complete — {n_passed} valid edges, {n_alerts} alerts",
-            message_code="job_edge_done", message_params={"passed": n_passed, "alerts": n_alerts},
-            result=report,
+            job_id, status=JobStatus.RUNNING,
+            progress=_PIPELINE_STAGE_PROGRESS.get(ps.get("step", ""), 20.0),
+            message=f"پایپ‌لاین از {mins} دقیقه پیش در حال اجراست — مرحله: {step_fa}",
+            message_code="job_edge_already_running",
+            message_params={"step": ps.get("step", ""), "minutes": mins},
+        )
+        return
+
+    job_manager.update(job_id, status=JobStatus.RUNNING, progress=2.0,
+                       message="پایپ‌لاین شروع شد", message_code="job_edge_start")
+
+    # Fire the pipeline shell script detached (setsid) so it survives web-server restarts
+    script = ROOT / "scripts" / "refresh_candidates.sh"
+    try:
+        subprocess.Popen(
+            ["setsid", "bash", str(script)],
+            cwd=str(ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            start_new_session=True,
         )
     except Exception as exc:
-        _log.exception("edge refresh crashed")
+        _log.exception("edge refresh failed to start")
         job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
-                           message=f"Error: {exc}", message_code="job_error",
-                           message_params={"error": str(exc)})
+                           message=f"شروع پایپ‌لاین ناموفق: {exc}",
+                           message_code="job_error", message_params={"error": str(exc)})
+        return
+
+    # Poll pipeline_status.json for up to 3 minutes (= SSE stream lifetime)
+    # reporting stage changes. After 3 min the SSE closes and the JS switches
+    # to polling /api/edges/pipeline-status directly for the progress bar.
+    poll_deadline = time.time() + 180
+    last_step: str | None = None
+    time.sleep(3)  # brief pause so the script has time to write its first status
+
+    while time.time() < poll_deadline:
+        ps = _pipeline_status_now()
+        state = ps.get("state")
+
+        if state == "idle":
+            lr = ps.get("last_run", {})
+            if lr.get("ok"):
+                report_path = OUTPUTS_DIR / "wf_report.json"
+                report: dict = {}
+                try:
+                    report = json.loads(report_path.read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+                n_passed = report.get("n_passed", 0)
+                n_alerts = len(report.get("alerts", []))
+                job_manager.update(
+                    job_id, status=JobStatus.DONE, progress=100.0,
+                    message=f"اسکن کامل — {n_passed} لبه، {n_alerts} هشدار",
+                    message_code="job_edge_done",
+                    message_params={"passed": n_passed, "alerts": n_alerts},
+                    result=report,
+                )
+            else:
+                failed = lr.get("failed_step") or "?"
+                job_manager.update(job_id, status=JobStatus.ERROR,
+                                   error=f"pipeline failed at {failed}",
+                                   message=f"خطا در مرحله: {failed}",
+                                   message_code="job_edge_error")
+            return
+
+        if state == "running":
+            step = ps.get("step", "init")
+            if step != last_step:
+                last_step = step
+                label = _PIPELINE_STAGE_FA.get(step, step)
+                prog = _PIPELINE_STAGE_PROGRESS.get(step, 15.0)
+                job_manager.update(job_id, status=JobStatus.RUNNING, progress=prog,
+                                   message=f"مرحله: {label}",
+                                   message_code="job_edge_stage",
+                                   message_params={"step": step, "label": label})
+
+        time.sleep(10)
+
+    # SSE window elapsed — pipeline is still running (normal for large scans).
+    # Leave the job in RUNNING so the JS progress bar can poll pipeline-status directly.
+    ps = _pipeline_status_now()
+    step = ps.get("step", "wf_scan")
+    mins = ps.get("running_minutes", 0)
+    label = _PIPELINE_STAGE_FA.get(step, step)
+    job_manager.update(
+        job_id, status=JobStatus.RUNNING,
+        progress=_PIPELINE_STAGE_PROGRESS.get(step, 35.0),
+        message=f"مرحله: {label} ({mins} دقیقه) — پیشرفت را از نوار زیر دنبال کنید",
+        message_code="job_edge_stage",
+        message_params={"step": step, "label": label, "minutes": mins},
+    )
 
 
 @app.get("/api/insights")
