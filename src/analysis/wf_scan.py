@@ -38,6 +38,7 @@ SCAN_STRATEGIES = [
     "ema_trend", "rsi_mean_reversion", "bollinger_mean_reversion",
     "donchian_breakout", "atr_breakout", "macd_cross", "stochastic_mr",
     "ichimoku", "supertrend", "vwap_deviation", "cmf_trend",
+    "hammer_pattern", "engulfing",
 ]
 
 
@@ -277,6 +278,9 @@ def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
 
 BRIDGE_SUPPORTED_STRATEGIES = {
     "ema_trend", "macd_cross", "donchian_breakout", "atr_breakout",
+    "rsi_mean_reversion", "bollinger_mean_reversion", "stochastic_mr",
+    "ichimoku", "supertrend", "vwap_deviation", "cmf_trend",
+    "hammer_pattern", "engulfing",
 }
 
 
@@ -299,7 +303,7 @@ def apply_robustness(
     min_venues: int = 2,
     min_splits: int = 4,
     min_positive_frac: float = 0.70,
-    min_dsr: float = 0.50,
+    min_dsr: float = 0.20,
     supported: set[str] | None = None,
 ) -> dict:
     """نتایج را in-place حاشیه‌نویسی می‌کند و خلاصهٔ گیت را برمی‌گرداند."""
