@@ -2,8 +2,7 @@
 # پایپ‌لاینِ روزانهٔ لبه‌ها روی هاست (cron):
 #   1) رفرشِ افزایشیِ دیتا (کندل‌های تازه)  ← لبه‌ها بیات نشوند
 #   2) اسکنِ walk-forward + نوشتن manifest/report + کپی به noches و soodo
-#   3) ری‌استارتِ Mickey/Wall_E فقط اگر پلنِ زندهٔ جفت‌هایشان عوض شده باشد
-#   4) چرخش جفت‌ارز Gadget/Klaymen از روی امتیاز سازگاری RL/ML (با هیسترزیس)
+#   3) چرخش جفت‌ارز Gadget/Klaymen/Popeye/Wall_E از روی امتیاز سازگاری RL/ML (با هیسترزیس)
 # وضعیت اجرا در outputs/pipeline_status.json نوشته می‌شود تا داشبوردِ
 # hnarimani («مانیتور مرکزی → Quant Research») بداند الان چه می‌گذرد.
 set -uo pipefail
@@ -33,11 +32,12 @@ st_end() {  # $1 = true/false  $2 = failed step ("null" یا "\"step\"")
   fi
   OK=true; FAILED=null
   st_run "wf_scan"
-  if ! "$PY" scripts/refresh_candidates.py --reload-mickey --reload-walle "$@"; then
+  if ! "$PY" scripts/refresh_candidates.py --reload-walle "$@"; then
     OK=false; FAILED="\"wf_scan\""
     echo "FAIL: pipeline failed at step wf_scan"
   fi
-  # چرخش جفت‌ارز بات‌های RL/ML (Gadget/Klaymen) — هیسترزیس + ری‌استارت فقط در صورت تعویض
+  # چرخش جفت‌ارز بات‌های RL/ML (Gadget/Klaymen/Popeye) — هیسترزیس + ری‌استارت فقط در صورت تعویض
+  # Wall_E لبه‌محور است و در مرحلهٔ wf_scan بالا با --reload-walle مدیریت می‌شود.
   st_run "pair_rotation"
   if ! "$PY" scripts/rotate_bot_pairs.py --apply; then
     OK=false; [ "$FAILED" = null ] && FAILED="\"pair_rotation\""
