@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""چرخش خودکارِ جفت‌ارزِ بات‌های مدل‌محور (Gadget=RL، Klaymen=ML) از روی امتیاز سازگاری.
+"""چرخش خودکارِ جفت‌ارزِ بات‌های مدل‌محور (Gadget=RL، Klaymen/Popeye=ML) از روی امتیاز سازگاری.
 
 شب‌ها بعد از اسکن لبه‌ها اجرا می‌شود (refresh_candidates.sh):
   - Gadget  ← امتیاز RL  (recommend_rl_coins، فیوچرز bybit 15m)
   - Klaymen ← امتیاز ML  (recommend_ml_coins، دیتای bybit/gate به‌عنوان پراکسی
               + فیلتر «روی سواپ USDT صرافی OKX لیست شده باشد»)
+  - Popeye  ← امتیاز ML  (recommend_ml_coins، دیتای bybit 15m، جفت USDT)
+
+Wall_E لبه‌محور است (نه ML fitness) و توسط refresh_candidates.py مدیریت می‌شود.
 
 لایه‌های محافظ (همان فلسفهٔ پایپ‌لاین لبه‌ها):
   1) هیسترزیس: چالش‌گر باید switch_streak شب متوالی در تاپ-N بماند و
@@ -57,10 +60,11 @@ BOTS = {
     "gadget": {
         "label": "Gadget", "container": "Gadget", "kind": "rl",
         "exchange": "bybit", "trade_timeframe": "15m", "score_timeframe": "15m",
-        "score_venues": ("bybit",),
+        "score_venues": ("bybit",), "quote": "USDT",
         "config": NOCHES / "gadget_config.json",
         "sqlite": NOCHES / "gadget.sqlite",
         "models_dir": NOCHES / "models" / "gadget_rlpro_live",
+        "manifest_path": None, "default_strategy": None,
         "n_pairs": 3, "min_dwell_days": 14.0,
         "switch_streak": 3, "switch_margin": 5,
         "okx_filter": False,
@@ -68,13 +72,33 @@ BOTS = {
     "klaymen": {
         "label": "Klaymen", "container": "Klaymen", "kind": "ml",
         "exchange": "okx", "trade_timeframe": "5m", "score_timeframe": "15m",
-        "score_venues": ("bybit", "gate", "gateio", "gate_io"),
+        "score_venues": ("bybit", "gate", "gateio", "gate_io"), "quote": "USDT",
         "config": NOCHES / "klaymen_config.json",
         "sqlite": NOCHES / "klaymen.sqlite",
         "models_dir": NOCHES / "models" / "Klaymen_",
+        "manifest_path": None, "default_strategy": None,
         "n_pairs": 5, "min_dwell_days": 7.0,
         "switch_streak": 3, "switch_margin": 5,
         "okx_filter": True,
+    },
+    "popeye": {
+        "label": "Popeye", "container": "Popeye", "kind": "ml",
+        "exchange": "bybit", "trade_timeframe": "1h", "score_timeframe": "1h",
+        "score_venues": ("bybit",), "quote": "USDT",
+        "config": NOCHES / "popeye_config.json",
+        "sqlite": NOCHES / "popeye.sqlite",
+        "models_dir": NOCHES / "models" / "popeye_ml_live",
+        "manifest_path": None, "default_strategy": None,
+        "n_pairs": 5, "min_dwell_days": 7.0,
+        "switch_streak": 2, "switch_margin": 5,
+        "okx_filter": False,
+        # Popeye تایم‌فریم را هم از لبهٔ ML کوانت می‌گیرد (هر چند ساعت، با هیسترزیس):
+        # جفت‌ها روی همان تایم‌فریمی که ترید می‌شوند امتیازدهی می‌شوند.
+        "select_timeframe": True,
+        "candidate_timeframes": ["15m", "1h", "4h"],
+        "tf_switch_streak": 2,   # چند اجرای متوالی tfِ بهتر بماند تا سوییچ کنیم (هیسترزیس)
+        "tf_higher_bias": 3,     # tf بالاتر اگر در فاصلهٔ این امتیاز بود ترجیح دارد (تریدِ کمتر)
+        "informative_higher": {"15m": "1h", "1h": "4h", "4h": "1d"},
     },
 }
 
@@ -129,10 +153,44 @@ def write_whitelist(config_path: Path, pairs: list[str]) -> None:
     config_path.write_text(new_text, encoding="utf-8")
 
 
+# ── تایم‌فریم freqtrade (کلید top-level + include_timeframes فِری‌ای‌آی) ─────────
+
+TF_RE = re.compile(r'("timeframe"\s*:\s*")([^"]*)(")')
+INC_TF_RE = re.compile(r'("include_timeframes"\s*:\s*\[)([^\]]*)(\])', re.S)
+TF_ORDER = {"1m": 0, "3m": 1, "5m": 2, "15m": 3, "30m": 4,
+            "1h": 5, "2h": 6, "4h": 7, "6h": 8, "12h": 9, "1d": 10}
+
+
+def read_timeframe(config_path: Path) -> str | None:
+    m = TF_RE.search(config_path.read_text(encoding="utf-8"))
+    return m.group(2) if m else None
+
+
+def write_timeframe(config_path: Path, timeframe: str,
+                    include_timeframes: list[str]) -> None:
+    """فقط مقدار top-level «timeframe» و آرایهٔ feature_parameters.include_timeframes
+    را عوض می‌کند؛ بقیهٔ فایل (و کامنت‌ها) دست‌نخورده. freqtrade کلید کانفیگ را روی
+    attribute استراتژی override می‌کند، پس استراتژی timeframe جدید را می‌گیرد."""
+    text = config_path.read_text(encoding="utf-8")
+    m = TF_RE.search(text)
+    if not m:
+        raise RuntimeError(f'top-level "timeframe" not found in {config_path}')
+    text = text[: m.start()] + f'"timeframe": "{timeframe}"' + text[m.end():]
+    mi = INC_TF_RE.search(text)
+    if mi:
+        new_inner = ", ".join(f'"{t}"' for t in include_timeframes)
+        text = text[: mi.start(2)] + new_inner + text[mi.end(2):]
+    parsed = _loads_tolerant(text)  # اعتبارسنجی قبل از نوشتن
+    if parsed.get("timeframe") != timeframe:
+        raise RuntimeError(f"timeframe round-trip mismatch: {parsed.get('timeframe')} != {timeframe}")
+    config_path.write_text(text, encoding="utf-8")
+
+
 # ── دیتا و امتیازها ───────────────────────────────────────────────────────────
 
-def _pair_of(base: str) -> str:
-    return f"{base}/USDT:USDT"
+def _pair_of(base: str, quote: str = "USDT") -> str:
+    q = quote.upper()
+    return f"{base}/{q}:{q}"
 
 
 def _base_of(pair: str) -> str:
@@ -172,6 +230,7 @@ def okx_swap_bases(ttl_days: float = 7.0) -> set[str] | None:
 
 def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
     """{base: {score, detail}} — بهترین امتیاز هر پایه روی venue های مجاز."""
+    quote = spec.get("quote", "USDT")
     if spec["kind"] == "rl":
         rec = recommend_rl_coins(processed_dir, venues=spec["score_venues"],
                                  timeframe=spec["score_timeframe"], top_n=10**6)
@@ -183,9 +242,9 @@ def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
     table: dict[str, dict] = {}
     for r in rec["recommendations"]:
         sym = r["symbol"]
-        if not sym.endswith("USDT"):
+        if not sym.endswith(quote):
             continue
-        base = sym[: -len("USDT")]
+        base = sym[: -len(quote)]
         if base in BASE_BLACKLIST:
             continue
         cur = table.get(base)
@@ -283,10 +342,11 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
     ready = [b for b in challengers if streaks[b] >= spec["switch_streak"]]
     ready.sort(key=lambda b: table[b]["score"], reverse=True)
 
+    quote = spec.get("quote", "USDT")
     change: dict | None = None
     if len(whitelist) < spec["n_pairs"] and ready:
         b = ready[0]
-        change = {"action": "add", "pair_in": _pair_of(b),
+        change = {"action": "add", "pair_in": _pair_of(b, quote),
                   "score_in": table[b]["score"]}
     elif ready:
         # ضعیف‌ترین مستقرِ دارای امتیاز؛ بدونِ امتیاز = قابل‌سنجش نیست، معاف
@@ -304,13 +364,13 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
             if weakest in open_pairs or "__UNKNOWN__" in open_pairs:
                 blockers.append("open_trade")
             if blockers:
-                decision.update(action="blocked", pair_in=_pair_of(b),
+                decision.update(action="blocked", pair_in=_pair_of(b, quote),
                                 pair_out=weakest, score_in=table[b]["score"],
                                 score_out=w_score, blockers=blockers)
                 log_event(apply, **{k: v for k, v in decision.items() if k != "challengers"},
                           event="blocked")
             else:
-                change = {"action": "swap", "pair_in": _pair_of(b), "pair_out": weakest,
+                change = {"action": "swap", "pair_in": _pair_of(b, quote), "pair_out": weakest,
                           "score_in": table[b]["score"], "score_out": w_score}
 
     if change:
@@ -351,8 +411,10 @@ def _docker(cmd: str, container: str, timeout: int) -> None:
 
 def cleanup_pair_models(spec: dict, pair_out: str) -> None:
     """مدل جفتِ خروجی را کامل پاک کن تا برگشتِ بعدی fresh آموزش ببیند."""
+    mdir = spec.get("models_dir")
+    if not mdir:
+        return  # بات بدون FreqAI (مثل Wall_E) — چیزی برای پاک کردن نیست
     base = _base_of(pair_out)
-    mdir = spec["models_dir"]
     for d in mdir.glob(f"sub-train-{base}_*"):
         shutil.rmtree(d, ignore_errors=True)
     shutil.rmtree(mdir / "tensorboard" / base, ignore_errors=True)
@@ -367,6 +429,39 @@ def cleanup_pair_models(spec: dict, pair_out: str) -> None:
             print(f"WARN: pair_dictionary cleanup failed: {exc}")
 
 
+def write_bot_manifest(spec: dict, assignments: dict, table: dict) -> None:
+    """برای بات‌هایی که manifest_path دارند (مثل Wall_E) یک manifest ساده می‌نویسد.
+
+    QuantResearchBridge این فایل را می‌خواند تا بداند هر جفت با چه استراتژی ترید کند.
+    در سیستم جدید، جفت‌ها از ML fitness می‌آیند و استراتژی ثابت (default_strategy) است.
+    """
+    manifest_path = spec.get("manifest_path")
+    if not manifest_path:
+        return
+    tf = spec["trade_timeframe"]
+    strategy = spec.get("default_strategy", "ema_trend")
+    candidates = []
+    for pair, info in assignments.items():
+        score = info.get("last_score") or table.get(_base_of(pair), {}).get("score", 50)
+        oos_sharpe = round(float(score or 50) / 33.0, 2)  # score 0-100 → proxy 0-3
+        candidates.append({
+            "symbol": pair,
+            "timeframe": tf,
+            "strategy": strategy,
+            "allow_short": True,
+            "oos_sharpe": oos_sharpe,
+            "weight": 1.0,
+        })
+    manifest = {
+        "generated_at": _now(),
+        "source": "rotate_bot_pairs",
+        "candidates": candidates,
+    }
+    Path(manifest_path).write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"manifest -> {manifest_path}")
+
+
 def apply_change(spec: dict, new_whitelist: list[str], pair_out: str | None) -> None:
     _docker("stop", spec["container"], timeout=240)
     try:
@@ -377,15 +472,170 @@ def apply_change(spec: dict, new_whitelist: list[str], pair_out: str | None) -> 
         _docker("start", spec["container"], timeout=120)
 
 
+# ── انتخاب تایم‌فریم (فقط بات‌های select_timeframe، مثل Popeye) ─────────────────
+
+def _tf_rank_score(table: dict[str, dict], n_pairs: int) -> float:
+    """لبهٔ ML یک تایم‌فریم = میانگین امتیاز n جفتِ برترش."""
+    scores = sorted((v["score"] for v in table.values()), reverse=True)[:n_pairs]
+    return round(sum(scores) / len(scores), 2) if scores else 0.0
+
+
+def select_timeframe_tables(spec: dict, processed_dir: Path
+                            ) -> tuple[dict[str, dict], dict[str, float]]:
+    """برای هر تایم‌فریم کاندید، جدول امتیاز ML بساز و رتبه‌اش را حساب کن."""
+    tables_by_tf: dict[str, dict] = {}
+    rank_by_tf: dict[str, float] = {}
+    for tf in spec["candidate_timeframes"]:
+        s = dict(spec)
+        s["score_timeframe"] = tf
+        tbl = score_table(s, processed_dir)
+        tables_by_tf[tf] = tbl
+        rank_by_tf[tf] = _tf_rank_score(tbl, spec["n_pairs"])
+    return tables_by_tf, rank_by_tf
+
+
+def pick_best_timeframe(rank_by_tf: dict[str, float], candidates: list[str],
+                        higher_bias: float) -> str:
+    """tf با بیشترین لبهٔ ML؛ اگر tf بالاتری در فاصلهٔ higher_bias از آن بود، آن را
+    ترجیح بده (تایم‌فریم بزرگ‌تر = تریدِ کمتر = هم‌سو با هدف < ۱۰ ترید/روز)."""
+    best = max(candidates, key=lambda tf: rank_by_tf.get(tf, 0.0))
+    best_score = rank_by_tf.get(best, 0.0)
+    for tf in sorted(candidates, key=lambda t: TF_ORDER.get(t, 99)):
+        if (TF_ORDER.get(tf, 99) > TF_ORDER.get(best, 99)
+                and rank_by_tf.get(tf, 0.0) >= best_score - higher_bias):
+            best = tf
+    return best
+
+
+def wipe_all_models(spec: dict) -> None:
+    """تغییر تایم‌فریم ⇒ همهٔ مدل‌های قبلی بی‌اعتبارند (ویژگی‌ها روی tf دیگری ساخته شده‌اند).
+    محتویات را به یک trash منتقل کن (mv نه rm؛ inodeِ پوشه برای mountِ tb-popeye می‌ماند)."""
+    mdir = spec.get("models_dir")
+    if not mdir or not Path(mdir).exists():
+        return
+    ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    trash = Path(mdir) / f".trash_{ts}"
+    trash.mkdir(parents=True, exist_ok=True)
+    for child in Path(mdir).iterdir():
+        if child.name.startswith(".trash_"):
+            continue
+        shutil.move(str(child), str(trash / child.name))
+    print(f"wiped all models → {trash}")
+
+
+def apply_timeframe_switch(spec: dict, new_tf: str, new_whitelist: list[str]) -> None:
+    """stop → نوشتن timeframe + include_timeframes + whitelist تازه → پاکسازی کاملِ
+    مدل‌ها → start."""
+    inc = [new_tf]
+    higher = spec.get("informative_higher", {}).get(new_tf)
+    if higher:
+        inc.append(higher)
+    _docker("stop", spec["container"], timeout=240)
+    try:
+        write_timeframe(spec["config"], new_tf, inc)
+        write_whitelist(spec["config"], new_whitelist)
+        wipe_all_models(spec)
+    finally:
+        _docker("start", spec["container"], timeout=120)
+
+
+def decide_with_timeframe(bot: str, spec: dict, st: dict, processed_dir: Path,
+                          apply: bool) -> tuple[dict, dict]:
+    """مسیر Popeye: اول تایم‌فریم (هیسترزیس)، بعد چرخش جفت روی تایم‌فریمِ جاری.
+
+    برمی‌گرداند (table_used, decision). table_used جدولِ تایم‌فریمِ مؤثر است
+    (برای داشبورد). تصمیمِ tf_switch، چرخش جفت همان دور را رد می‌کند چون کل
+    سبد بازانتخاب شده.
+    """
+    now = _now()
+    bst = st.setdefault(bot, {"assignments": {}, "streaks": {}, "tf_streaks": {}})
+    bst.setdefault("tf_streaks", {})
+
+    tables_by_tf, rank_by_tf = select_timeframe_tables(spec, processed_dir)
+    cur_tf = read_timeframe(spec["config"]) or spec["trade_timeframe"]
+    best_tf = pick_best_timeframe(rank_by_tf, spec["candidate_timeframes"],
+                                  float(spec.get("tf_higher_bias", 0)))
+    print(f"[{spec['label']}] tf ranks {rank_by_tf}; current={cur_tf} best={best_tf}")
+
+    # هیسترزیس tf: استریک فقط برای «تایم‌فریمِ متفاوتِ مطلوب» جلو می‌رود
+    if best_tf != cur_tf:
+        bst["tf_streaks"] = {best_tf: bst["tf_streaks"].get(best_tf, 0) + 1}
+    else:
+        bst["tf_streaks"] = {}
+    tf_streak = bst["tf_streaks"].get(best_tf, 0)
+
+    open_pairs = open_trade_pairs(spec["sqlite"])
+    spec["score_timeframe"] = cur_tf
+
+    if best_tf != cur_tf and tf_streak >= int(spec.get("tf_switch_streak", 2)):
+        if open_pairs:  # تریدِ باز ⇒ سوییچ tf را عقب بینداز (مدل‌ها وایپ می‌شوند)
+            decision = {"bot": spec["label"], "checked_at": now, "action": "tf_blocked",
+                        "tf_from": cur_tf, "tf_to": best_tf, "tf_streak": tf_streak,
+                        "blockers": ["open_trade"], "tf_ranks": rank_by_tf}
+            log_event(apply, bot=spec["label"], event="tf_blocked",
+                      tf_from=cur_tf, tf_to=best_tf, blockers=["open_trade"])
+            spec["trade_timeframe"] = cur_tf
+            return tables_by_tf.get(cur_tf, {}), decision
+
+        ranked = sorted(tables_by_tf[best_tf].items(),
+                        key=lambda kv: kv[1]["score"], reverse=True)
+        quote = spec.get("quote", "USDT")
+        new_basket = [_pair_of(b, quote) for b, _ in ranked[: spec["n_pairs"]]]
+        decision = {"bot": spec["label"], "checked_at": now, "action": "tf_switch",
+                    "tf_from": cur_tf, "tf_to": best_tf, "new_whitelist": new_basket,
+                    "tf_ranks": rank_by_tf}
+        if apply:
+            try:
+                apply_timeframe_switch(spec, best_tf, new_basket)
+                bst["assignments"] = {
+                    p: {"assigned_at": now, "source": "tf_switch",
+                        "last_score": tables_by_tf[best_tf].get(_base_of(p), {}).get("score"),
+                        "score_at": now}
+                    for p in new_basket}
+                bst["streaks"] = {}
+                bst["tf_streaks"] = {}
+                spec["trade_timeframe"] = best_tf
+                spec["score_timeframe"] = best_tf
+                log_event(apply, bot=spec["label"], event="tf_switch",
+                          tf_from=cur_tf, tf_to=best_tf, new_whitelist=new_basket)
+            except Exception as exc:
+                decision.update(action="error", error=str(exc))
+                log_event(apply, bot=spec["label"], event="error", error=str(exc),
+                          attempted={"tf_switch": best_tf})
+        else:
+            log_event(apply, bot=spec["label"], event="would_tf_switch",
+                      tf_from=cur_tf, tf_to=best_tf, new_whitelist=new_basket)
+        return tables_by_tf[best_tf], decision
+
+    # بدون سوییچ: چرخش معمولیِ جفت روی تایم‌فریمِ جاری
+    spec["trade_timeframe"] = cur_tf
+    table = tables_by_tf.get(cur_tf, {})
+    decision = decide(bot, spec, st, table, apply)
+    decision.update(tf_current=cur_tf, tf_best=best_tf, tf_streak=tf_streak,
+                    tf_ranks=rank_by_tf)
+    return table, decision
+
+
 # ── خروجی داشبوردها ───────────────────────────────────────────────────────────
 
 def write_assignments(st: dict, decisions: dict, tables: dict,
                       soodo_db: Path | None) -> None:
+    # اجرای جزئی (مثل --bots popeye هر ۴ ساعت) نباید بخش بات‌های دیگر را در
+    # داشبورد خالی کند → سکشن بات‌های پردازش‌نشده را از فایل قبلی نگه می‌داریم.
+    try:
+        prev = json.loads(ASSIGN_PATH.read_text(encoding="utf-8")).get("bots", {})
+    except Exception:
+        prev = {}
     bots_out = {}
     for bot, spec in BOTS.items():
+        if bot not in tables and spec["label"] in prev:
+            bots_out[spec["label"]] = prev[spec["label"]]
+            continue
         bst = st.get(bot, {})
         table = tables.get(bot, {})
+        quote = spec.get("quote", "USDT")
         ranked = sorted(table.items(), key=lambda kv: kv[1]["score"], reverse=True)
+        assignments = bst.get("assignments", {})
         bots_out[spec["label"]] = {
             "kind": spec["kind"], "exchange": spec["exchange"],
             "trade_timeframe": spec["trade_timeframe"],
@@ -393,11 +643,11 @@ def write_assignments(st: dict, decisions: dict, tables: dict,
             "n_pairs": spec["n_pairs"], "min_dwell_days": spec["min_dwell_days"],
             "switch_streak": spec["switch_streak"],
             "switch_margin": spec["switch_margin"],
-            "pairs": bst.get("assignments", {}),
+            "pairs": assignments,
             "streaks": bst.get("streaks", {}),
             "candidates_top": [
-                {"base": b, "pair": _pair_of(b), "score": v["score"],
-                 "incumbent": _pair_of(b) in bst.get("assignments", {}),
+                {"base": b, "pair": _pair_of(b, quote), "score": v["score"],
+                 "incumbent": _pair_of(b, quote) in assignments,
                  "streak": bst.get("streaks", {}).get(b, 0),
                  "detail": v["detail"]}
                 for b, v in ranked[:10]],
@@ -407,6 +657,13 @@ def write_assignments(st: dict, decisions: dict, tables: dict,
     ASSIGN_PATH.write_text(json.dumps(payload, ensure_ascii=False, indent=2),
                            encoding="utf-8")
     print(f"assignments -> {ASSIGN_PATH}")
+
+    # manifest برای بات‌هایی که QuantResearchBridge از آن می‌خوانند (مثل Wall_E)
+    for bot, spec in BOTS.items():
+        if spec.get("manifest_path"):
+            bst = st.get(bot, {})
+            write_bot_manifest(spec, bst.get("assignments", {}), tables.get(bot, {}))
+
     if soodo_db and soodo_db.is_dir():
         try:
             shutil.copy2(ASSIGN_PATH, soodo_db / "qr_pair_rotation.json")
@@ -432,6 +689,20 @@ def main() -> int:
     decisions, tables = {}, {}
     for bot in args.bots:
         spec = BOTS[bot]
+        if spec.get("select_timeframe"):
+            # Popeye: تایم‌فریم + جفت‌ها هر دو از لبهٔ ML کوانت (با هیسترزیس)
+            table, decision = decide_with_timeframe(bot, spec, st, processed_dir,
+                                                    apply=args.apply)
+            tables[bot] = table
+            decisions[bot] = decision
+            d = decision
+            extra = ""
+            if d["action"] in ("tf_switch", "would_tf_switch", "tf_blocked"):
+                extra = f" tf {d.get('tf_from')}→{d.get('tf_to')}"
+            elif d["action"] != "hold":
+                extra = f" {d.get('pair_out', '∅')} -> {d.get('pair_in', '')}"
+            print(f"[{spec['label']}] decision: {d['action']}{extra}")
+            continue
         table = score_table(spec, processed_dir)
         tables[bot] = table
         ranked = sorted(table.items(), key=lambda kv: kv[1]["score"], reverse=True)

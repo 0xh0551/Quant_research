@@ -37,17 +37,13 @@ from src.analysis.wf_scan import (  # noqa: E402
 )
 
 OUT = ROOT / "outputs"
-SIG_PATH = OUT / ".live_plan_sig.json"
-WALLE_SIG_PATH = OUT / ".walle_plan_sig.json"
 KILLS_PATH = OUT / "edge_kills.json"
 SELECTION_STATE_PATH = OUT / "selection_state.json"
 
 NOCHES_DIR = Path("/home/h0551user/noches")
-MICKEY_ENV_PATH = NOCHES_DIR / "mickey.env"
-WALLE_ENV_PATH = NOCHES_DIR / "walle.env"
-MICKEY_CONFIG_PATH = NOCHES_DIR / "user_data" / "mickey_config.json"
+WALLE_SIG_PATH    = OUT / ".walle_plan_sig.json"
+WALLE_ENV_PATH    = NOCHES_DIR / "walle.env"
 WALLE_CONFIG_PATH = NOCHES_DIR / "user_data" / "walle_config.json"
-MICKEY_MANIFEST_PATH = NOCHES_DIR / "user_data" / "wf_candidates.json"
 WALLE_MANIFEST_PATH = NOCHES_DIR / "user_data" / "wf_candidates_walle.json"
 
 KILL_MIN_HOURS = 24  # کیل حداقل این‌قدر فعال می‌ماند، حتی اگر اسکن جدید پاکش کند
@@ -66,14 +62,6 @@ def _norm_sym(sym: str) -> str:
         if s.endswith(q) and len(s) > len(q):
             return s[: -len(q)]
     return s
-
-
-def _to_gate_pair(base: str) -> str:
-    return f"{_norm_sym(base)}/USDT:USDT"
-
-
-def _to_hyperliquid_pair(base: str) -> str:
-    return f"{_norm_sym(base)}/USDC:USDC"
 
 
 # ── portfolio selection (سبد کم‌همبسته + وزن) ─────────────────────────────────
@@ -210,6 +198,32 @@ def _active_kills(kills: dict, bot: str) -> set[str]:
             kept.append(k)
     kills["kills"] = kept
     return active
+
+
+def _to_hyperliquid_pair(base: str) -> str:
+    return f"{base}/USDC:USDC"
+
+
+_TF_MINUTES = {
+    "1m": 1, "3m": 3, "5m": 5, "15m": 15, "30m": 30,
+    "1h": 60, "2h": 120, "4h": 240, "6h": 360, "8h": 480, "1d": 1440,
+}
+
+
+def _walle_best_timeframe(results: list, upgrade_factor: float = 1.5) -> str | None:
+    """کوچکترین TF با لبه روی Hyperliquid؛ فقط اگر TF بزرگ‌تر upgrade_factor برابر بیشتر اج داشت ارتقا می‌یابد."""
+    tf_total: dict[str, float] = {}
+    for r in results:
+        if r.deployable:
+            tf_total[r.timeframe] = tf_total.get(r.timeframe, 0.0) + r.oos_sharpe
+    if not tf_total:
+        return None
+    available = sorted(tf_total.keys(), key=lambda t: _TF_MINUTES.get(t, 99999))
+    best, best_score = available[0], tf_total[available[0]]
+    for tf in available[1:]:
+        if tf_total[tf] > best_score * upgrade_factor:
+            best, best_score = tf, tf_total[tf]
+    return best
 
 
 def _save_kills(kills: dict) -> None:
@@ -584,13 +598,13 @@ def main() -> int:
     # هیسترزیس
     ap.add_argument("--switch-streak", type=int, default=3)
     ap.add_argument("--switch-margin", type=float, default=0.20)
-    # Mickey / Wall_E
-    ap.add_argument("--reload-mickey", action="store_true")
-    ap.add_argument("--mickey-pairs", nargs="*", default=None)
-    ap.add_argument("--force-reload", action="store_true")
-    ap.add_argument("--reload-walle", action="store_true")
-    ap.add_argument("--walle-pairs", nargs="*", default=None)
-    ap.add_argument("--force-reload-walle", action="store_true")
+    # Wall_E (لبه‌محور، Hyperliquid)
+    ap.add_argument("--reload-walle", action="store_true",
+                    help="اعمال پلن Wall_E (مانیفست + ری‌استارت در صورت تغییر)")
+    ap.add_argument("--force-reload-walle", action="store_true",
+                    help="اعمال فوری Wall_E بدون شرط استریک")
+    ap.add_argument("--walle-pairs", nargs="*", default=None,
+                    help="محدود کردن انتخاب Wall_E به این base ها")
     args = ap.parse_args()
 
     processed_dir = Path(args.processed)
@@ -629,42 +643,46 @@ def main() -> int:
     if args.soodo_report:
         _copy(rep, Path(args.soodo_report), "report")
 
-    # ── انتخاب سبد + تصمیم استقرار برای هر بات (همیشه محاسبه، اجرا با فلگ) ──
+    # ── Wall_E: لبه‌محور روی دیتای Hyperliquid (کوچکترین TF با لبه) ─────────────
+    hl_results = [r for r in results if r.exchange.startswith("hyperliquid")]
+    hl_tf = _walle_best_timeframe(hl_results) or args.live_timeframe
     kills = _load_kills()
-    selection_state = {"generated_at": _now_iso(), "gate": gate,
-                       "live_timeframe": live_tf, "bots": {}}
-
-    bots = [
-        ("Mickey", args.mickey_pairs, args.reload_mickey or args.force_reload,
-         args.force_reload, SIG_PATH, MICKEY_ENV_PATH, MICKEY_CONFIG_PATH,
-         MICKEY_MANIFEST_PATH, _to_gate_pair),
-        ("Wall_E", args.walle_pairs, args.reload_walle or args.force_reload_walle,
-         args.force_reload_walle, WALLE_SIG_PATH, WALLE_ENV_PATH, WALLE_CONFIG_PATH,
-         WALLE_MANIFEST_PATH, _to_hyperliquid_pair),
-    ]
-    for (name, only_pairs, do_deploy, force, sig_path, env_path,
-         config_path, manifest_path, fmt) in bots:
-        kills_active = _active_kills(kills, name)
-        selected, weights, diag = select_portfolio(
-            results,
-            timeframe=live_tf,
-            top_n=args.top_n,
-            corr_cap=args.corr_cap,
-            processed_dir=processed_dir,
-            exclude=kills_active,
-            only_bases=only_pairs,
-        )
-        summary = decide_and_maybe_deploy(
-            bot=name, results=results, selected=selected, weights=weights,
-            tf=live_tf, kills_active=kills_active,
-            sig_path=sig_path, env_path=env_path, config_path=config_path,
-            manifest_path=manifest_path, pair_formatter=fmt,
-            switch_streak=args.switch_streak, switch_margin=args.switch_margin,
-            do_deploy=do_deploy, force=force, diag=diag,
-        )
-        selection_state["bots"][name] = summary
-
+    hl_kills = _active_kills(kills, "Wall_E")
+    hl_selected, hl_weights, hl_diag = select_portfolio(
+        hl_results,
+        timeframe=hl_tf,
+        top_n=5,
+        corr_cap=args.corr_cap,
+        processed_dir=processed_dir,
+        exclude=hl_kills,
+        only_bases=args.walle_pairs,
+    )
+    print(f"Wall_E tf={hl_tf} selected={[_norm_sym(r.symbol) for r in hl_selected]}")
+    walle_summary = decide_and_maybe_deploy(
+        bot="Wall_E",
+        results=hl_results,
+        selected=hl_selected,
+        weights=hl_weights,
+        tf=hl_tf,
+        kills_active=hl_kills,
+        sig_path=WALLE_SIG_PATH,
+        env_path=WALLE_ENV_PATH,
+        config_path=WALLE_CONFIG_PATH,
+        manifest_path=WALLE_MANIFEST_PATH,
+        pair_formatter=_to_hyperliquid_pair,
+        switch_streak=args.switch_streak,
+        switch_margin=args.switch_margin,
+        do_deploy=args.reload_walle or args.force_reload_walle,
+        force=args.force_reload_walle,
+        diag=hl_diag,
+    )
     _save_kills(kills)
+
+    selection_state = {
+        "generated_at": _now_iso(), "gate": gate,
+        "live_timeframe": live_tf,
+        "bots": {"Wall_E": walle_summary},
+    }
     SELECTION_STATE_PATH.write_text(
         json.dumps(selection_state, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"selection state -> {SELECTION_STATE_PATH}")
@@ -677,8 +695,7 @@ def main() -> int:
             (KILLS_PATH, "qr_edge_kills.json"),
             (Path(args.history), "qr_wf_history.jsonl"),
             (OUT / "pipeline_status.json", "qr_pipeline_status.json"),
-            (MICKEY_MANIFEST_PATH, "qr_manifest_mickey.json"),
-            (WALLE_MANIFEST_PATH, "qr_manifest_walle.json"),
+            (WALLE_MANIFEST_PATH, "qr_walle_manifest.json"),
         ):
             try:
                 if src.exists():

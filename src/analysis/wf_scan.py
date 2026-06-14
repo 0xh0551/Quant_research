@@ -445,9 +445,9 @@ def build_report(
                 "gap": round(gap, 3),
                 "message": (
                     f"{sym}: لبهٔ قوی‌تری روی {gb.timeframe} پیدا شد "
-                    f"(Sharpe {gb.oos_sharpe:.2f} با {gb.strategy}) نسبت به تایم‌فریم زندهٔ "
-                    f"{live_timeframe} (Sharpe {live_sharpe:.2f}). برای فعال‌سازی، بات باید با "
-                    f"تایم‌فریم {gb.timeframe} ری‌استارت شود — این تغییر دستی/تأییدی است."
+                    f"(Sharpe {gb.oos_sharpe:.2f} با {gb.strategy}) نسبت به تایم‌فریم جمعی "
+                    f"{live_timeframe} (Sharpe {live_sharpe:.2f}). "
+                    f"تایم‌فریم جمعی به‌صورت خودکار انتخاب می‌شود — این هشدار اطلاع‌رسانی است."
                 ),
             })
 
