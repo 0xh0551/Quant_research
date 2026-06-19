@@ -32,16 +32,26 @@ st_end() {  # $1 = true/false  $2 = failed step ("null" یا "\"step\"")
   fi
   OK=true; FAILED=null
   st_run "wf_scan"
-  if ! "$PY" scripts/refresh_candidates.py --reload-walle "$@"; then
+  # توجه: «--reload-walle» حذف شد — Wall_E دیگر با گیتِ سخت‌گیرِ deployable مستقر
+  # نمی‌شود (که مدام فلتش می‌کرد). هم Wall_E هم Mickey با پروفایلِ پرتکرار در
+  # مرحلهٔ qr_bridge_refresh مدیریت می‌شوند. wf_scan فقط اسکن + dashboard را می‌نویسد.
+  if ! "$PY" scripts/refresh_candidates.py "$@"; then
     OK=false; FAILED="\"wf_scan\""
     echo "FAIL: pipeline failed at step wf_scan"
   fi
   # چرخش جفت‌ارز بات‌های RL/ML (Gadget/Klaymen/Popeye) — هیسترزیس + ری‌استارت فقط در صورت تعویض
-  # Wall_E لبه‌محور است و در مرحلهٔ wf_scan بالا با --reload-walle مدیریت می‌شود.
   st_run "pair_rotation"
   if ! "$PY" scripts/rotate_bot_pairs.py --apply; then
     OK=false; [ "$FAILED" = null ] && FAILED="\"pair_rotation\""
     echo "FAIL: pair rotation failed"
+  fi
+  # Mickey (gate) + Wall_E (hyperliquid): بریجِ کوانتِ پرتکرار روی 15m — انتخابِ
+  # پروفایلِ پرتکرار + فیلترِ نقدینگی از همین اسکن، با هیسترزیس (ری‌استارت فقط در
+  # صورتِ تغییرِ پلن). جزئیات: scripts/refresh_qr_bridge.py
+  st_run "qr_bridge_refresh"
+  if ! "$PY" scripts/refresh_qr_bridge.py --bot all --apply; then
+    OK=false; [ "$FAILED" = null ] && FAILED="\"qr_bridge_refresh\""
+    echo "FAIL: qr bridge refresh failed"
   fi
   st_end "$OK" "$FAILED"
 } >> logs/refresh_candidates.log 2>&1

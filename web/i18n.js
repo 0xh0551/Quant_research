@@ -13,7 +13,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'پلتفرم ریسرچ کوانت',
-    version_label: 'نسخهٔ ۱.۲',
+    version_label: 'نسخهٔ ۱.۳',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
@@ -203,6 +203,9 @@ const I18N = {
     edges_col_symbol: 'نماد', edges_col_rule: 'قاعده', edges_col_dir: 'جهت',
     edges_col_sharpe_oos: 'شارپ (OOS)', edges_col_positive: '٪ مثبت',
     edges_col_return_oos: 'بازده OOS', edges_col_exchange: 'صرافیِ مرجع',
+    edges_col_status: 'وضعیت',
+    edges_deploy_deployable: 'قابل‌استقرار', edges_deploy_robust: 'مستحکم', edges_deploy_passed: 'فقط معتبر',
+    edges_deploy_legend: '🟢 قابل‌استقرار = به بات Wall_E منتقل می‌شود (مستحکم + استراتژیِ پشتیبانی‌شدهٔ بریج). 🔵 مستحکم = از گیتِ چندصرافی/DSR رد شده ولی بریج پیاده‌اش نکرده. ⚪ فقط معتبر = فقط گیتِ شُلِ OOS را رد کرده (اغلب کم‌نقدینگی/اورفیت). توجه: بات‌های RL/ML (Gadget/Klaymen/Popeye) از این لبه‌ها تغذیه نمی‌شوند؛ آن‌ها جفت‌ها را از امتیاز RL/ML می‌گیرند.',
     edges_col_tf: 'TF', edges_col_trades: 'معاملات/پنجره',
     edges_dir_both: 'دوطرفه', edges_dir_long: 'فقط خرید',
     edges_oos_return: 'بازده OOS', edges_strategy: 'استراتژی', edges_trades_split: 'معاملات/پنجره',
@@ -237,7 +240,20 @@ const I18N = {
     cx_col_pair: 'جفت', cx_col_lag: 'لگ', cx_col_corr: 'همبستگی', cx_col_leader: 'پیشرو',
     cx_col_pvalue: 'p-value', cx_col_hedge: 'نسبت هج', cx_col_z: 'z اسپرد', cx_col_coint: 'هم‌انباشته',
     cx_col_spot: 'اسپات', cx_col_deriv: 'مشتقه', cx_col_basis_now: 'بیسیس فعلی', cx_col_basis_mean: 'میانگین', cx_col_basis_std: 'انحراف',
+    cx_col_kind: 'نوع', cx_kind_basis: 'پرپ↔اسپات', cx_kind_cross: 'بین‌صرافی',
+    cx_scan_btn: 'اسکن خودکار همه', cx_scanning: 'در حال اسکن همهٔ نمادها…',
+    cx_scan_title: 'بهترین فرصت‌های بین‌صرافی', cx_scan_hint: 'همهٔ نمادهای دارای ≥۲ صرافی اسکن و بر اساس قدرت لبه رتبه‌بندی شدند؛ ستون «اقدام» ساختار ترید پیشنهادی است.',
+    cx_col_type: 'نوع لبه', cx_col_symbol: 'نماد', cx_col_tf: 'تایم‌فریم', cx_col_score: 'امتیاز', cx_col_action: 'اقدام پیشنهادی', cx_col_venues: 'صرافی‌ها',
     cx_col_venue: 'صرافی', cx_col_dvol: 'حجم دلاری',
+    cx_col_confidence: 'اطمینان', cx_col_gap: 'فاصله تا میانگین', cx_col_pnl: 'سود تخمینی (سرمایه ۱۰۰۰$)',
+    cx_conf_high: 'بالا', cx_conf_medium: 'متوسط', cx_conf_low: 'پایین',
+    cx_score_tip: 'امتیاز = قدرت آماری لبه (نه سود تضمینی): برای آربیتراژ آماری = |z| فاصلهٔ اسپرد از میانگین به انحراف معیار؛ برای پیشرو-پیرو = همبستگی×لگ؛ برای کج‌شدگی = انحراف فعلی به انحراف معیار آن. هرچه بالاتر، سیگنال قوی‌تر است.',
+    cx_pnl_tip: 'سود تخمینی = اگر این فاصله کامل به میانگین برگردد و ۱۰۰۰ دلار بین دو پایهٔ معامله (لانگ/شورت) تقسیم شود — قبل از کارمزد، فاندینگ، لغزش قیمت (slippage) و بدون تضمین زمان یا وقوع بازگشت.',
+    cx_scan_guide_title: '📖 راهنمای استفاده از هر نوع فرصت',
+    cx_guide_stat_arb: '🟢 آربیتراژ آماری (Stat-Arb): دو پایه را هم‌زمان باز کنید — طبق ستون «اقدام» یکی را لانگ و دیگری را به نسبت «هج» شورت کنید (مثلاً اگر هج=۱.۰ یعنی اندازهٔ برابر). وقتی z به نزدیک صفر برگشت، هر دو پایه را ببندید. اگر z به جای برگشت، بازهم بیشتر شد (مثلاً از ۳ به ۵ رسید)، یعنی فرضیهٔ هم‌انباشتگی شکسته—با حد ضرر از پوزیشن خارج شوید.',
+    cx_guide_lead_lag: '🔵 پیشرو-پیرو (Lead-Lag): این یک معاملهٔ خنثی نیست؛ وقتی صرافی «پیشرو» حرکت می‌کند، همان جهت را روی صرافی «پیرو» با تأخیر چند کندل تکرار کنید. نیاز به اجرای سریع/اتوماتیک دارد و برای ترید دستی عملاً سخت است — بیشتر برای بات مناسب است.',
+    cx_guide_dislocation: '🟡 کج‌شدگی بین‌صرافی (Dislocation): قیمت یک نماد روی دو صرافی فاصله گرفته. نماد ارزان‌تر را لانگ و گران‌تر را شورت کنید (هر دو هم‌زمان، با حجم برابر دلاری)، و وقتی فاصله به میانگین تاریخی برگشت ببندید. فاندینگ‌ریت هر صرافی را هم چک کنید چون می‌تواند سود را بخورد یا اضافه کند.',
+    cx_guide_disclaimer: '⚠️ این اعداد آماری/تاریخی‌اند، نه پیش‌بینی قطعی. قبل از ورود واقعی: حجم/نقدینگی کافی صرافی‌ها را چک کنید، کارمزد دو طرف معامله و فاندینگ را در نظر بگیرید، و با حجم کوچک تست کنید.',
 
     /* portfolio */
     pf_select: 'دیتاست‌ها را انتخاب کنید (حداقل ۲)', pf_method: 'روش وزن‌دهی',
@@ -246,9 +262,15 @@ const I18N = {
     pf_weights: 'وزن‌ها', pf_metrics: 'مشخصات پرتفوی', pf_sizing: 'سایزینگ (Kelly کسری و هدف‌گیری نوسان)',
     pf_div_ratio: 'نسبت تنوع‌بخشی', pf_avg_corr: 'همبستگی میانگین', pf_port_vol: 'نوسان پرتفوی (هر کندل)', pf_n_assets: 'تعداد دارایی',
     pf_col_asset: 'دارایی', pf_col_weight: 'وزن', pf_col_kelly: 'Kelly کسری', pf_col_vol_lev: 'اهرم هدف‌گیری نوسان',
+    pf_backtest: 'بک‌تست پرتفوی (در برابر وزن برابر)', pf_beats_ew: 'بهتر از ۱/N', pf_below_ew: 'بدتر از ۱/N',
+    pf_backtest_hint: 'بازده واقعیِ سبدِ وزن‌دارِ ساخته‌شده روی همین بازه، در برابر معیارِ ساده‌ی وزن‌برابر (۱/N). اگر زیر ۱/N باشد، روشِ تخصیص ارزش افزوده نداشته.',
 
     /* models */
     mdl_rl_title: 'پیشنهاد ارز برای RL', mdl_rl_hint: 'مناسب‌ترین ارزها برای ایجنت RL روی فیوچرز ۱۵ دقیقه (Bybit / OKX / Gate)',
+    mdl_ml_reco_title: 'پیشنهاد ارز برای ML', mdl_ml_reco_hint: 'مناسب‌ترین ارزها برای مدل ML روی فیوچرز ۱۵ دقیقه (همان امتیازی که چرخش شبانهٔ Klaymen/Popeye استفاده می‌کند)',
+    mdl_mf_title: 'جریان پول', mdl_mf_hint: 'کوین‌هایی که سرمایه روی آن‌ها در حال ورود یا خروج است (بر اساس CMF + حجم نسبی + شیب OBV روی کندل‌ها) — همین سیگنال در چرخش شبانه روی امتیازِ انتخاب کوین اثر می‌گذارد.',
+    mf_inflow_label: 'ورود پول', mf_outflow_label: 'خروج پول',
+    lab_date_hint: 'خالی = کل تاریخچه؛ برای هم‌خوانی با تب گزارش، همان بازهٔ ریسرچ را بگذارید', ins_rerun: 'اعمال بازه',
     mdl_rl_evaluated: 'دیتاست بررسی‌شده', mdl_rl_col_score: 'امتیاز RL', mdl_rl_col_regimes: 'تغییرات رژیم',
     mdl_rl_col_density: 'چگالی پاداش', mdl_rl_col_pred: 'پیش‌بینی‌ناپذیری',
     mdl_ml_title: 'ارزیابی واقعی ML (CV پاک‌سازی‌شده + امبارگو)',
@@ -313,7 +335,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'Quant Research Platform',
-    version_label: 'v1.2',
+    version_label: 'v1.3',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
@@ -502,6 +524,9 @@ const I18N = {
     edges_col_symbol: 'Symbol', edges_col_rule: 'Rule', edges_col_dir: 'Direction',
     edges_col_sharpe_oos: 'Sharpe (OOS)', edges_col_positive: '% positive',
     edges_col_return_oos: 'OOS return', edges_col_exchange: 'Ref. exchange',
+    edges_col_status: 'Status',
+    edges_deploy_deployable: 'Deployable', edges_deploy_robust: 'Robust', edges_deploy_passed: 'Passed only',
+    edges_deploy_legend: '🟢 Deployable = pushed to the Wall_E bot (robust + bridge-supported rule). 🔵 Robust = cleared the cross-venue/DSR gate but the bridge does not implement it. ⚪ Passed only = cleared just the loose OOS gate (often illiquid / curve-fit). Note: the RL/ML bots (Gadget/Klaymen/Popeye) are NOT fed by these edges; they pick pairs from the RL/ML fitness score.',
     edges_col_tf: 'TF', edges_col_trades: 'Trades/window',
     edges_dir_both: 'Both', edges_dir_long: 'Long only',
     edges_oos_return: 'OOS return', edges_strategy: 'Strategy', edges_trades_split: 'Trades/window',
@@ -536,7 +561,20 @@ const I18N = {
     cx_col_pair: 'Pair', cx_col_lag: 'Lag', cx_col_corr: 'Corr', cx_col_leader: 'Leader',
     cx_col_pvalue: 'p-value', cx_col_hedge: 'Hedge ratio', cx_col_z: 'Spread z', cx_col_coint: 'Cointegrated',
     cx_col_spot: 'Spot', cx_col_deriv: 'Derivative', cx_col_basis_now: 'Basis now', cx_col_basis_mean: 'Mean', cx_col_basis_std: 'Std',
+    cx_col_kind: 'Kind', cx_kind_basis: 'perp↔spot', cx_kind_cross: 'cross-venue',
+    cx_scan_btn: 'Auto-scan all', cx_scanning: 'Scanning all symbols…',
+    cx_scan_title: 'Top cross-exchange opportunities', cx_scan_hint: 'Every symbol on ≥2 venues was scanned and ranked by edge strength; the Action column is the suggested trade construction.',
+    cx_col_type: 'Edge type', cx_col_symbol: 'Symbol', cx_col_tf: 'Timeframe', cx_col_score: 'Score', cx_col_action: 'Suggested action', cx_col_venues: 'Venues',
     cx_col_venue: 'Venue', cx_col_dvol: 'Dollar volume',
+    cx_col_confidence: 'Confidence', cx_col_gap: 'Gap to mean', cx_col_pnl: 'Est. PnL ($1000)',
+    cx_conf_high: 'High', cx_conf_medium: 'Medium', cx_conf_low: 'Low',
+    cx_score_tip: 'Score = statistical strength of the edge (not guaranteed profit): for stat-arb it is |z| (spread distance from mean, in std-devs); for lead-lag it is correlation×lag; for dislocation it is the current deviation divided by its own std. Higher = stronger signal.',
+    cx_pnl_tip: 'Estimated PnL = if this gap fully reverts to the mean and $1000 is split across both legs (long/short) of the trade — gross, before fees, funding and slippage, with no guarantee of timing or whether it reverts at all.',
+    cx_scan_guide_title: '📖 How to use each opportunity type',
+    cx_guide_stat_arb: '🟢 Stat-Arb: open both legs at once — long one side, short the other sized by the hedge ratio in the Action column (e.g. hedge=1.0 means equal size). Close both legs once z returns near zero. If z keeps widening instead of reverting (e.g. 3 → 5), the cointegration assumption is breaking down — exit with a stop.',
+    cx_guide_lead_lag: '🔵 Lead-Lag: not a market-neutral trade; when the "leader" venue moves, mirror the same direction on the "follower" venue a few bars later. Requires fast/automated execution — impractical by hand, best suited to a bot.',
+    cx_guide_dislocation: '🟡 Dislocation: the same symbol has diverged in price across two venues. Long the cheaper venue and short the pricier one (simultaneously, equal dollar size), close once the gap reverts to its historical mean. Check each venue\'s funding rate too — it can eat into or add to the profit.',
+    cx_guide_disclaimer: '⚠️ These numbers are statistical/historical, not a guarantee. Before trading real size: check each venue has enough liquidity, account for fees on both legs plus funding, and test with a small position first.',
 
     /* portfolio */
     pf_select: 'Select datasets (at least 2)', pf_method: 'Weighting method',
@@ -545,9 +583,15 @@ const I18N = {
     pf_weights: 'Weights', pf_metrics: 'Portfolio profile', pf_sizing: 'Sizing (fractional Kelly & vol-targeting)',
     pf_div_ratio: 'Diversification ratio', pf_avg_corr: 'Avg correlation', pf_port_vol: 'Portfolio vol (per bar)', pf_n_assets: 'Assets',
     pf_col_asset: 'Asset', pf_col_weight: 'Weight', pf_col_kelly: 'Fractional Kelly', pf_col_vol_lev: 'Vol-target leverage',
+    pf_backtest: 'Portfolio backtest (vs equal-weight)', pf_beats_ew: 'Beats 1/N', pf_below_ew: 'Below 1/N',
+    pf_backtest_hint: 'Realized return of the weighted basket over this window vs the naive equal-weight (1/N) benchmark. If it sits below 1/N, the allocation method added no value.',
 
     /* models */
     mdl_rl_title: 'RL Coin Recommendation', mdl_rl_hint: 'Best coins for an RL agent on 15m futures (Bybit / OKX / Gate)',
+    mdl_ml_reco_title: 'ML Coin Recommendation', mdl_ml_reco_hint: 'Best coins for an ML model on 15m futures (the same score the nightly Klaymen/Popeye rotation uses)',
+    mdl_mf_title: 'Money Flow', mdl_mf_hint: 'Coins capital is currently rotating into or out of (CMF + relative volume + OBV slope on candles) — the same signal tilts coin-selection scores in the nightly rotation.',
+    mf_inflow_label: 'Inflow', mf_outflow_label: 'Outflow',
+    lab_date_hint: 'Empty = full history; to match the Report tab, use the same Research range', ins_rerun: 'Apply range',
     mdl_rl_evaluated: 'datasets evaluated', mdl_rl_col_score: 'RL score', mdl_rl_col_regimes: 'Regime changes',
     mdl_rl_col_density: 'Reward density', mdl_rl_col_pred: 'Unpredictability',
     mdl_ml_title: 'Honest ML Evaluation (purged + embargoed CV)',

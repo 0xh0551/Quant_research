@@ -620,14 +620,19 @@ function backToInsightsList() {
   document.getElementById('insights-step2').style.display = 'none';
   state.insightDetail = null;
 }
+function reRunInsight() {
+  const a = state.insightArgs;
+  if (a) loadDetailedInsight(a.file, a.symbol, a.exchange, a.tf);
+}
 async function loadDetailedInsight(file, symbol, exchange, tf) {
+  state.insightArgs = { file, symbol, exchange, tf };
   document.getElementById('insights-step1').style.display = 'none';
   document.getElementById('insights-step2').style.display = '';
   document.getElementById('ins-det-title').textContent = `${symbol} · ${exchange.toUpperCase()} · ${tf}`;
   document.getElementById('insights-detail-loading').style.display = 'block';
   document.getElementById('insights-detail-content').style.display = 'none';
   try {
-    const r = await fetch('/api/insights/detailed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file }) });
+    const r = await fetch('/api/insights/detailed', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: file, ...qrDateRange('ins') }) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.statusText); }
     state.insightDetail = await r.json();
     renderDetailedInsight(state.insightDetail);
@@ -833,6 +838,15 @@ function updateLabButtons() {
   document.getElementById('lab-run-btn').disabled = !ready;
   document.getElementById('lab-opt-btn').disabled = !ready;
 }
+// Date range for Lab/Insight. Falls back to the Research tab's range so the
+// three tabs agree on the same window unless the user overrides it locally.
+function qrDateRange(prefix) {
+  const ownStart = (document.getElementById(prefix + '-start') || {}).value || '';
+  const ownEnd = (document.getElementById(prefix + '-end') || {}).value || '';
+  const resStart = (document.getElementById('res-start') || {}).value || '';
+  const resEnd = (document.getElementById('res-end') || {}).value || '';
+  return { start: (ownStart || resStart) || null, end: (ownEnd || resEnd) || null };
+}
 async function runLabBacktest() {
   if (!state.lab.dataset || !state.lab.strategy) return;
   const btn = document.getElementById('lab-run-btn');
@@ -840,7 +854,7 @@ async function runLabBacktest() {
   document.getElementById('lab-results-empty').style.display = 'none';
   document.getElementById('lab-results-content').style.display = 'none';
   try {
-    const r = await fetch('/api/lab/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: state.lab.dataset, strategy: state.lab.strategy, params: state.lab.params }) });
+    const r = await fetch('/api/lab/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: state.lab.dataset, strategy: state.lab.strategy, params: state.lab.params, ...qrDateRange('lab') }) });
     if (!r.ok) { const e = await r.json(); throw new Error(e.detail || r.statusText); }
     renderLabResults(await r.json());
   } catch (e) {
@@ -879,7 +893,7 @@ async function runLabOptimizer() {
   document.getElementById('lab-opt-bar').style.width = '0%';
   document.getElementById('lab-opt-bar').style.background = 'var(--grad-accent)';
   try {
-    const r = await fetch('/api/lab/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: state.lab.dataset, strategy: state.lab.strategy }) });
+    const r = await fetch('/api/lab/optimize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ filename: state.lab.dataset, strategy: state.lab.strategy, ...qrDateRange('lab') }) });
     const { job_id } = await r.json();
     const es = new EventSource(`/api/jobs/${job_id}/events`);
     es.onmessage = (e) => {
@@ -960,17 +974,27 @@ function renderEdges(data) {
       <div class="table-wrap"><table><thead><tr><th>${t('edges_col_symbol')}</th><th>${t('edges_col_rule')}</th><th>${t('edges_col_dir')}</th><th>${t('edges_col_sharpe_oos')}</th><th>${t('edges_col_positive')}</th><th>${t('edges_col_return_oos')}</th><th>${t('edges_col_exchange')}</th></tr></thead><tbody>${planRows}</tbody></table></div>
       <div class="note">${t('edges_plan_note')}</div></div>
     <div class="card"><div class="card-title"><span class="dot"></span>🏆 ${t('edges_all_candidates')}</div>
-      <div class="table-wrap"><table><thead><tr><th>${t('edges_col_exchange')}</th><th>${t('edges_col_symbol')}</th><th>${t('edges_col_tf')}</th><th>${t('edges_col_rule')}</th><th>${t('edges_col_dir')}</th><th>Sharpe</th><th>${t('edges_col_ci')}</th><th>${t('edges_col_psr')}</th><th>${t('edges_col_dsr')}</th><th>${t('edges_col_pbo')}</th><th>${t('edges_col_return_oos')}</th></tr></thead>
+      <div class="table-wrap"><table><thead><tr><th>${t('edges_col_status')}</th><th>${t('edges_col_exchange')}</th><th>${t('edges_col_symbol')}</th><th>${t('edges_col_tf')}</th><th>${t('edges_col_rule')}</th><th>${t('edges_col_dir')}</th><th>Sharpe</th><th>${t('edges_col_ci')}</th><th>${t('edges_col_psr')}</th><th>${t('edges_col_dsr')}</th><th>${t('edges_col_pbo')}</th><th>${t('edges_col_return_oos')}</th></tr></thead>
       <tbody>${top.slice(0, 20).map(c => {
         const dsr = c.dsr == null || c.dsr !== c.dsr ? '—' : fmtN(c.dsr, 2);
         const dsrCls = (c.deflated_pass) ? 'cell-green' : (c.dsr === c.dsr && c.dsr < 0.9 ? 'cell-red' : '');
         const ci = (c.sharpe_ci_low || c.sharpe_ci_high) ? `${fmtN(c.sharpe_ci_low, 1)}–${fmtN(c.sharpe_ci_high, 1)}` : '—';
         const pbo = c.pbo == null || c.pbo !== c.pbo ? '—' : (c.pbo * 100).toFixed(0) + '%';
-        return `<tr><td class="muted">${esc(c.exchange)}</td><td><b>${esc(c.symbol)}</b></td><td>${esc(c.timeframe)}</td><td>${esc(c.strategy)}</td><td>${edgesDirPill(c.allow_short)}</td><td class="pos"><b>${fmtN(c.oos_sharpe)}</b></td><td class="muted" style="font-size:11px">${ci}</td><td>${c.psr != null ? (c.psr * 100).toFixed(0) + '%' : '—'}</td><td class="${dsrCls}">${dsr}</td><td class="muted">${pbo}</td><td class="${c.oos_total_return >= 0 ? 'pos' : 'neg'}">${fmtPct(c.oos_total_return)}</td></tr>`;
+        return `<tr><td>${edgesDeployPill(c)}</td><td class="muted">${esc(c.exchange)}</td><td><b>${esc(c.symbol)}</b></td><td>${esc(c.timeframe)}</td><td>${esc(c.strategy)}</td><td>${edgesDirPill(c.allow_short)}</td><td class="pos"><b>${fmtN(c.oos_sharpe)}</b></td><td class="muted" style="font-size:11px">${ci}</td><td>${c.psr != null ? (c.psr * 100).toFixed(0) + '%' : '—'}</td><td class="${dsrCls}">${dsr}</td><td class="muted">${pbo}</td><td class="${c.oos_total_return >= 0 ? 'pos' : 'neg'}">${fmtPct(c.oos_total_return)}</td></tr>`;
       }).join('')}</tbody></table></div>
+      <div class="note">${t('edges_deploy_legend')}</div>
       <div class="note">${t('edges_rigor_hint')}</div></div>`;
 
   buildEdgeCharts(data);
+}
+function edgesDeployPill(c) {
+  // Distinguishes what a bot can actually trade (deployable) from a raw passed
+  // edge. Only `deployable` rows reach the QuantResearchBridge bot (Wall_E);
+  // `robust` survived the cross-venue/DSR gate but isn't bridge-supported;
+  // `passed` only cleared the loose OOS gate (often illiquid / curve-fit).
+  if (c.deployable) return `<span class="pill" style="background:rgba(52,211,153,.18);color:#34d399;border:1px solid rgba(52,211,153,.35)">${t('edges_deploy_deployable')}</span>`;
+  if (c.robust) return `<span class="pill" style="background:rgba(34,211,238,.15);color:#22d3ee;border:1px solid rgba(34,211,238,.3)">${t('edges_deploy_robust')}</span>`;
+  return `<span class="pill" style="background:rgba(148,163,184,.12);color:#94a3b8;border:1px solid rgba(148,163,184,.25)">${t('edges_deploy_passed')}</span>`;
 }
 function edgesAlertText(a) {
   if (a.type === 'better_timeframe') return t('edges_alert_better', {
@@ -1157,7 +1181,7 @@ function renderCrossExchange(d) {
   if (d.insufficient) { body.innerHTML = `<div class="card">${t('cx_insufficient')}</div>`; return; }
   const ll = (d.lead_lag || []).map(x => `<tr><td>${esc(x.a)} ↔ ${esc(x.b)}</td><td><b>${x.best_lag}</b></td><td>${fmtN(x.corr, 2)}</td><td class="muted">${esc(x.leader)}</td></tr>`).join('');
   const co = (d.cointegration || []).map(x => `<tr><td>${esc(x.a)} ↔ ${esc(x.b)}</td><td class="${x.cointegrated ? 'cell-green' : ''}">${fmtN(x.pvalue, 3)}</td><td>${fmtN(x.hedge_ratio, 2)}</td><td class="${Math.abs(x.spread_z) > 2 ? 'cell-yellow' : 'muted'}">${fmtN(x.spread_z, 2)}</td><td>${x.cointegrated ? '✅' : '—'}</td></tr>`).join('');
-  const bs = (d.basis || []).map(x => `<tr><td>${esc(x.spot)}</td><td>${esc(x.derivative)}</td><td class="${x.basis_now_pct >= 0 ? 'pos' : 'neg'}">${fmtN(x.basis_now_pct, 3)}%</td><td class="muted">${fmtN(x.basis_mean_pct, 3)}%</td><td class="muted">${fmtN(x.basis_std_pct, 3)}%</td></tr>`).join('');
+  const bs = (d.basis || []).map(x => `<tr><td>${esc(x.spot)}</td><td>${esc(x.derivative)}</td><td>${x.kind === 'cross_venue' ? `<span class="badge" style="background:rgba(148,163,184,.15);color:#94a3b8">${t('cx_kind_cross')}</span>` : `<span class="badge badge-cyan">${t('cx_kind_basis')}</span>`}</td><td class="${x.basis_now_pct >= 0 ? 'pos' : 'neg'}">${fmtN(x.basis_now_pct, 3)}%</td><td class="muted">${fmtN(x.basis_mean_pct, 3)}%</td><td class="muted">${fmtN(x.basis_std_pct, 3)}%</td></tr>`).join('');
   const liq = (d.liquidity || []).map(x => `<tr><td>${esc(x.venue)}</td><td>$${fmtNum(Math.round(x.dollar_volume))}</td></tr>`).join('');
   body.innerHTML = `
     <div class="card"><div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
@@ -1175,11 +1199,48 @@ function renderCrossExchange(d) {
     </div>
     <div class="grid-2">
       <div class="card"><div class="card-title"><span class="dot"></span>${t('cx_basis')}</div>
-        <div class="table-wrap"><table><thead><tr><th>${t('cx_col_spot')}</th><th>${t('cx_col_deriv')}</th><th>${t('cx_col_basis_now')}</th><th>${t('cx_col_basis_mean')}</th><th>${t('cx_col_basis_std')}</th></tr></thead><tbody>${bs || `<tr><td colspan="5" class="muted">${t('no_data')}</td></tr>`}</tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>${t('cx_col_spot')}</th><th>${t('cx_col_deriv')}</th><th>${t('cx_col_kind')}</th><th>${t('cx_col_basis_now')}</th><th>${t('cx_col_basis_mean')}</th><th>${t('cx_col_basis_std')}</th></tr></thead><tbody>${bs || `<tr><td colspan="6" class="muted">${t('no_data')}</td></tr>`}</tbody></table></div>
         <div class="note">${t('cx_basis_hint')}</div></div>
       <div class="card"><div class="card-title"><span class="dot"></span>${t('cx_liquidity')}</div>
         <div class="table-wrap"><table><thead><tr><th>${t('cx_col_venue')}</th><th>${t('cx_col_dvol')}</th></tr></thead><tbody>${liq || `<tr><td colspan="2" class="muted">${t('no_data')}</td></tr>`}</tbody></table></div></div>
     </div>`;
+}
+
+async function runCxScan() {
+  const tf = document.getElementById('cx-tf').value || '';
+  const body = document.getElementById('crossex-body');
+  body.innerHTML = `<div class="empty-state"><span class="spinner" style="width:28px;height:28px"></span> ${t('cx_scanning')}</div>`;
+  try {
+    const r = await fetch(`/api/cross-exchange/scan${tf ? '?timeframe=' + encodeURIComponent(tf) : ''}`);
+    const d = await r.json();
+    const typeColor = { stat_arb: 'var(--green)', lead_lag: 'var(--cyan)', dislocation: 'var(--yellow)' };
+    const confColor = { high: 'var(--green)', medium: 'var(--yellow)', low: 'var(--text3)' };
+    const rows = (d.opportunities || []).map(o => `<tr>
+      <td><span class="badge" style="background:${(typeColor[o.type] || '#94a3b8')}22;color:${typeColor[o.type] || '#94a3b8'}">${esc(o.type)}</span></td>
+      <td><b>${esc(o.symbol)}</b></td><td>${esc(o.timeframe)}</td>
+      <td class="pos"><b>${fmtN(o.score, 2)}</b></td>
+      <td><span class="badge" style="background:${(confColor[o.confidence] || '#94a3b8')}22;color:${confColor[o.confidence] || '#94a3b8'}">${t('cx_conf_' + (o.confidence || 'low'))}</span></td>
+      <td class="muted">${fmtN(o.gap_pct, 2)}%</td>
+      <td class="${(o.est_pnl_usd || 0) >= 0 ? 'pos' : 'neg'}">$${fmtN(o.est_pnl_usd, 2)}</td>
+      <td style="font-size:12px">${esc(o.action)}</td>
+      <td class="muted" style="font-size:11px">${(o.venues || []).join(', ')}</td></tr>`).join('')
+      || `<tr><td colspan="9" class="muted">${t('no_data')}</td></tr>`;
+    body.innerHTML = `<div class="card"><div class="card-title"><span class="dot"></span>🎯 ${t('cx_scan_title')} <span class="badge badge-cyan" style="margin-inline-start:8px">${d.n_scanned}</span></div>
+      <div class="table-wrap"><table><thead><tr>
+        <th>${t('cx_col_type')}</th><th>${t('cx_col_symbol')}</th><th>${t('cx_col_tf')}</th>
+        <th title="${esc(t('cx_score_tip'))}">${t('cx_col_score')} ℹ️</th>
+        <th>${t('cx_col_confidence')}</th><th>${t('cx_col_gap')}</th>
+        <th title="${esc(t('cx_pnl_tip'))}">${t('cx_col_pnl')} ℹ️</th>
+        <th>${t('cx_col_action')}</th><th>${t('cx_col_venues')}</th>
+      </tr></thead><tbody>${rows}</tbody></table></div>
+      <div class="note">${t('cx_scan_hint')}</div>
+      <div class="note">${t('cx_pnl_tip')}</div></div>
+    <div class="card"><div class="card-title"><span class="dot"></span>${t('cx_scan_guide_title')}</div>
+      <p style="font-size:13px;line-height:1.8;margin:6px 0">${t('cx_guide_stat_arb')}</p>
+      <p style="font-size:13px;line-height:1.8;margin:6px 0">${t('cx_guide_lead_lag')}</p>
+      <p style="font-size:13px;line-height:1.8;margin:6px 0">${t('cx_guide_dislocation')}</p>
+      <div class="note" style="margin-top:8px">${t('cx_guide_disclaimer')}</div></div>`;
+  } catch (e) { body.innerHTML = `<div class="card"><p class="neg">${t('error_colon')}${esc(e.message)}</p></div>`; }
 }
 
 // ═══════════════════════════════════════════════════════════════ PORTFOLIO
@@ -1215,11 +1276,32 @@ function renderPortfolio(d) {
     [t('pf_port_vol'), (m.portfolio_vol_per_bar * 100).toFixed(3) + '%', 'var(--purple)'],
   ];
   const sizingRows = cols.map(c => `<tr><td><b>${esc(c)}</b></td><td>${(w[c] * 100).toFixed(1)}%</td><td class="${(sz[c]?.kelly?.fractional_kelly || 0) >= 0 ? 'pos' : 'neg'}">${fmtN(sz[c]?.kelly?.fractional_kelly, 2)}</td><td>${fmtN(sz[c]?.vol_target_leverage, 2)}×</td></tr>`).join('');
+  const bt = d.backtest || {}, bm = bt.metrics || {}, em = bt.equal_weight_metrics || {};
+  const beat = (bm.total_return || 0) >= (em.total_return || 0);
+  const btCard = bt.equity ? `
+    <div class="card"><div class="card-title"><span class="dot"></span>${t('pf_backtest')}
+      <span class="badge ${beat ? 'badge-green' : 'badge-red'}" style="margin-inline-start:8px">${beat ? t('pf_beats_ew') : t('pf_below_ew')}</span></div>
+      <div class="metric-grid" style="margin-bottom:12px">
+        ${[['Total', 'total_return', true], ['CAGR', 'cagr', true], ['Sharpe', 'sharpe', false], ['Max DD', 'max_drawdown', true]].map(([l, k, isPct]) => {
+          const v = bm[k], ev = em[k];
+          const fmtV = isPct ? (x => (x * 100).toFixed(1) + '%') : (x => fmtN(x, 2));
+          return `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${(v || 0) >= 0 ? 'var(--green)' : 'var(--red)'}">${fmtV(v)}</div><div style="font-size:10px;color:var(--text3);margin-top:2px">1/N: ${fmtV(ev)}</div></div>`;
+        }).join('')}
+      </div>
+      <div id="pf-equity-chart" style="height:260px"></div>
+      <div class="note">${t('pf_backtest_hint')}</div></div>` : '';
   body.innerHTML = `
     <div class="card"><div class="card-title"><span class="dot"></span>${t('pf_weights')} <span class="badge badge-cyan" style="margin-inline-start:8px">${d.method}</span></div><div id="pf-weights-chart" style="height:260px"></div></div>
     <div class="card"><div class="card-title"><span class="dot"></span>${t('pf_metrics')}</div><div class="metric-grid">${metrics.map(([l, v, c]) => `<div class="metric-card"><div class="lbl">${l}</div><div class="val" style="font-size:18px;color:${c}">${v}</div></div>`).join('')}</div></div>
+    ${btCard}
     <div class="card"><div class="card-title"><span class="dot"></span>${t('pf_sizing')}</div>
       <div class="table-wrap"><table><thead><tr><th>${t('pf_col_asset')}</th><th>${t('pf_col_weight')}</th><th>${t('pf_col_kelly')}</th><th>${t('pf_col_vol_lev')}</th></tr></thead><tbody>${sizingRows}</tbody></table></div></div>`;
+  if (bt.equity) {
+    Plotly.react('pf-equity-chart', [
+      { x: bt.timestamps, y: bt.equal_weight_equity, mode: 'lines', name: '1/N (' + t('pf_equal') + ')', line: { color: '#94a3b8', width: 1.5, dash: 'dot' } },
+      { x: bt.timestamps, y: bt.equity, mode: 'lines', name: d.method, line: { color: '#2dd4bf', width: 2.5 } },
+    ], { ...PLOTLY_DARK, margin: { l: 50, r: 15, t: 10, b: 40 }, xaxis: { gridcolor: GRID }, yaxis: { gridcolor: GRID, title: '×' }, hovermode: 'x unified', legend: { bgcolor: 'rgba(0,0,0,.4)', bordercolor: GRID } }, { responsive: true });
+  }
   Plotly.react('pf-weights-chart', [{
     type: 'bar', x: cols, y: cols.map(c => w[c] * 100),
     marker: { color: '#2dd4bf' }, hovertemplate: '%{x}<br>%{y:.1f}%<extra></extra>',
@@ -1232,15 +1314,61 @@ function loadModels() {
   const rlBody = document.getElementById('rl-reco-body');
   rlBody.innerHTML = `<div class="empty-state" style="padding:24px"><span class="spinner"></span></div>`;
   fetch('/api/rl/recommend?timeframe=15m&top_n=12').then(r => r.json()).then(d => {
-    const rows = (d.recommendations || []).map((x, i) => {
-      const w = Math.max(4, x.rl_score);
-      return `<tr><td>${i + 1}</td><td class="muted">${esc(x.exchange)}</td><td><b>${esc(x.symbol)}</b></td>
-        <td><div class="score-bar-bg" style="display:inline-block;width:90px;vertical-align:middle"><div class="score-bar-fill" style="width:${w}%;background:${x.rl_score >= 55 ? 'var(--green)' : x.rl_score >= 45 ? 'var(--cyan)' : 'var(--yellow)'}"></div></div> <b>${x.rl_score}</b></td>
-        <td class="muted">${x.regime_changes}</td><td class="muted">${fmtN(x.reward_density, 2)}</td><td class="muted">${fmtN(x.low_predictability, 2)}</td></tr>`;
+    const cards = (d.recommendations || []).slice(0, 12).map((x, i) => {
+      const sc = x.rl_score;
+      const barColor = sc >= 55 ? '#34d399' : sc >= 45 ? '#22d3ee' : '#fbbf24';
+      return `<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-weight:800;font-size:14px">${esc(x.symbol)}</div>
+            <div style="font-size:10px;opacity:.45">${esc(x.exchange)}</div>
+          </div>
+          <div style="font-weight:800;font-size:18px;color:${barColor}">${sc}</div>
+        </div>
+        <div style="height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden">
+          <div style="height:100%;width:${Math.max(4,sc)}%;background:${barColor};border-radius:99px"></div>
+        </div>
+        <div style="display:flex;gap:8px;font-size:10px;opacity:.55;flex-wrap:wrap">
+          <span>regimes: <b>${x.regime_changes}</b></span>
+          <span>density: <b>${fmtN(x.reward_density,2)}</b></span>
+          <span>pred: <b>${fmtN(x.low_predictability,2)}</b></span>
+        </div>
+      </div>`;
     }).join('');
-    rlBody.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:8px">${d.n_evaluated} ${t('mdl_rl_evaluated')}</div>
-      <div class="table-wrap"><table><thead><tr><th>#</th><th>${t('cx_col_venue')}</th><th>${t('edges_col_symbol')}</th><th>${t('mdl_rl_col_score')}</th><th>${t('mdl_rl_col_regimes')}</th><th>${t('mdl_rl_col_density')}</th><th>${t('mdl_rl_col_pred')}</th></tr></thead><tbody>${rows || `<tr><td colspan="7" class="muted">${t('no_data')}</td></tr>`}</tbody></table></div>`;
+    rlBody.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${d.n_evaluated} ${t('mdl_rl_evaluated')}</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${cards || `<p class="muted">${t('no_data')}</p>`}</div>`;
   }).catch(() => rlBody.innerHTML = `<p class="muted">${t('no_data')}</p>`);
+
+  // ML recommendations (mirror of RL, powered by /api/ml/recommend)
+  const mlBody = document.getElementById('ml-reco-body');
+  if (mlBody) {
+    mlBody.innerHTML = `<div class="empty-state" style="padding:24px"><span class="spinner"></span></div>`;
+    fetch('/api/ml/recommend?timeframe=15m&top_n=12').then(r => r.json()).then(d => {
+      const cards = (d.recommendations || []).slice(0, 12).map((x) => {
+        const sc = x.ml_score;
+        const barColor = sc >= 55 ? '#34d399' : sc >= 45 ? '#22d3ee' : '#fbbf24';
+        return `<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:800;font-size:14px">${esc(x.symbol)}</div>
+              <div style="font-size:10px;opacity:.45">${esc(x.exchange)}</div>
+            </div>
+            <div style="font-weight:800;font-size:18px;color:${barColor}">${sc}</div>
+          </div>
+          <div style="height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden">
+            <div style="height:100%;width:${Math.max(4,sc)}%;background:${barColor};border-radius:99px"></div>
+          </div>
+          <div style="display:flex;gap:8px;font-size:10px;opacity:.55;flex-wrap:wrap">
+            <span>autocorr: <b>${fmtN(x.autocorr_1,3)}</b></span>
+            <span>hurst: <b>${fmtN(x.hurst,2)}</b></span>
+            <span>stat: <b>${fmtN(x.stationarity,2)}</b></span>
+          </div>
+        </div>`;
+      }).join('');
+      mlBody.innerHTML = `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${d.n_evaluated} ${t('mdl_rl_evaluated')}</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px">${cards || `<p class="muted">${t('no_data')}</p>`}</div>`;
+    }).catch(() => mlBody.innerHTML = `<p class="muted">${t('no_data')}</p>`);
+  }
 
   // ML eval dataset dropdown
   const sel = document.getElementById('ml-dataset');
@@ -1248,6 +1376,42 @@ function loadModels() {
     sel.innerHTML = state.inventory.map(i => `<option value="${i.file}">${i.symbol} · ${i.exchange} · ${i.timeframe}</option>`).join('');
   }
   loadExperiments();
+  loadMoneyFlow();
+}
+function _mfCard(x, color) {
+  return `<div style="background:rgba(255,255,255,.028);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <div style="font-weight:800;font-size:14px">${esc(x.symbol)}</div>
+        <div style="font-size:10px;opacity:.45">${esc(x.exchange)}</div>
+      </div>
+      <div style="font-weight:800;font-size:18px;color:${color}">${x.money_flow_score}</div>
+    </div>
+    <div style="height:5px;background:rgba(255,255,255,.07);border-radius:99px;overflow:hidden">
+      <div style="height:100%;width:${Math.max(4,x.money_flow_score)}%;background:${color};border-radius:99px"></div>
+    </div>
+    <div style="display:flex;gap:8px;font-size:10px;opacity:.55;flex-wrap:wrap">
+      <span>cmf: <b>${fmtN(x.cmf,3)}</b></span>
+      <span>rvol: <b>${fmtN(x.rvol,2)}</b></span>
+      <span>obv: <b>${fmtN(x.obv_slope,3)}</b></span>
+    </div>
+  </div>`;
+}
+function loadMoneyFlow() {
+  const inBody = document.getElementById('mf-inflow-body');
+  const outBody = document.getElementById('mf-outflow-body');
+  if (!inBody || !outBody) return;
+  inBody.innerHTML = `<div class="empty-state" style="padding:24px"><span class="spinner"></span></div>`;
+  outBody.innerHTML = `<div class="empty-state" style="padding:24px"><span class="spinner"></span></div>`;
+  fetch('/api/money-flow/score?timeframe=15m&top_n=8').then(r => r.json()).then(d => {
+    const inflowCards = (d.top_inflow || []).map(x => _mfCard(x, '#34d399')).join('');
+    const outflowCards = (d.top_outflow || []).map(x => _mfCard(x, '#f87171')).join('');
+    inBody.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${inflowCards || `<p class="muted">${t('no_data')}</p>`}</div>`;
+    outBody.innerHTML = `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">${outflowCards || `<p class="muted">${t('no_data')}</p>`}</div>`;
+  }).catch(() => {
+    inBody.innerHTML = `<p class="muted">${t('no_data')}</p>`;
+    outBody.innerHTML = `<p class="muted">${t('no_data')}</p>`;
+  });
 }
 async function runMlEval() {
   const file = document.getElementById('ml-dataset').value;
@@ -1277,8 +1441,76 @@ function loadExperiments() {
     const runs = d.runs || [];
     const el = document.getElementById('experiments-body');
     if (!runs.length) { el.innerHTML = `<div class="empty-state" style="padding:24px"><p>${t('mdl_exp_empty')}</p></div>`; return; }
-    el.innerHTML = `<div class="table-wrap"><table><thead><tr><th>${t('mdl_exp_col_name')}</th><th>${t('mdl_exp_col_metrics')}</th><th>${t('mdl_exp_col_seed')}</th><th>${t('mdl_exp_col_when')}</th></tr></thead>
-      <tbody>${runs.map(r => `<tr><td>${esc(r.name)}</td><td class="muted" style="font-size:11px">${Object.entries(r.metrics || {}).map(([k, v]) => k + '=' + (typeof v === 'number' ? v.toFixed(3) : v)).join(', ')}</td><td class="muted">${r.seed ?? '—'}</td><td class="muted" style="font-size:11px">${fmtDateTime(r.ts * 1000)}</td></tr>`).join('')}</tbody></table></div>`;
+
+    // Helper: color a metric value based on known thresholds
+    function metricColor(key, val) {
+      if (typeof val !== 'number') return 'var(--text2)';
+      const k = key.toLowerCase();
+      if (k.includes('auc')) return val >= 0.55 ? 'var(--green)' : val >= 0.52 ? 'var(--yellow)' : 'var(--red)';
+      if (k.includes('sharpe') || k.includes('sortino')) return val >= 1.0 ? 'var(--green)' : val >= 0.5 ? 'var(--yellow)' : 'var(--red)';
+      if (k.includes('return') || k.includes('pnl')) return val > 0 ? 'var(--green)' : val < 0 ? 'var(--red)' : 'var(--text2)';
+      if (k.includes('drawdown') || k.includes('dd')) return val < -0.2 ? 'var(--red)' : val < -0.1 ? 'var(--yellow)' : 'var(--green)';
+      if (k.includes('accuracy') || k.includes('win')) return val >= 0.55 ? 'var(--green)' : val >= 0.48 ? 'var(--yellow)' : 'var(--red)';
+      return 'var(--text2)';
+    }
+    function metricFmt(key, val) {
+      if (typeof val !== 'number') return String(val);
+      const k = key.toLowerCase();
+      if (k.includes('return') || k.includes('pnl') || k.includes('drawdown') || k.includes('accuracy') || k.includes('win') || k.includes('auc')) return (val * (k.includes('return') || k.includes('drawdown') || k.includes('accuracy') || k.includes('win') ? 100 : 1)).toFixed(2) + (k.includes('return') || k.includes('drawdown') || k.includes('accuracy') || k.includes('win') ? '%' : '');
+      return val.toFixed(3);
+    }
+
+    // Summary chart: trend of first numeric metric over experiments
+    const chartMetricKey = runs.length > 1 ? (() => {
+      const m0 = runs[0].metrics || {};
+      return Object.keys(m0).find(k => typeof m0[k] === 'number') || null;
+    })() : null;
+
+    const cards = runs.map(r => {
+      const m = r.metrics || {};
+      const pills = Object.entries(m).slice(0, 6).map(([k, v]) =>
+        `<span style="display:inline-flex;flex-direction:column;align-items:center;gap:2px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:8px;padding:4px 8px;min-width:70px">
+           <span style="font-size:10px;opacity:.5;text-transform:uppercase;letter-spacing:.04em">${k.replace(/_/g,' ')}</span>
+           <span style="font-size:14px;font-weight:700;color:${metricColor(k,v)}">${metricFmt(k,v)}</span>
+         </span>`
+      ).join('');
+      const paramStr = Object.entries(r.params || {}).slice(0, 4).map(([k,v]) => `<span style="font-size:10px;opacity:.45">${k}=<b>${typeof v === 'number' ? v : esc(String(v))}</b></span>`).join(' · ');
+      return `<div style="background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:10px 12px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px;flex-wrap:wrap">
+          <span style="font-weight:700;font-size:13px">${esc(r.name)}</span>
+          <span style="font-size:10px;opacity:.4">${fmtDateTime(r.ts * 1000)}</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:${paramStr ? '8px' : '0'}">${pills}</div>
+        ${paramStr ? `<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px">${paramStr}</div>` : ''}
+      </div>`;
+    }).join('');
+
+    let trendHtml = '';
+    if (chartMetricKey && runs.length >= 3) {
+      trendHtml = `<div style="margin-bottom:10px;font-size:11px;opacity:.5">تغییرات <b>${chartMetricKey}</b> در ${runs.length} اجرا</div>
+        <div id="exp-trend-chart" style="height:140px;margin-bottom:12px"></div>`;
+    }
+
+    el.innerHTML = trendHtml + cards;
+
+    if (chartMetricKey && runs.length >= 3) {
+      const xs = runs.map(r => fmtDateTime(r.ts * 1000));
+      const ys = runs.map(r => typeof r.metrics[chartMetricKey] === 'number' ? r.metrics[chartMetricKey] : null);
+      Plotly.react('exp-trend-chart', [{
+        x: xs, y: ys, mode: 'lines+markers', type: 'scatter',
+        line: { color: 'var(--cyan)', width: 2 },
+        marker: { size: 5, color: ys.map(v => {
+          const c = metricColor(chartMetricKey, v);
+          return c === 'var(--green)' ? '#34d399' : c === 'var(--yellow)' ? '#fbbf24' : '#f87171';
+        }) },
+        hovertemplate: `<b>${esc(chartMetricKey)}</b>: %{y:.4f}<extra></extra>`,
+      }], {
+        ...PLOTLY_DARK, height: 140,
+        margin: { l: 50, r: 10, t: 5, b: 50 },
+        xaxis: { gridcolor: GRID, tickfont: { size: 9 } },
+        yaxis: { gridcolor: GRID, tickfont: { size: 9 } },
+      }, { responsive: true, displayModeBar: false });
+    }
   });
 }
 
