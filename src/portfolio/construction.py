@@ -108,6 +108,56 @@ def hrp(returns: pd.DataFrame) -> dict[str, float]:
     return {cols[i]: float(w[i]) for i in order}
 
 
+def backtest_portfolio(
+    returns: pd.DataFrame, weights: dict[str, float], bars_per_year: int,
+    max_points: int = 600,
+) -> dict:
+    """Realized buy-and-hold backtest of a fixed-weight portfolio.
+
+    Closes the gap where the section only reported ex-ante risk: this applies the
+    weights to the actual return series, builds the equity curve, annualises the
+    metrics, and benchmarks against an equal-weight baseline so the user can see
+    whether the chosen allocation actually beat naive 1/N out-of-sample.
+    """
+    cols = list(returns.columns)
+    if not cols:
+        return {}
+    w = np.array([weights.get(c, 0.0) for c in cols])
+    if w.sum() != 0:
+        w = w / w.sum()
+    port_ret = pd.Series(returns.to_numpy() @ w, index=returns.index)
+    eq = (1.0 + port_ret).cumprod()
+    ew = np.full(len(cols), 1.0 / len(cols))
+    ew_ret = pd.Series(returns.to_numpy() @ ew, index=returns.index)
+    ew_eq = (1.0 + ew_ret).cumprod()
+
+    def _m(r: pd.Series, e: pd.Series) -> dict:
+        vol = r.std() * np.sqrt(bars_per_year)
+        dd = float((e / e.cummax() - 1).min())
+        return {
+            "total_return": round(float(e.iloc[-1] - 1.0), 4),
+            "cagr": round(float(e.iloc[-1] ** (bars_per_year / max(len(r), 1)) - 1.0), 4),
+            "sharpe": round(float(r.mean() * bars_per_year / vol) if vol else 0.0, 3),
+            "max_drawdown": round(dd, 4),
+        }
+
+    def _ds(s: pd.Series) -> list[float]:
+        if len(s) <= max_points:
+            return [round(float(x), 5) for x in s.tolist()]
+        idx = np.linspace(0, len(s) - 1, max_points).astype(int)
+        return [round(float(x), 5) for x in s.iloc[idx].tolist()]
+
+    return {
+        "metrics": _m(port_ret, eq),
+        "equal_weight_metrics": _m(ew_ret, ew_eq),
+        "equity": _ds(eq),
+        "equal_weight_equity": _ds(ew_eq),
+        "timestamps": [str(t)[:16] for t in (
+            returns.index[np.linspace(0, len(returns) - 1, min(len(returns), max_points)).astype(int)]
+            if len(returns) > max_points else returns.index)],
+    }
+
+
 def build_portfolio(returns: pd.DataFrame, method: str = "hrp") -> dict:
     """Return weights + the resulting portfolio's risk profile."""
     returns = returns.dropna(how="all", axis=1).fillna(0.0)

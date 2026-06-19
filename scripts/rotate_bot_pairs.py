@@ -43,12 +43,17 @@ sys.path.insert(0, str(ROOT))
 
 from src.ml.recommend import recommend_ml_coins  # noqa: E402
 from src.rl.recommend import recommend_rl_coins  # noqa: E402
+from src.tracking.money_flow import apply_money_flow, recommend_money_flow_coins  # noqa: E402
+from src.tracking.selection_feedback import apply_feedback, realized_performance  # noqa: E402
 
 OUT = ROOT / "outputs"
 STATE_PATH = OUT / "pair_rotation_state.json"
 ASSIGN_PATH = OUT / "pair_assignments.json"
 HISTORY_PATH = OUT / "pair_rotation_history.jsonl"
+SELPERF_ROLLUP = OUT / "selection_performance.json"      # latest per-bot (dashboards)
+SELPERF_HISTORY = OUT / "selection_performance.jsonl"    # learning-loop ledger
 OKX_CACHE = OUT / "okx_swap_bases.json"
+GATE_CACHE = OUT / "gate_liquid_bases.json"
 
 NOCHES = Path("/home/h0551user/noches/user_data")
 
@@ -83,8 +88,8 @@ BOTS = {
     },
     "bot1": {
         "label": "bot1", "container": "bot1", "kind": "ml",
-        "exchange": "bybit", "trade_timeframe": "1h", "score_timeframe": "1h",
-        "score_venues": ("bybit",), "quote": "USDT",
+        "exchange": "gate", "trade_timeframe": "1h", "score_timeframe": "1h",
+        "score_venues": ("gate", "gateio", "gate_io"), "quote": "USDT",
         "config": NOCHES / "bot1_config.json",
         "sqlite": NOCHES / "bot1.sqlite",
         "models_dir": NOCHES / "models" / "bot1_ml_live",
@@ -92,6 +97,10 @@ BOTS = {
         "n_pairs": 5, "min_dwell_days": 7.0,
         "switch_streak": 2, "switch_margin": 5,
         "okx_filter": False,
+        # فیلترِ نقدینگی: فقط جفت‌هایی که حجمِ ۲۴ساعتهٔ پرپِ Gate ≥ آستانه دارند کاندید/مستقر می‌مانند.
+        # ریشهٔ overshoot/emergency_exitِ استاپ روی جفت‌های نازک (gap-through) همین بود.
+        "liquidity_filter": True,
+        "min_quote_vol_24h": 10_000_000,
         # bot1 تایم‌فریم را هم از لبهٔ ML کوانت می‌گیرد (هر چند ساعت، با هیسترزیس):
         # جفت‌ها روی همان تایم‌فریمی که ترید می‌شوند امتیازدهی می‌شوند.
         "select_timeframe": True,
@@ -228,6 +237,63 @@ def okx_swap_bases(ttl_days: float = 7.0) -> set[str] | None:
     return set(cached["bases"]) if cached and cached.get("bases") else None
 
 
+_GATE_LIQUID_MEM: dict[int, set[str] | None] = {}
+
+
+def gate_liquid_bases(min_quote_vol_24h: float, ttl_hours: float = 6.0) -> set[str] | None:
+    """پایه‌های USDT-پرپِ Gate با حجمِ ۲۴ساعتهٔ (به USDT) ≥ آستانه. کش ۶ساعته؛
+    شکست شبکه → کش کهنه؛ هیچ داده → None (آنگاه فیلترِ آن دور رد می‌شود، نه حذفِ کور)."""
+    key = int(min_quote_vol_24h)
+    if key in _GATE_LIQUID_MEM:
+        return _GATE_LIQUID_MEM[key]
+
+    vols: dict | None = None
+    try:
+        cached = json.loads(GATE_CACHE.read_text(encoding="utf-8"))
+        age = (datetime.now(timezone.utc)
+               - datetime.fromisoformat(cached["fetched_at"])).total_seconds() / 3600.0
+        if age < ttl_hours and cached.get("vols"):
+            vols = cached["vols"]
+    except Exception:
+        pass
+
+    if vols is None:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://api.gateio.ws/api/v4/futures/usdt/tickers",
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            vols = {}
+            for d in data:
+                c = d.get("contract", "")
+                if not c.endswith("_USDT"):
+                    continue
+                try:
+                    vols[c[: -len("_USDT")]] = float(
+                        d.get("volume_24h_quote") or d.get("volume_24h_settle") or 0)
+                except Exception:
+                    continue
+            if vols:
+                GATE_CACHE.write_text(json.dumps(
+                    {"fetched_at": _now(), "vols": vols}, ensure_ascii=False),
+                    encoding="utf-8")
+        except Exception as exc:
+            print(f"WARN: gate liquidity load failed: {exc}")
+            try:  # افت به کشِ کهنه اگر موجود بود
+                vols = json.loads(GATE_CACHE.read_text(encoding="utf-8")).get("vols")
+            except Exception:
+                vols = None
+
+    if not vols:
+        _GATE_LIQUID_MEM[key] = None
+        return None
+    out = {b for b, v in vols.items() if v >= min_quote_vol_24h}
+    _GATE_LIQUID_MEM[key] = out
+    return out
+
+
 def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
     """{base: {score, detail}} — بهترین امتیاز هر پایه روی venue های مجاز."""
     quote = spec.get("quote", "USDT")
@@ -257,6 +323,14 @@ def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
         else:
             incumbents = {_base_of(p) for p in read_whitelist(spec["config"])}
             table = {b: v for b, v in table.items() if b in allowed or b in incumbents}
+    if spec.get("liquidity_filter"):
+        liquid = gate_liquid_bases(float(spec.get("min_quote_vol_24h", 1e7)))
+        if liquid is None:
+            print("WARN: no Gate liquidity data — skipping liquidity filter this run")
+        else:
+            # برخلافِ okx_filter اینجا مستقرها معاف نیستند: junkِ مستقر باید بی‌امتیاز
+            # شود تا در decide حذف گردد (گیتِ نقدینگی روی خودِ ونیوِ ترید).
+            table = {b: v for b, v in table.items() if b in liquid}
     return table
 
 
@@ -344,11 +418,33 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
 
     quote = spec.get("quote", "USDT")
     change: dict | None = None
-    if len(whitelist) < spec["n_pairs"] and ready:
+
+    # ── اولویتِ صفر: حذفِ فوریِ جفتِ کم‌نقدینگی (بدون نیاز به استریک/مارجین/دِوِل) ──
+    # junk با gap-through استاپ را خراب می‌کند؛ هرچه زودتر باید برود. تنها مانع =
+    # تریدِ باز روی همان جفت (نمی‌توان وسطِ پوزیشن whitelist را عوض کرد).
+    if spec.get("liquidity_filter"):
+        liquid = gate_liquid_bases(float(spec.get("min_quote_vol_24h", 1e7)))
+        if liquid is not None:
+            blocked = set(whitelist) if "__UNKNOWN__" in open_pairs else set(open_pairs)
+            removable = [p for p in whitelist
+                         if _base_of(p) not in liquid and p not in blocked]
+            if removable:
+                worst = removable[0]
+                liq_challengers = [b for b, _ in ranked if b not in incumbents]
+                if liq_challengers:
+                    b = liq_challengers[0]
+                    change = {"action": "swap", "pair_in": _pair_of(b, quote),
+                              "pair_out": worst, "score_in": table[b]["score"],
+                              "score_out": None, "reason": "illiquid"}
+                else:
+                    change = {"action": "remove", "pair_in": None, "pair_out": worst,
+                              "score_in": None, "score_out": None, "reason": "illiquid"}
+
+    if change is None and len(whitelist) < spec["n_pairs"] and ready:
         b = ready[0]
         change = {"action": "add", "pair_in": _pair_of(b, quote),
                   "score_in": table[b]["score"]}
-    elif ready:
+    elif change is None and ready:
         # ضعیف‌ترین مستقرِ دارای امتیاز؛ بدونِ امتیاز = قابل‌سنجش نیست، معاف
         scored = [p for p in whitelist if table.get(_base_of(p))]
         if scored:
@@ -376,16 +472,18 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
     if change:
         decision.update(change)
         new_wl = [p for p in whitelist if p != change.get("pair_out")]
-        new_wl.append(change["pair_in"])
+        if change.get("pair_in"):
+            new_wl.append(change["pair_in"])
         if apply:
             try:
                 apply_change(spec, new_wl, change.get("pair_out"))
                 if change.get("pair_out"):
-                    del assigns[change["pair_out"]]
-                assigns[change["pair_in"]] = {
-                    "assigned_at": now, "source": "auto",
-                    "last_score": change["score_in"], "score_at": now}
-                bst["streaks"].pop(_base_of(change["pair_in"]), None)
+                    assigns.pop(change["pair_out"], None)
+                if change.get("pair_in"):
+                    assigns[change["pair_in"]] = {
+                        "assigned_at": now, "source": "auto",
+                        "last_score": change["score_in"], "score_at": now}
+                    bst["streaks"].pop(_base_of(change["pair_in"]), None)
                 log_event(apply, bot=spec["label"], event=change["action"],
                           **{k: v for k, v in change.items() if k != "action"},
                           new_whitelist=new_wl)
@@ -540,7 +638,7 @@ def apply_timeframe_switch(spec: dict, new_tf: str, new_whitelist: list[str]) ->
 
 
 def decide_with_timeframe(bot: str, spec: dict, st: dict, processed_dir: Path,
-                          apply: bool) -> tuple[dict, dict]:
+                          apply: bool, feedback_perf: dict | None = None) -> tuple[dict, dict]:
     """مسیر bot1: اول تایم‌فریم (هیسترزیس)، بعد چرخش جفت روی تایم‌فریمِ جاری.
 
     برمی‌گرداند (table_used, decision). table_used جدولِ تایم‌فریمِ مؤثر است
@@ -552,6 +650,19 @@ def decide_with_timeframe(bot: str, spec: dict, st: dict, processed_dir: Path,
     bst.setdefault("tf_streaks", {})
 
     tables_by_tf, rank_by_tf = select_timeframe_tables(spec, processed_dir)
+    # Closed-loop feedback: demote/boost bases by their realized live PnL before
+    # both the timeframe ranking and the pair decision use these scores.
+    if feedback_perf:
+        for tbl in tables_by_tf.values():
+            apply_feedback(tbl, feedback_perf)
+    # Money-flow tilt: nudge bases toward coins capital is currently rotating
+    # into (and away from outflow coins) before ranking, same as feedback above.
+    for tf, tbl in tables_by_tf.items():
+        mf = recommend_money_flow_coins(processed_dir, venues=spec["score_venues"],
+                                        timeframe=tf)
+        apply_money_flow(tbl, mf, spec.get("quote", "USDT"))
+    rank_by_tf = {tf: _tf_rank_score(tbl, spec["n_pairs"])
+                  for tf, tbl in tables_by_tf.items()}
     cur_tf = read_timeframe(spec["config"]) or spec["trade_timeframe"]
     best_tf = pick_best_timeframe(rank_by_tf, spec["candidate_timeframes"],
                                   float(spec.get("tf_higher_bias", 0)))
@@ -669,9 +780,46 @@ def write_assignments(st: dict, decisions: dict, tables: dict,
             shutil.copy2(ASSIGN_PATH, soodo_db / "qr_pair_rotation.json")
             if HISTORY_PATH.exists():
                 shutil.copy2(HISTORY_PATH, soodo_db / "qr_pair_rotation_history.jsonl")
+            if SELPERF_ROLLUP.exists():
+                shutil.copy2(SELPERF_ROLLUP, soodo_db / "qr_selection_performance.json")
             print(f"synced -> {soodo_db}/qr_pair_rotation*.json")
         except Exception as exc:
             print(f"WARN: soodo sync failed: {exc}")
+
+
+def _record_selection_performance(spec: dict, table: dict, perf: dict,
+                                  decision: dict, apply: bool) -> None:
+    """Closed-loop ledger: for what's currently deployed, store the score it was
+    selected with alongside its realized live PnL. The rollup is always refreshed
+    (read by the hnarimani/soodo monitors); the JSONL ledger appends on --apply so
+    the learning history accumulates over rounds."""
+    try:
+        whitelist = read_whitelist(spec["config"])
+    except Exception:
+        whitelist = []
+    deployed = [{
+        "pair": p, "base": _base_of(p),
+        "selected_score": table.get(_base_of(p), {}).get("score"),
+        "realized": perf.get(_base_of(p)),
+    } for p in whitelist]
+    record = {
+        "ts": _now(), "bot": spec["label"], "kind": spec["kind"],
+        "trade_timeframe": spec["trade_timeframe"],
+        "action": decision.get("action"),
+        "feedback_adjustments": decision.get("feedback", {}).get("adjustments", {}),
+        "deployed": deployed,
+    }
+    try:
+        rollup = json.loads(SELPERF_ROLLUP.read_text(encoding="utf-8"))
+    except Exception:
+        rollup = {"bots": {}}
+    rollup["generated_at"] = _now()
+    rollup.setdefault("bots", {})[spec["label"]] = record
+    SELPERF_ROLLUP.write_text(json.dumps(rollup, ensure_ascii=False, indent=2),
+                              encoding="utf-8")
+    if apply:
+        with SELPERF_HISTORY.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
 
 def main() -> int:
@@ -689,12 +837,16 @@ def main() -> int:
     decisions, tables = {}, {}
     for bot in args.bots:
         spec = BOTS[bot]
+        # realized live PnL per base (read-only; {} if no closed trades) — feeds
+        # the closed learning loop and is echoed to the dashboards.
+        perf = realized_performance(spec["sqlite"])
         if spec.get("select_timeframe"):
             # bot1: تایم‌فریم + جفت‌ها هر دو از لبهٔ ML کوانت (با هیسترزیس)
             table, decision = decide_with_timeframe(bot, spec, st, processed_dir,
-                                                    apply=args.apply)
+                                                    apply=args.apply, feedback_perf=perf)
             tables[bot] = table
             decisions[bot] = decision
+            decision["feedback"] = {"perf": perf}
             d = decision
             extra = ""
             if d["action"] in ("tf_switch", "would_tf_switch", "tf_blocked"):
@@ -702,17 +854,27 @@ def main() -> int:
             elif d["action"] != "hold":
                 extra = f" {d.get('pair_out', '∅')} -> {d.get('pair_in', '')}"
             print(f"[{spec['label']}] decision: {d['action']}{extra}")
+            _record_selection_performance(spec, table, perf, decision, apply=args.apply)
             continue
         table = score_table(spec, processed_dir)
+        audit = apply_feedback(table, perf)  # demote/boost by realized live PnL
+        mf = recommend_money_flow_coins(processed_dir, venues=spec["score_venues"],
+                                        timeframe=spec["score_timeframe"])
+        mf_audit = apply_money_flow(table, mf, spec.get("quote", "USDT"))
         tables[bot] = table
         ranked = sorted(table.items(), key=lambda kv: kv[1]["score"], reverse=True)
         print(f"[{spec['label']}] scored {len(table)} bases; "
-              f"top: {[(b, v['score']) for b, v in ranked[:6]]}")
+              f"top: {[(b, v['score']) for b, v in ranked[:6]]}"
+              + (f"  feedback-adj: {audit}" if audit else "")
+              + (f"  money-flow-adj: {mf_audit}" if mf_audit else ""))
         decisions[bot] = decide(bot, spec, st, table, apply=args.apply)
+        decisions[bot]["feedback"] = {"perf": perf, "adjustments": audit,
+                                       "money_flow": mf_audit}
         d = decisions[bot]
         print(f"[{spec['label']}] decision: {d['action']}"
               + (f" {d.get('pair_out', '∅')} -> {d.get('pair_in', '')}"
                  if d["action"] != "hold" else ""))
+        _record_selection_performance(spec, table, perf, decisions[bot], apply=args.apply)
 
     if args.apply:
         save_state(st)

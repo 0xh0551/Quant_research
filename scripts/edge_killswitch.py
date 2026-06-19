@@ -37,7 +37,7 @@ TF_HOURS = {"15m": 0.25, "30m": 0.5, "1h": 1.0, "2h": 2.0, "4h": 4.0, "1d": 24.0
 
 BOTS = {
     "bot5": {
-        "manifest": NOCHES_USER_DATA / "wf_candidates.json",
+        "manifest": NOCHES_USER_DATA / "wf_candidates_bot5.json",
         "db": NOCHES_USER_DATA / "bot5.sqlite",
     },
     "bot6": {

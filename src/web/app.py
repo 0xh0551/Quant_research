@@ -31,7 +31,9 @@ from src.data.downloader import CCXTFallbackDownloader, DataIngestionPipeline, D
 from src.ml import model_eval as _ml_eval
 from src.portfolio import construction as _pf
 from src.portfolio import sizing as _sizing
+from src.ml.recommend import recommend_ml_coins
 from src.rl.recommend import recommend_rl_coins
+from src.tracking.money_flow import recommend_money_flow_coins
 from src.tracking.experiments import log_run, recent_runs
 from src.validation.monitor import quality_report
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
@@ -105,7 +107,7 @@ BARS_30D = {
 _symbol_cache: dict[str, list[str]] = {}
 _symbol_cache_lock = threading.Lock()
 
-app = FastAPI(title="Quant Research Platform", version="1.1.0")
+app = FastAPI(title="Quant Research Platform", version="1.3.0")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
@@ -143,17 +145,23 @@ class ResearchRequest(BaseModel):
 
 class DetailedInsightRequest(BaseModel):
     filename: str
+    start: str | None = None
+    end: str | None = None
 
 
 class LabRunRequest(BaseModel):
     filename: str
     strategy: str
     params: dict[str, Any] = {}
+    start: str | None = None
+    end: str | None = None
 
 
 class LabOptRequest(BaseModel):
     filename: str
     strategy: str
+    start: str | None = None
+    end: str | None = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -526,6 +534,7 @@ def get_detailed_insights(req: DetailedInsightRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="File not found")
 
     df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+    df = _apply_date_filter(df, req.start, req.end)
     if len(df) < 50:
         raise HTTPException(status_code=422, detail="Insufficient data (need ≥ 50 bars)")
 
@@ -662,6 +671,7 @@ def lab_run(req: LabRunRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="File not found")
 
     df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+    df = _apply_date_filter(df, req.start, req.end)
     if len(df) < 50:
         raise HTTPException(status_code=422, detail="Insufficient data (need ≥ 50 bars)")
 
@@ -714,6 +724,12 @@ def cross_exchange_analyze(symbol: str, timeframe: str) -> dict[str, Any]:
     return _cx.analyze_symbol(DATA_DIR, symbol, timeframe)
 
 
+@app.get("/api/cross-exchange/scan")
+def cross_exchange_scan(timeframe: str | None = None) -> dict[str, Any]:
+    """Auto-ranked cross-exchange opportunity leaderboard across all symbols."""
+    return _cx.scan_all(DATA_DIR, timeframe=timeframe)
+
+
 # ── Portfolio construction & sizing (Tier 2) ────────────────────────────────────
 
 class PortfolioRequest(BaseModel):
@@ -742,6 +758,7 @@ def build_portfolio(req: PortfolioRequest) -> dict[str, Any]:
     if returns.empty or returns.shape[1] < 2:
         raise HTTPException(status_code=422, detail="Datasets do not overlap in time")
     portfolio = _pf.build_portfolio(returns, req.method)
+    backtest = _pf.backtest_portfolio(returns, portfolio.get("weights", {}), bars_year)
     sizing = {
         col: {
             "vol_target_leverage": round(_sizing.vol_target_leverage(returns[col], req.target_vol, bars_year), 3),
@@ -749,8 +766,8 @@ def build_portfolio(req: PortfolioRequest) -> dict[str, Any]:
         }
         for col in returns.columns
     }
-    return {**portfolio, "sizing": sizing, "bars_per_year": bars_year,
-            "n_bars": int(returns.shape[0])}
+    return {**portfolio, "backtest": backtest, "sizing": sizing,
+            "bars_per_year": bars_year, "n_bars": int(returns.shape[0])}
 
 
 # ── ML evaluation (purged CV) & RL recommendation (Tier 3) ──────────────────────
@@ -789,6 +806,27 @@ def ml_evaluate(req: MLEvalRequest) -> dict[str, Any]:
 @app.get("/api/rl/recommend")
 def rl_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
     return recommend_rl_coins(DATA_DIR, timeframe=timeframe, top_n=top_n)
+
+
+@app.get("/api/ml/recommend")
+def ml_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
+    """Ranked ML-suitability leaderboard — the ML counterpart of /api/rl/recommend.
+
+    `recommend_ml_coins` already powers the nightly bot4/bot1 pair rotation;
+    this exposes the same ranking to the dashboard's Models tab so ML has a
+    best-list and per-coin detail just like RL does.
+    """
+    return recommend_ml_coins(DATA_DIR, timeframe=timeframe, top_n=top_n)
+
+
+@app.get("/api/money-flow/score")
+def money_flow_score_route(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
+    """Top inflow/outflow coins by OHLCV-only money-flow signal (CMF + RVOL + OBV slope).
+
+    Same signal that nudges bot4/bot1/bot3 pair-selection scores in the
+    nightly rotation (`apply_money_flow` in `scripts/rotate_bot_pairs.py`).
+    """
+    return recommend_money_flow_coins(DATA_DIR, timeframe=timeframe, top_n=top_n)
 
 
 # ── Data quality + forward-test attribution + experiments (Tier 4) ──────────────
@@ -1014,6 +1052,7 @@ def _run_optimize(job_id: str, req: LabOptRequest) -> None:
     try:
         path = DATA_DIR / req.filename
         df = pd.read_parquet(path).sort_values("timestamp").reset_index(drop=True)
+        df = _apply_date_filter(df, req.start, req.end)
         info = _parse_dataset_id(path)
         tf = info["timeframe"]
         ppy = PERIODS_PER_YEAR.get(tf, 365)
@@ -1072,6 +1111,21 @@ def _run_optimize(job_id: str, req: LabOptRequest) -> None:
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _apply_date_filter(
+    df: pd.DataFrame, start: str | None, end: str | None,
+) -> pd.DataFrame:
+    """Slice a dataset to [start, end] (inclusive) so Lab/Insight match Research.
+
+    Both endpoints used to silently backtest the whole parquet, which made their
+    results disagree with the Report tab (which honours the user's date range).
+    """
+    if start:
+        df = df[df["timestamp"] >= pd.Timestamp(start, tz="UTC")]
+    if end:
+        df = df[df["timestamp"] <= pd.Timestamp(end, tz="UTC")]
+    return df.reset_index(drop=True)
+
 
 def _parse_dataset_id(path: Path) -> dict[str, str]:
     parts = path.stem.split("_")
