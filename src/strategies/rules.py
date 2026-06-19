@@ -433,12 +433,18 @@ def supertrend(data: pd.DataFrame, config: SuperTrendConfig, allow_short: bool =
 
         fu = basic_upper.iloc[i]
         fl = basic_lower.iloc[i]
-        final_upper.iloc[i] = fu if fu < bu_prev or c_prev > bu_prev else bu_prev
-        final_lower.iloc[i] = fl if fl > bl_prev or c_prev < bl_prev else bl_prev
+        # NaN-safe ratchet: during ATR warm-up the previous final band is NaN.
+        # Without this guard the `else: keep prev` branch propagates NaN for the
+        # whole series (any comparison with NaN is False) → the trend never flips
+        # and SuperTrend collapses to a permanent long == buy & hold.
+        final_upper.iloc[i] = fu if (np.isnan(bu_prev) or fu < bu_prev or c_prev > bu_prev) else bu_prev
+        final_lower.iloc[i] = fl if (np.isnan(bl_prev) or fl > bl_prev or c_prev < bl_prev) else bl_prev
 
-        if trend.iloc[i - 1] == -1 and c_cur > final_upper.iloc[i - 1]:
+        fu_prev = final_upper.iloc[i - 1]
+        fl_prev = final_lower.iloc[i - 1]
+        if trend.iloc[i - 1] == -1 and not np.isnan(fu_prev) and c_cur > fu_prev:
             trend.iloc[i] = 1.0
-        elif trend.iloc[i - 1] == 1 and c_cur < final_lower.iloc[i - 1]:
+        elif trend.iloc[i - 1] == 1 and not np.isnan(fl_prev) and c_cur < fl_prev:
             trend.iloc[i] = -1.0
         else:
             trend.iloc[i] = trend.iloc[i - 1]
@@ -599,7 +605,13 @@ def _stateful_signal(
     short_entry: pd.Series,
     short_exit: pd.Series,
 ) -> pd.Series:
-    """Stateful long/short/flat position. Long=+1, Short=-1, Flat=0."""
+    """Stateful long/short/flat position. Long=+1, Short=-1, Flat=0.
+
+    Exit conditions return to FLAT (0); a fresh entry signal is required to take
+    the opposite side. Previously an exit flipped straight to the opposite
+    position, so the strategy was never flat — in futures mode this forced these
+    mean-reversion / channel rules to sit short on assets that only trended up.
+    """
     position = pd.Series(0.0, index=long_entry.index)
     state = 0  # 0=flat, 1=long, -1=short
     for idx in long_entry.index:
@@ -608,8 +620,8 @@ def _stateful_signal(
         elif bool(short_entry.loc[idx]):
             state = -1
         elif state == 1 and bool(long_exit.loc[idx]):
-            state = -1
+            state = 0
         elif state == -1 and bool(short_exit.loc[idx]):
-            state = 1
+            state = 0
         position.loc[idx] = float(state)
     return position
