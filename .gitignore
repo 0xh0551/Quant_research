@@ -13,6 +13,7 @@ __pycache__/
 data/raw/*
 data/processed/*
 data/research/*
+data/hl_flow/*
 outputs/*
 reports/**/*.png
 reports/**/*.html
