@@ -35,7 +35,14 @@ UD = NOCHES / "user_data"
 TF = "15m"
 
 # پیکربندیِ هر بات
-BOTS: dict[str, dict] = {
+# ۲۰۲۶-۰۶-۲۰ — هر دو باتِ این بریج به استراتژیِ cross-sectional market-neutral مهاجرت
+# کردند و دیگر از مانیفستِ rule-edge تغذیه نمی‌شوند. پس از این رفرشِ شبانه **جدا** شدند
+# تا whitelist/config‌شان را clobber و کانتینر را ری‌استارت نکند (BOTS خالی = no-op):
+#   • bot5 → bot5XSMN  (bybit، FreqAI μ/α، ۲۹ جفت)        — strategies/bot5XSMN.py
+#   • bot6 → bot6XSMN   (hyperliquid، XS momentumِ قاعده‌محور، ۳۴ جفت) — strategies/bot6XSMN.py
+# اگر باتی دوباره به مدلِ rule-bridge برگشت، ورودی‌اش را از _LEGACY_BOTS_DISABLED به BOTS برگردان.
+BOTS: dict[str, dict] = {}
+_LEGACY_BOTS_DISABLED: dict[str, dict] = {
     "bot5": {
         "container": "bot5",
         "exchange": "gate", "quote": "USDT", "swap_opt": True,
