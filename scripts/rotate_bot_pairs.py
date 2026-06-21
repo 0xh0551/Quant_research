@@ -54,6 +54,7 @@ SELPERF_ROLLUP = OUT / "selection_performance.json"      # latest per-bot (dashb
 SELPERF_HISTORY = OUT / "selection_performance.jsonl"    # learning-loop ledger
 OKX_CACHE = OUT / "okx_swap_bases.json"
 GATE_CACHE = OUT / "gate_liquid_bases.json"
+BYBIT_CACHE = OUT / "bybit_liquid_bases.json"
 
 NOCHES = Path("/home/h0551user/noches/user_data")
 
@@ -73,6 +74,26 @@ BOTS = {
         "n_pairs": 3, "min_dwell_days": 14.0,
         "switch_streak": 3, "switch_margin": 5,
         "okx_filter": False,
+    },
+    "bot2": {
+        "label": "bot2", "container": "bot2", "kind": "rl",
+        "exchange": "bybit", "trade_timeframe": "15m", "score_timeframe": "15m",
+        "score_venues": ("bybit",), "quote": "USDT",
+        "config": NOCHES / "bot2_config.json",
+        "sqlite": NOCHES / "bot2.sqlite",
+        "models_dir": NOCHES / "models" / "bot2_",
+        "manifest_path": None, "default_strategy": None,
+        # سبدِ گسترده‌تر از bot3 (۶ کاندید، max_open_trades=5) تا انتخابِ بیشتری
+        # برای RL باشد. dwell=10 (نه 14): کمی پاسخ‌گوتر چون cron هر ۴ساعت چک می‌کند،
+        # ولی همچنان به مدلِ continual فرصتِ همگرایی می‌دهد (cold start مفت نیست).
+        "n_pairs": 6, "min_dwell_days": 10.0,
+        "switch_streak": 3, "switch_margin": 5,
+        "okx_filter": False,
+        # فیلترِ نقدینگی روی خودِ ونیوِ ترید (bybit): جفت‌های نازک (ریشهٔ gap-through
+        # استاپ) کاندید/مستقر نمی‌مانند، ولی آلت‌های جاافتاده مثل BNB/AVAX حفظ می‌شوند.
+        "liquidity_filter": True, "liquidity_venue": "bybit",
+        "min_quote_vol_24h": 10_000_000,    # آستانهٔ ورود/کاندیدی
+        "illiquid_remove_below": 6_000_000,  # حذفِ اجباری فقط زیرِ این کف (باند هیسترزیس)
     },
     "bot4": {
         "label": "bot4", "container": "bot4", "kind": "ml",
@@ -294,6 +315,77 @@ def gate_liquid_bases(min_quote_vol_24h: float, ttl_hours: float = 6.0) -> set[s
     return out
 
 
+_BYBIT_LIQUID_MEM: dict[int, set[str] | None] = {}
+
+
+def bybit_liquid_bases(min_quote_vol_24h: float, ttl_hours: float = 6.0) -> set[str] | None:
+    """پایه‌های USDT-پرپِ Bybit با گردشِ ۲۴ساعتهٔ (turnover به USDT) ≥ آستانه.
+    مثل gate_liquid_bases ولی روی ونیوِ خودِ bot2 (bybit) — فیلترِ Gate برای یک باتِ
+    bybit به‌اشتباه آلت‌های جاافتاده‌ای مثل BNB/AVAX را می‌انداخت (حجمشان روی Gate کم بود).
+    شکست شبکه → کش کهنه؛ هیچ داده → None (آنگاه فیلترِ آن دور رد می‌شود، نه حذفِ کور)."""
+    key = int(min_quote_vol_24h)
+    if key in _BYBIT_LIQUID_MEM:
+        return _BYBIT_LIQUID_MEM[key]
+
+    vols: dict | None = None
+    try:
+        cached = json.loads(BYBIT_CACHE.read_text(encoding="utf-8"))
+        age = (datetime.now(timezone.utc)
+               - datetime.fromisoformat(cached["fetched_at"])).total_seconds() / 3600.0
+        if age < ttl_hours and cached.get("vols"):
+            vols = cached["vols"]
+    except Exception:
+        pass
+
+    if vols is None:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                "https://api.bybit.com/v5/market/tickers?category=linear",
+                headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64)"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode())
+            vols = {}
+            for d in data.get("result", {}).get("list", []):
+                s = d.get("symbol", "")
+                if not s.endswith("USDT"):
+                    continue
+                try:
+                    vols[s[: -len("USDT")]] = float(d.get("turnover24h") or 0)
+                except Exception:
+                    continue
+            if vols:
+                BYBIT_CACHE.write_text(json.dumps(
+                    {"fetched_at": _now(), "vols": vols}, ensure_ascii=False),
+                    encoding="utf-8")
+        except Exception as exc:
+            print(f"WARN: bybit liquidity load failed: {exc}")
+            try:  # افت به کشِ کهنه اگر موجود بود
+                vols = json.loads(BYBIT_CACHE.read_text(encoding="utf-8")).get("vols")
+            except Exception:
+                vols = None
+
+    if not vols:
+        _BYBIT_LIQUID_MEM[key] = None
+        return None
+    out = {b for b, v in vols.items() if v >= min_quote_vol_24h}
+    _BYBIT_LIQUID_MEM[key] = out
+    return out
+
+
+def liquid_bases_for(spec: dict, threshold: float | None = None) -> set[str] | None:
+    """مجموعهٔ پایه‌های نقدِ ونیوِ تریدِ این بات (bybit یا gate). تنها منبعِ حقیقتِ
+    نقدینگی — هم در score_table و هم در مسیرِ حذفِ فوریِ illiquid از همین استفاده کنند
+    تا با هم واگرا نشوند (باگِ قبلی: decide به‌صورت hard-code gate را صدا می‌زد).
+
+    threshold را می‌توان override کرد: انتخاب با min_quote_vol_24h ولی حذفِ اجباری با
+    کفِ پایین‌تر (illiquid_remove_below) تا جفتِ مرزی بین run‌ها flicker/churn نکند."""
+    thr = float(threshold if threshold is not None else spec.get("min_quote_vol_24h", 1e7))
+    if spec.get("liquidity_venue", "gate") == "bybit":
+        return bybit_liquid_bases(thr)
+    return gate_liquid_bases(thr)
+
+
 def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
     """{base: {score, detail}} — بهترین امتیاز هر پایه روی venue های مجاز."""
     quote = spec.get("quote", "USDT")
@@ -324,9 +416,10 @@ def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
             incumbents = {_base_of(p) for p in read_whitelist(spec["config"])}
             table = {b: v for b, v in table.items() if b in allowed or b in incumbents}
     if spec.get("liquidity_filter"):
-        liquid = gate_liquid_bases(float(spec.get("min_quote_vol_24h", 1e7)))
+        liquid = liquid_bases_for(spec)
         if liquid is None:
-            print("WARN: no Gate liquidity data — skipping liquidity filter this run")
+            print(f"WARN: no {spec.get('liquidity_venue', 'gate')} liquidity data "
+                  "— skipping liquidity filter this run")
         else:
             # برخلافِ okx_filter اینجا مستقرها معاف نیستند: junkِ مستقر باید بی‌امتیاز
             # شود تا در decide حذف گردد (گیتِ نقدینگی روی خودِ ونیوِ ترید).
@@ -423,7 +516,9 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
     # junk با gap-through استاپ را خراب می‌کند؛ هرچه زودتر باید برود. تنها مانع =
     # تریدِ باز روی همان جفت (نمی‌توان وسطِ پوزیشن whitelist را عوض کرد).
     if spec.get("liquidity_filter"):
-        liquid = gate_liquid_bases(float(spec.get("min_quote_vol_24h", 1e7)))
+        # باندِ هیسترزیس: ورود با min_quote_vol_24h، ولی حذفِ اجباری فقط زیرِ کفِ
+        # پایین‌تر (illiquid_remove_below) — جفتِ مرزی نباید هر چند ساعت swap شود.
+        liquid = liquid_bases_for(spec, spec.get("illiquid_remove_below"))
         if liquid is not None:
             blocked = set(whitelist) if "__UNKNOWN__" in open_pairs else set(open_pairs)
             removable = [p for p in whitelist
