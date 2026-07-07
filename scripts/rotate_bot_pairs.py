@@ -71,9 +71,22 @@ BOTS = {
         "sqlite": NOCHES / "gadget.sqlite",
         "models_dir": NOCHES / "models" / "gadget_rlpro_live",
         "manifest_path": None, "default_strategy": None,
-        "n_pairs": 3, "min_dwell_days": 14.0,
+        "n_pairs": 3, "min_dwell_days": 10.0,
         "switch_streak": 3, "switch_margin": 5,
         "okx_filter": False,
+        # Liquidity gate on the trade venue (bybit). Per user 2026-06-26: Gadget
+        # uses a LOWER bar than Bender (1M entry / 0.6M evict, vs 10M/6M) so smaller
+        # high-RL-fitness alts like HUMA (~2.2M/24h) stay eligible. Trade-off: thin
+        # pairs carry more slippage/gap-through risk at 3-10x leverage — acceptable
+        # here by explicit choice.
+        "liquidity_filter": True, "liquidity_venue": "bybit",
+        "min_quote_vol_24h": 1_000_000,
+        "illiquid_remove_below": 600_000,
+        # Min OHLCV history (15m bars) a base must have to be a candidate. The RL
+        # agent trains on train_period_days=90 (~8640 bars) + startup; a brand-new
+        # token (e.g. HUMA) has too little history for a stable held-out eval and
+        # was the proximate cause of the all-negative eval_score lockout.
+        "min_history_bars": 10_000,
     },
     "bender": {
         "label": "Bender", "container": "Bender", "kind": "rl",
@@ -151,7 +164,10 @@ WL_RE = re.compile(r'("pair_whitelist"\s*:\s*\[)([^\]]*)(\])', re.S)
 
 
 def _loads_tolerant(text: str):
-    no_comments = re.sub(r"^\s*//.*$", "", text, flags=re.M)
+    # Strip // line-comments, including INLINE/trailing ones (e.g. `2000, // note`).
+    # The negative lookbehind keeps URL schemes intact (https://… has ':' before //),
+    # so we don't corrupt string values like webhook URLs or "$schema".
+    no_comments = re.sub(r"(?<![:\"'])//[^\n]*", "", text)
     no_trailing = re.sub(r",(\s*[}\]])", r"\1", no_comments)
     return json.loads(no_trailing)
 
@@ -408,6 +424,18 @@ def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
         cur = table.get(base)
         if cur is None or r[key] > cur["score"]:
             table[base] = {"score": int(r[key]), "detail": r}
+    min_hist = int(spec.get("min_history_bars", 0))
+    if min_hist > 0:
+        # Drop bases with too little OHLCV history for a stable model/eval window.
+        # Incumbents are NOT exempt: a thin-history junk pair must lose its score
+        # so decide() evicts it.
+        before = set(table)
+        table = {b: v for b, v in table.items()
+                 if int(v["detail"].get("n", 0)) >= min_hist}
+        dropped = before - set(table)
+        if dropped:
+            print(f"  [{spec['label']}] min_history_bars={min_hist} dropped: "
+                  f"{sorted(dropped)}")
     if spec["okx_filter"]:
         allowed = okx_swap_bases()
         if allowed is None:
