@@ -119,6 +119,12 @@ BOTS = {
         "n_pairs": 5, "min_dwell_days": 7.0,
         "switch_streak": 3, "switch_margin": 5,
         "okx_filter": True,
+        # لنگرهای مِیجر (تصمیم مالک 2026-07-14): هر دو استاپِ کاملِ جولای روی
+        # اسمال‌کپ‌های روتیشنی بود (AAOI/MEGA) و دورهٔ طلایی تماماً روی مِیجرها.
+        # این جفت‌ها همیشه در whitelist می‌مانند (فارغ از امتیاز QR که یک prior
+        # ساختاری است، نه لبهٔ اعتبارسنجی‌شده)؛ روتیشن فقط اسلات‌های باقی‌مانده
+        # (n_pairs - len(anchor_bases) = 2) را مدیریت می‌کند.
+        "anchor_bases": ["BTC", "ETH", "SOL"],
     },
     "bot1": {
         "label": "bot1", "container": "bot1", "kind": "ml",
@@ -402,6 +408,20 @@ def liquid_bases_for(spec: dict, threshold: float | None = None) -> set[str] | N
     return gate_liquid_bases(thr)
 
 
+def _drop_bases_for(label: str) -> set:
+    """Bases to exclude from selection for this bot, from outputs/drop_list.json
+    (learn_outcomes.py: learned bleeders + owner-curated manual_drops). Case-insensitive
+    match on the bot label. Fails safe to empty (no exclusion) if the file is absent."""
+    try:
+        data = json.loads((OUT / "drop_list.json").read_text())
+        for k, v in (data.get("bots") or {}).items():
+            if k.lower() == label.lower():
+                return {b.upper() for b in v}
+    except Exception:
+        pass
+    return set()
+
+
 def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
     """{base: {score, detail}} — بهترین امتیاز هر پایه روی venue های مجاز."""
     quote = spec.get("quote", "USDT")
@@ -452,6 +472,13 @@ def score_table(spec: dict, processed_dir: Path) -> dict[str, dict]:
             # برخلافِ okx_filter اینجا مستقرها معاف نیستند: junkِ مستقر باید بی‌امتیاز
             # شود تا در decide حذف گردد (گیتِ نقدینگی روی خودِ ونیوِ ترید).
             table = {b: v for b, v in table.items() if b in liquid}
+    # closed-loop exclusion: bases that bleed live despite selection (learn_outcomes.py)
+    dropped_bases = _drop_bases_for(spec["label"])
+    if dropped_bases:
+        removed = sorted(set(table) & dropped_bases)
+        if removed:
+            print(f"  [{spec['label']}] drop_list excluded: {removed}")
+        table = {b: v for b, v in table.items() if b not in dropped_bases}
     return table
 
 
@@ -516,9 +543,10 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
             log_event(apply, bot=spec["label"], event="manual_remove", pair_out=p)
 
     incumbents = [_base_of(p) for p in whitelist]
+    anchors = set(spec.get("anchor_bases") or [])
     ranked = sorted(table.items(), key=lambda kv: kv[1]["score"], reverse=True)
     target = [b for b, _ in ranked[: spec["n_pairs"]]]
-    challengers = [b for b in target if b not in incumbents]
+    challengers = [b for b in target if b not in incumbents and b not in anchors]
 
     # streak فقط برای چالش‌گرهای فعلی جلو می‌رود؛ بقیه صفر می‌شوند
     streaks = {b: min(bst["streaks"].get(b, 0) + 1, 99) for b in challengers}
@@ -540,6 +568,65 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
     quote = spec.get("quote", "USDT")
     change: dict | None = None
 
+    # ── اولویتِ منفی‌یک: تضمینِ لنگرها (anchor_bases؛ تصمیم مالک 2026-07-14) ──
+    # لنگرِ غایب بدون توجه به streak/margin/dwell جایگزینِ ضعیف‌ترین غیرلنگر
+    # می‌شود (همهٔ لنگرهای غایب در یک اجرا — تصمیمِ عامدانهٔ مالک است، churn نیست).
+    # تنها مانع = تریدِ باز روی جفتِ خروجی. اجرای apply یک stop/start واحد دارد.
+    if anchors:
+        missing = [b for b in spec["anchor_bases"] if b not in incumbents]
+        if missing:
+            blocked = set(whitelist) if "__UNKNOWN__" in open_pairs else set(open_pairs)
+            evictable = sorted(
+                [p for p in whitelist
+                 if _base_of(p) not in anchors and p not in blocked],
+                key=lambda p: table.get(_base_of(p), {}).get("score") or -1)
+            swaps: list[tuple[str, str | None]] = []
+            new_wl = list(whitelist)
+            for b in missing:
+                pin = _pair_of(b, quote)
+                if len(new_wl) < spec["n_pairs"]:
+                    new_wl.append(pin)
+                    swaps.append((pin, None))
+                elif evictable:
+                    out = evictable.pop(0)
+                    new_wl = [p for p in new_wl if p != out] + [pin]
+                    swaps.append((pin, out))
+            if swaps:
+                decision.update(
+                    action="anchor_enforce",
+                    swaps=[{"pair_in": i, "pair_out": o} for i, o in swaps])
+                if apply:
+                    try:
+                        _docker("stop", spec["container"], timeout=240)
+                        try:
+                            write_whitelist(spec["config"], new_wl)
+                            for _pin, out in swaps:
+                                if out:
+                                    cleanup_pair_models(spec, out)
+                        finally:
+                            _docker("start", spec["container"], timeout=120)
+                        for pin, out in swaps:
+                            if out:
+                                assigns.pop(out, None)
+                            assigns[pin] = {
+                                "assigned_at": now, "source": "anchor",
+                                "last_score": table.get(_base_of(pin), {}).get("score"),
+                                "score_at": now}
+                            bst["streaks"].pop(_base_of(pin), None)
+                            log_event(apply, bot=spec["label"], event="anchor_swap",
+                                      pair_in=pin, pair_out=out, new_whitelist=new_wl)
+                    except Exception as exc:
+                        decision.update(action="error", error=str(exc))
+                        log_event(apply, bot=spec["label"], event="error",
+                                  error=str(exc),
+                                  attempted={"action": "anchor_enforce",
+                                             "swaps": [list(s) for s in swaps]})
+                else:
+                    log_event(apply, bot=spec["label"], event="would_anchor_enforce",
+                              swaps=[{"pair_in": i, "pair_out": o} for i, o in swaps],
+                              new_whitelist=new_wl)
+                return decision
+
     # ── اولویتِ صفر: حذفِ فوریِ جفتِ کم‌نقدینگی (بدون نیاز به استریک/مارجین/دِوِل) ──
     # junk با gap-through استاپ را خراب می‌کند؛ هرچه زودتر باید برود. تنها مانع =
     # تریدِ باز روی همان جفت (نمی‌توان وسطِ پوزیشن whitelist را عوض کرد).
@@ -550,7 +637,8 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
         if liquid is not None:
             blocked = set(whitelist) if "__UNKNOWN__" in open_pairs else set(open_pairs)
             removable = [p for p in whitelist
-                         if _base_of(p) not in liquid and p not in blocked]
+                         if _base_of(p) not in liquid and p not in blocked
+                         and _base_of(p) not in anchors]
             if removable:
                 worst = removable[0]
                 liq_challengers = [b for b, _ in ranked if b not in incumbents]
@@ -568,8 +656,10 @@ def decide(bot: str, spec: dict, st: dict, table: dict[str, dict],
         change = {"action": "add", "pair_in": _pair_of(b, quote),
                   "score_in": table[b]["score"]}
     elif change is None and ready:
-        # ضعیف‌ترین مستقرِ دارای امتیاز؛ بدونِ امتیاز = قابل‌سنجش نیست، معاف
-        scored = [p for p in whitelist if table.get(_base_of(p))]
+        # ضعیف‌ترین مستقرِ دارای امتیاز؛ بدونِ امتیاز = قابل‌سنجش نیست، معاف.
+        # لنگرها (anchor_bases) هرگز کاندیدِ خروج نیستند.
+        scored = [p for p in whitelist
+                  if table.get(_base_of(p)) and _base_of(p) not in anchors]
         if scored:
             weakest = min(scored, key=lambda p: table[_base_of(p)]["score"])
             w_base, w_score = _base_of(weakest), table[_base_of(weakest)]["score"]
