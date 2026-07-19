@@ -14,6 +14,7 @@ data/raw/*
 data/processed/*
 data/research/*
 data/hl_flow/*
+data/microstructure/*
 outputs/*
 reports/**/*.png
 reports/**/*.html
