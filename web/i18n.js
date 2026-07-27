@@ -178,7 +178,7 @@ const I18N = {
 
     /* ── edges section ────────────────────────────────────────────── */
     edges_title: 'لبه‌های اعتبارسنجی‌شده (Walk-Forward)',
-    edges_sub: 'خروجیِ اسکنِ خارج‌از‌نمونه — بات‌های قاعده‌محور (bot5، bot6) فقط همین‌ها را اجرا می‌کنند',
+    edges_sub: 'خروجیِ اسکنِ خارج‌از‌نمونه — بات‌های قاعده‌محور (بریج) فقط همین‌ها را اجرا می‌کنند',
     edges_rescan: 'اجرای اسکن دوباره',
     edges_scanning: 'شروع اسکن…',
     edges_no_report: 'هنوز گزارشی تولید نشده. «اجرای اسکن دوباره» را بزنید.',
@@ -205,7 +205,7 @@ const I18N = {
     edges_col_return_oos: 'بازده OOS', edges_col_exchange: 'صرافیِ مرجع',
     edges_col_status: 'وضعیت',
     edges_deploy_deployable: 'قابل‌استقرار', edges_deploy_robust: 'مستحکم', edges_deploy_passed: 'فقط معتبر',
-    edges_deploy_legend: '🟢 قابل‌استقرار = به بات bot6 منتقل می‌شود (مستحکم + استراتژیِ پشتیبانی‌شدهٔ بریج). 🔵 مستحکم = از گیتِ چندصرافی/DSR رد شده ولی بریج پیاده‌اش نکرده. ⚪ فقط معتبر = فقط گیتِ شُلِ OOS را رد کرده (اغلب کم‌نقدینگی/اورفیت). توجه: بات‌های RL/ML (bot3/bot4/bot1) از این لبه‌ها تغذیه نمی‌شوند؛ آن‌ها جفت‌ها را از امتیاز RL/ML می‌گیرند.',
+    edges_deploy_legend: '🟢 قابل‌استقرار = به بات بریج منتقل می‌شود (مستحکم + استراتژیِ پشتیبانی‌شدهٔ بریج). 🔵 مستحکم = از گیتِ چندصرافی/DSR رد شده ولی بریج پیاده‌اش نکرده. ⚪ فقط معتبر = فقط گیتِ شُلِ OOS را رد کرده (اغلب کم‌نقدینگی/اورفیت). توجه: بات‌های RL/ML از این لبه‌ها تغذیه نمی‌شوند؛ آن‌ها جفت‌ها را از امتیاز RL/ML می‌گیرند.',
     edges_col_tf: 'TF', edges_col_trades: 'معاملات/پنجره',
     edges_dir_both: 'دوطرفه', edges_dir_long: 'فقط خرید',
     edges_oos_return: 'بازده OOS', edges_strategy: 'استراتژی', edges_trades_split: 'معاملات/پنجره',
@@ -267,7 +267,7 @@ const I18N = {
 
     /* models */
     mdl_rl_title: 'پیشنهاد ارز برای RL', mdl_rl_hint: 'مناسب‌ترین ارزها برای ایجنت RL روی فیوچرز ۱۵ دقیقه (Bybit / OKX / Gate)',
-    mdl_ml_reco_title: 'پیشنهاد ارز برای ML', mdl_ml_reco_hint: 'مناسب‌ترین ارزها برای مدل ML روی فیوچرز ۱۵ دقیقه (همان امتیازی که چرخش شبانهٔ bot4/bot1 استفاده می‌کند)',
+    mdl_ml_reco_title: 'پیشنهاد ارز برای ML', mdl_ml_reco_hint: 'مناسب‌ترین ارزها برای مدل ML روی فیوچرز ۱۵ دقیقه (همان امتیازی که چرخش شبانهٔ بات‌های ML استفاده می‌کند)',
     mdl_mf_title: 'جریان پول', mdl_mf_hint: 'کوین‌هایی که سرمایه روی آن‌ها در حال ورود یا خروج است (بر اساس CMF + حجم نسبی + شیب OBV روی کندل‌ها) — همین سیگنال در چرخش شبانه روی امتیازِ انتخاب کوین اثر می‌گذارد.',
     mf_inflow_label: 'ورود پول', mf_outflow_label: 'خروج پول',
     lab_date_hint: 'خالی = کل تاریخچه؛ برای هم‌خوانی با تب گزارش، همان بازهٔ ریسرچ را بگذارید', ins_rerun: 'اعمال بازه',
@@ -285,7 +285,7 @@ const I18N = {
     q_health: 'سلامت داده', q_datasets: 'دیتاست‌ها', q_clean: 'سالم', q_with_gaps: 'دارای شکاف', q_with_malformed: 'خراب',
     q_col_dataset: 'دیتاست', q_col_rows: 'کندل', q_col_coverage: 'پوشش (روز)', q_col_gaps: 'شکاف',
     q_col_dupes: 'تکراری', q_col_malformed: 'خراب', q_col_status: 'وضعیت', q_clean_badge: 'سالم', q_issue_badge: 'مشکل‌دار',
-    fwd_title: 'فوروارد-تست: انتظار در برابر تحقق', fwd_hint: 'مقایسهٔ بازده موردانتظار (OOS) با بازده واقعیِ بات‌های زنده (bot5/bot6).',
+    fwd_title: 'فوروارد-تست: انتظار در برابر تحقق', fwd_hint: 'مقایسهٔ بازده موردانتظار (OOS) با بازده واقعیِ بات‌های زندهٔ بریج.',
     fwd_col_symbol: 'نماد', fwd_col_expected: 'موردانتظار (تقریبی)', fwd_col_realized: 'محقق‌شده',
     fwd_col_trades: 'معاملات', fwd_col_divergence: 'واگرایی', fwd_col_status: 'وضعیت',
     fwd_status_ok: 'منطبق', fwd_status_diverging: 'واگرا', fwd_status_no_trades: 'بدون معامله',
@@ -499,7 +499,7 @@ const I18N = {
 
     /* ── edges section ────────────────────────────────────────────── */
     edges_title: 'Validated Edges (Walk-Forward)',
-    edges_sub: 'Out-of-sample scan output — rule-based bots (bot5, bot6) only trade these',
+    edges_sub: 'Out-of-sample scan output — the rule-based bridge bots only trade these',
     edges_rescan: 'Re-run Scan',
     edges_scanning: 'Starting scan…',
     edges_no_report: 'No report generated yet. Click "Re-run Scan".',
@@ -526,7 +526,7 @@ const I18N = {
     edges_col_return_oos: 'OOS return', edges_col_exchange: 'Ref. exchange',
     edges_col_status: 'Status',
     edges_deploy_deployable: 'Deployable', edges_deploy_robust: 'Robust', edges_deploy_passed: 'Passed only',
-    edges_deploy_legend: '🟢 Deployable = pushed to the bot6 bot (robust + bridge-supported rule). 🔵 Robust = cleared the cross-venue/DSR gate but the bridge does not implement it. ⚪ Passed only = cleared just the loose OOS gate (often illiquid / curve-fit). Note: the RL/ML bots (bot3/bot4/bot1) are NOT fed by these edges; they pick pairs from the RL/ML fitness score.',
+    edges_deploy_legend: '🟢 Deployable = pushed to the bridge bot (robust + bridge-supported rule). 🔵 Robust = cleared the cross-venue/DSR gate but the bridge does not implement it. ⚪ Passed only = cleared just the loose OOS gate (often illiquid / curve-fit). Note: the RL/ML bots are NOT fed by these edges; they pick pairs from the RL/ML fitness score.',
     edges_col_tf: 'TF', edges_col_trades: 'Trades/window',
     edges_dir_both: 'Both', edges_dir_long: 'Long only',
     edges_oos_return: 'OOS return', edges_strategy: 'Strategy', edges_trades_split: 'Trades/window',
@@ -588,7 +588,7 @@ const I18N = {
 
     /* models */
     mdl_rl_title: 'RL Coin Recommendation', mdl_rl_hint: 'Best coins for an RL agent on 15m futures (Bybit / OKX / Gate)',
-    mdl_ml_reco_title: 'ML Coin Recommendation', mdl_ml_reco_hint: 'Best coins for an ML model on 15m futures (the same score the nightly bot4/bot1 rotation uses)',
+    mdl_ml_reco_title: 'ML Coin Recommendation', mdl_ml_reco_hint: 'Best coins for an ML model on 15m futures (the same score the nightly ML-bot rotation uses)',
     mdl_mf_title: 'Money Flow', mdl_mf_hint: 'Coins capital is currently rotating into or out of (CMF + relative volume + OBV slope on candles) — the same signal tilts coin-selection scores in the nightly rotation.',
     mf_inflow_label: 'Inflow', mf_outflow_label: 'Outflow',
     lab_date_hint: 'Empty = full history; to match the Report tab, use the same Research range', ins_rerun: 'Apply range',
@@ -606,7 +606,7 @@ const I18N = {
     q_health: 'Data health', q_datasets: 'Datasets', q_clean: 'Clean', q_with_gaps: 'With gaps', q_with_malformed: 'Malformed',
     q_col_dataset: 'Dataset', q_col_rows: 'Bars', q_col_coverage: 'Coverage (days)', q_col_gaps: 'Gaps',
     q_col_dupes: 'Dupes', q_col_malformed: 'Malformed', q_col_status: 'Status', q_clean_badge: 'clean', q_issue_badge: 'issues',
-    fwd_title: 'Forward-Test: expected vs realized', fwd_hint: 'Compares expected (OOS) return with the live bots’ (bot5/bot6) realized return.',
+    fwd_title: 'Forward-Test: expected vs realized', fwd_hint: 'Compares expected (OOS) return with the live bridge bots’ realized return.',
     fwd_col_symbol: 'Symbol', fwd_col_expected: 'Expected (approx)', fwd_col_realized: 'Realized',
     fwd_col_trades: 'Trades', fwd_col_divergence: 'Divergence', fwd_col_status: 'Status',
     fwd_status_ok: 'on-track', fwd_status_diverging: 'diverging', fwd_status_no_trades: 'no trades',

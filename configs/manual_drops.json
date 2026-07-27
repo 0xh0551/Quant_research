@@ -1,4 +1,0 @@
-{
-  "_comment": "Owner-curated persistent per-bot base exclusions, merged into drop_list.json by learn_outcomes.py and enforced by rotate_bot_pairs.py. Bots keyed by ledger name (Capitalized). Added 2026-07-11 from Claude post-mortem: TAG was 66% of bot1's worst losses (bleeding base, fitness score masked it, 50-66bps exit slippage).",
-  "bot1": ["TAG"]
-}

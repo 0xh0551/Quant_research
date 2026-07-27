@@ -1,8 +1,8 @@
 """Walk-forward scan: find strategy×timeframe×pair×direction combos with a
 genuine out-of-sample edge, and export them as a candidate manifest that the
-live freqtrade bots (bot6, bot5) can consume.
+live freqtrade bridge bots can consume.
 
-Rationale: the noches RL/ML bots overfit — nightly validation rejects almost
+Rationale: RL/ML bots overfit — nightly validation rejects almost
 every run (in-sample positive, OOS negative). This scan only promotes rule
 strategies that stay positive across rolling OOS test windows, with realistic
 futures costs (fees + slippage + perpetual funding) and short selling enabled.
@@ -352,7 +352,7 @@ def apply_robustness(
     }
 
 
-# ── reporting (برای داشبورد Quant_research و گزارش ادمین soodo) ──────────────────
+# ── reporting (dashboard report + external admin mirrors) ──────────────────
 
 def _best_per_symbol(survivors: list[ScanResult], timeframe: str | None = None):
     """بهترین کاندید (بیشترین Sharpe) به ازای هر symbol، اختیاراً محدود به یک tf."""

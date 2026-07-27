@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Cross-venue funding-rate carry scanner (public data, no keys, no LLM).
 
-For each base traded across the four noches venues (bybit/gate/okx/hyperliquid),
+For each base traded across the four supported venues (bybit/gate/okx/hyperliquid),
 fetch the current funding rate, annualize per the venue's funding interval, and
 rank the best short-high-funding / long-low-funding pairs. This is the
 market-neutral "carry sleeve" opportunity: collect funding on the short leg,
@@ -9,7 +9,7 @@ hedge with the long leg — no directional bet. Gross numbers; fees/borrow and
 convergence risk not deducted.
 
 Writes outputs/funding_carry.json. Cron (free):
-    25 */4 * * * cd /home/h0551user/Quant_research && .venv/bin/python scripts/funding_carry_scan.py --quiet >> logs/funding_carry.log 2>&1
+    25 */4 * * * cd $QR_ROOT && .venv/bin/python scripts/funding_carry_scan.py --quiet >> logs/funding_carry.log 2>&1
 """
 
 from __future__ import annotations

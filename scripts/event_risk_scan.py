@@ -9,7 +9,7 @@
     .venv/bin/python scripts/event_risk_scan.py --venue bybit --pairs BTC/USDT:USDT,ADA/USDT:USDT --dry
 
 Cron (hourly like hl_flow_scan; add --with-events on a slower cadence to cap LLM cost):
-    7 * * * * cd /home/h0551user/Quant_research && .venv/bin/python scripts/event_risk_scan.py >> logs/event_risk.log 2>&1
+    7 * * * * cd $QR_ROOT && .venv/bin/python scripts/event_risk_scan.py >> logs/event_risk.log 2>&1
 """
 
 from __future__ import annotations
@@ -53,7 +53,7 @@ def main() -> int:
         print(f"{sym:18} {d['risk']:>5.3f}  "
               f"{fa['vol']:.2f}/{fa['funding']:.2f}/{fa['liquidity']:.2f}/{fa['event']:.2f}      {d['reason'][:44]}")
     if not args.dry:
-        print("\n[written] outputs/event_risk.json + noches/user_data/event_risk.json")
+        print("\n[written] outputs/event_risk.json (+ bot user_data copy if configured)")
     return 0
 
 

@@ -29,17 +29,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-USER_DATA = Path("/home/h0551user/noches/user_data")
+from src import local_config
 
-# canonical bot -> live sqlite (the root-level *.sqlite files are 0-byte decoys;
-# the real DBs live under user_data/, WAL mode)
+# Live-fleet wiring comes from the gitignored site config (configs/local.json);
+# both stay empty on a plain research checkout and everything degrades to
+# empty frames.
+USER_DATA: Path = local_config.user_data_dir() or Path("user_data")
+
+# canonical bot -> live sqlite filename (resolved under USER_DATA)
 BOTS: dict[str, str] = {
-    "bot2": "bot2.sqlite",
-    "bot3": "bot3.sqlite",
-    "bot4": "bot4.sqlite",
-    "bot1": "bot1.sqlite",
-    "bot5": "bot5.sqlite",
-    "bot6": "bot6.sqlite",
+    name: p.name for name, p in local_config.bot_databases().items()
 }
 
 

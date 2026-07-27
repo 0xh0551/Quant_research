@@ -33,7 +33,7 @@ class BacktestConfig:
     # Funding is paid/received on the held notional every ~8h. With a positive
     # rate longs pay shorts (the common regime). We approximate it per-bar so
     # short and long carry costs become realistically asymmetric — important
-    # because the noches bots trade perpetual futures, mostly short.
+    # because live perp bots trade both directions, often short.
     apply_funding: bool = False
     funding_rate_8h: float = 0.0001   # ≈ 0.01% per 8h (typical neutral funding)
     hours_per_bar: float = 24.0       # set per timeframe (e.g. 0.25 for 15m, 1 for 1h)

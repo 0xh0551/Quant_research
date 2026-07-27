@@ -812,7 +812,7 @@ def rl_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
 def ml_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
     """Ranked ML-suitability leaderboard — the ML counterpart of /api/rl/recommend.
 
-    `recommend_ml_coins` already powers the nightly bot4/bot1 pair rotation;
+    `recommend_ml_coins` already powers the nightly ML-bot pair rotation;
     this exposes the same ranking to the dashboard's Models tab so ML has a
     best-list and per-coin detail just like RL does.
     """
@@ -823,7 +823,7 @@ def ml_recommend(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
 def money_flow_score_route(timeframe: str = "15m", top_n: int = 12) -> dict[str, Any]:
     """Top inflow/outflow coins by OHLCV-only money-flow signal (CMF + RVOL + OBV slope).
 
-    Same signal that nudges bot4/bot1/bot3 pair-selection scores in the
+    Same signal that nudges the live bots' pair-selection scores in the
     nightly rotation (`apply_money_flow` in `scripts/rotate_bot_pairs.py`).
     """
     return recommend_money_flow_coins(DATA_DIR, timeframe=timeframe, top_n=top_n)

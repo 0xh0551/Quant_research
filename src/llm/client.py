@@ -1,10 +1,11 @@
 """Shared Claude client for the Quant Research platform.
 
-Standalone (no hnarimani/Flask deps) so QR cron jobs can call Claude without
-dragging the web app in. Resolves `ANTHROPIC_API_KEY` from the environment or,
-failing that, from `hnarimani/.env` / `soodo/.env` (the same key the blog/lab
-agents already use). Fails safe: `is_enabled()` is False when no key is found,
-and `complete()` raises a clear error rather than calling with no auth.
+Standalone (no web-framework deps) so QR cron jobs can call Claude without
+dragging a web app in. Resolves `ANTHROPIC_API_KEY` from the environment or,
+failing that, from the optional `.env` files listed in the site-local config
+(`configs/local.json`, gitignored). Fails safe: `is_enabled()` is False when no
+key is found, and `complete()` raises a clear error rather than calling with no
+auth.
 
 Wraps the three things every QR LLM use needs:
   * tiered models  — cheap=Haiku 4.5, smart=Sonnet 5, reasoning=Opus 4.8
@@ -49,15 +50,14 @@ SPEND_FILE = _ROOT / "outputs" / "llm_spend.json"
 MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "5.0"))
 WEB_SEARCH_USD = 0.01  # ~$10 / 1000 Anthropic web searches
 
-_ENV_FILES = [
-    Path("/home/h0551user/hnarimani/.env"),
-    Path("/home/h0551user/soodo/.env"),
-]
+from src import local_config
+
+_ENV_FILES = local_config.env_files()
 
 
 def _month_key() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
-_KEY_NAMES = ["ANTHROPIC_API_KEY", "ANTHROPOC_API_LAB"]  # 2nd = legacy typo in hnarimani/.env
+_KEY_NAMES = ["ANTHROPIC_API_KEY", "ANTHROPOC_API_LAB"]  # 2nd = legacy alias some site .env files use
 
 
 def _read_env_key() -> str | None:
@@ -97,7 +97,7 @@ class QuantLLM:
         if self._client is None:
             if not self._key:
                 raise RuntimeError(
-                    "No ANTHROPIC_API_KEY (env, hnarimani/.env, or soodo/.env). LLM features disabled."
+                    "No ANTHROPIC_API_KEY (env or site-local .env files). LLM features disabled."
                 )
             import anthropic
 
