@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Daily LLM market brief — a short, grounded read of the market situation for the
-hnarimani execution dashboard.
+external execution dashboard.
 
 Grounded: feeds Claude ONLY facts already computed by the deterministic layers
 (regime, event catalysts, fleet go-live posture, top risk action) — never raw price —

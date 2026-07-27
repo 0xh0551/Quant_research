@@ -232,12 +232,12 @@ data/processed/*.parquet                    ← every downloaded exchange × sym
    • funding-aware backtest on every OOS test window
    • keep only: OOS mean > 0, ≥55% positive windows, Sharpe > 0
         │
-        ├──►  outputs/wf_candidates.json   (manifest — the live bot reads this)
-        └──►  outputs/wf_report.json       (dashboard report + alerts)  →  copied to soodo admin
+        ├──►  outputs/wf_candidates.json   (manifest — live bridge bots read this)
+        └──►  outputs/wf_report.json       (dashboard report + alerts)
         │
-        ▼  scripts/refresh_candidates.py   (weekly cron)
-  copy manifest → noches/user_data/wf_candidates.json
-  reload bot5  →  QuantResearchBridge picks best validated rule per pair
+        ▼  refresh pipeline (cron)
+  copy manifest → the bots' user_data/wf_candidates.json
+  conditional reload → the bridge strategy picks the best validated rule per pair
 ```
 
 ### What it scans
@@ -252,31 +252,23 @@ The scan runs over **every Parquet in `data/processed/` that has enough bars** (
 
 → robust edges concentrate on **4h** (e.g. BTC `donchian_breakout` consistent across 5 exchanges). 1d datasets are skipped automatically (too few bars for a valid split).
 
-### Live bot (freqtrade) — `QuantResearchBridge`
+### Live bot (freqtrade) — the bridge strategy
 
-`noches/user_data/strategies/QuantResearchBridge.py` is a freqtrade `IStrategy` that **reads the manifest and trades only validated rules** (pure-pandas, matching the research engine exactly). For each pair it picks the highest-Sharpe candidate **matching its live timeframe**; if a pair has no validated candidate, it stays flat. The live timeframe comes from the `QR_TIMEFRAME` env var (default `4h`).
+The bridge is a freqtrade `IStrategy` that **reads the manifest and trades only validated rules** (pure-pandas, matching the research engine exactly). For each pair it picks the highest-Sharpe candidate **matching its live timeframe**; if a pair has no validated candidate, it stays flat. The live timeframe comes from the `QR_TIMEFRAME` env var (default `4h`).
 
 ### Automation & the timeframe policy
 
-The full loop runs **daily** via one cron (`scripts/refresh_candidates.sh` at 23:00):
+The full loop runs **daily** via one cron:
 
 1. **Data refresh** (`scripts/refresh_data.py`) — incrementally appends fresh candles to every dataset in `data/processed` (dedup by timestamp; nothing is deleted) so edges are never computed on stale data.
-2. **Re-scan** — rewrites the manifest + report, copies the manifest to the bots and the report to the soodo admin.
-3. **Conditional reload** — bot5 is restarted **only when its live plan actually changes**, not on a fixed schedule. The script keeps a signature `{symbol: [strategy, allow_short]}` for the bot's pairs (`outputs/.live_plan_sig.json`); if today's scan yields the same plan, **no restart happens** (zero needless downtime); if the chosen rule/direction for a pair changes, it `docker restart`s and saves the new signature. So the restart cadence is driven by *how often the edge changes* — could be never, could be several days running — which is exactly "keep the bot in its best state automatically." (`--force-reload` overrides; `--bot5-pairs` sets which pairs count.)
+2. **Re-scan** — rewrites the manifest + report and copies the manifest to the bots.
+3. **Conditional reload** — a bridge bot is restarted **only when its live plan actually changes**, not on a fixed schedule. The script keeps a signature `{symbol: [strategy, allow_short]}` for the bot's pairs (`outputs/.live_plan_sig.json`); if today's scan yields the same plan, **no restart happens** (zero needless downtime); if the chosen rule/direction for a pair changes, it `docker restart`s and saves the new signature. So the restart cadence is driven by *how often the edge changes* — could be never, could be several days running — which is exactly "keep the bot in its best state automatically." (a force-reload flag overrides; the pair set is configurable.)
 
 **Switching the timeframe is deliberately *not* automatic.** If a stronger edge appears on a different timeframe, the scan emits a `better_timeframe` **alert** in `wf_report.json` (surfaced on both dashboards) rather than silently re-pointing a live, sold product. Changing the timeframe means restarting the container with a new `QR_TIMEFRAME` — a human-approved action, because it changes the character and risk profile of the bot.
 
 ### Edges dashboard
 
-The **`/edges`** page (linked from the main dashboard sidebar) visualises the latest scan: live plan per symbol, per-timeframe edge distribution, top candidates, timeframe alerts, and scan history. It also exposes a **“run scan again”** button that triggers the same pipeline as a background job. A read-only mirror of the report is also rendered inside the **soodo admin** panel (`/admin/qr-edges`) so the business side can see what changed and when.
-
-```bash
-# run a scan manually (writes manifest + report, copies to bots, reloads bot5)
-.venv/bin/python scripts/refresh_candidates.py --reload-bot5
-
-# scan only — write outputs but don't copy to bots or reload (for inspection)
-.venv/bin/python scripts/refresh_candidates.py --noches "" --soodo-report ""
-```
+The **`/edges`** page (linked from the main dashboard sidebar) visualises the latest scan: live plan per symbol, per-timeframe edge distribution, top candidates, timeframe alerts, and scan history. It also exposes a **“run scan again”** button that triggers the same pipeline as a background job. A read-only mirror of the report can also be exported to an external admin panel.
 
 | Endpoint | Purpose |
 |---|---|

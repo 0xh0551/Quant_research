@@ -1,4 +1,4 @@
-"""Execution-quality analytics for the noches freqtrade bots.
+"""Execution-quality analytics for live freqtrade bots.
 
 Read-only over each bot's freqtrade sqlite (`trades` + `orders` tables). Quantifies
 the P&L that leaks to *execution* rather than to a lack of alpha: per-fill and
