@@ -122,7 +122,7 @@ def discover_gate_futures_pairs(n: int = GATE_TOP_N) -> list[tuple[str, str, str
 
 
 def discover_hyperliquid_pairs(n: int = HL_TOP_N) -> list[tuple[str, str, str, str]]:
-    """Top N Hyperliquid USDC perps by 24h volume → bootstrap list (Wall_E venue).
+    """Top N Hyperliquid USDC perps by 24h volume → bootstrap list.
 
     سینتتیک‌ها (XYZ-SP500، XYZ-CL و مانند آن) و ارزهای مشکوک (base حاوی '-' یا '/')
     فیلتر می‌شوند تا فقط جفت‌های کریپتوی واقعی اضافه شوند.
@@ -248,7 +248,7 @@ def refresh_one(path: Path) -> str:
 
 
 def write_coverage(files: list[Path]) -> str:
-    """خلاصهٔ پوشش دیتا برای داشبوردها (hnarimani / QR web)."""
+    """خلاصهٔ پوشش دیتا برای داشبوردها."""
     rows = []
     for path in files:
         try:

@@ -4,7 +4,7 @@ A self-contained, gym-style env (no hard dependency on gymnasium / SB3 — it
 subclasses `gymnasium.Env` only if it is installed). The point is that the
 *reward already nets out the frictions a live perp bot pays*: taker fees on every
 position change and perpetual funding on the held notional. Training a policy
-that ignores these is how the noches bots overfit; this env makes the costs part
+that ignores these is how live bots overfit; this env makes the costs part
 of the objective. Built to be wrapped in walk-forward folds (train on one slice,
 evaluate out-of-sample on the next).
 """

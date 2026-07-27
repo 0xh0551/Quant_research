@@ -11,9 +11,10 @@ Two layers, combined into one `event_risk.json` = {symbol: {risk, reason, factor
     a numeric model can't see. Gated behind `with_events` and grounded: the LLM
     must cite what it found, and its score is blended, never trusted blindly.
 
-`risk` is 0 (size normally) .. 1 (size to near-zero / veto). The bot maps it to a
-stake multiplier (see strategies/_risk_overlay.py). Read-only inputs; writes only
-`outputs/event_risk.json` (+ an atomic copy into noches/user_data/ for the bots).
+`risk` is 0 (size normally) .. 1 (size to near-zero / veto). Live bots map it to
+a stake multiplier. Read-only inputs; writes only `outputs/event_risk.json`
+(+ an atomic copy into the configured bot `user_data/` dir, when one is set in
+the site-local config).
 """
 
 from __future__ import annotations
@@ -29,7 +30,9 @@ OUT = ROOT / "outputs"
 PROCESSED = ROOT / "data" / "processed"
 MS_LATEST = OUT / "microstructure_latest.json"
 EVENT_CACHE = OUT / "event_catalysts.json"  # LLM catalyst results, refreshed a few x/day
-NOCHES_UD = Path("/home/h0551user/noches/user_data")
+from src import local_config
+
+BOT_UD = local_config.user_data_dir()  # None on a plain research checkout
 
 VENUE_MARKET = {"bybit": "futures", "gate": "futures", "okx": "futures", "hyperliquid": "futures"}
 
@@ -321,11 +324,12 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
     if write:
         OUT.mkdir(parents=True, exist_ok=True)
         (OUT / "event_risk.json").write_text(json.dumps(payload, indent=2))
-        # atomic copy into the bind-mounted dir the bots hot-read
-        try:
-            tmp = NOCHES_UD / "event_risk.json.tmp"
-            tmp.write_text(json.dumps(payload, indent=2))
-            tmp.replace(NOCHES_UD / "event_risk.json")
-        except Exception as e:
-            print(f"[event_risk] could not write to noches/user_data: {e}")
+        # atomic copy into the bind-mounted dir the bots hot-read (if configured)
+        if BOT_UD is not None:
+            try:
+                tmp = BOT_UD / "event_risk.json.tmp"
+                tmp.write_text(json.dumps(payload, indent=2))
+                tmp.replace(BOT_UD / "event_risk.json")
+            except Exception as e:
+                print(f"[event_risk] could not write to bot user_data: {e}")
     return payload

@@ -1,8 +1,8 @@
 """Forward-test attribution — close the loop between backtest and live.
 
-The walk-forward scan promotes edges that the live bots (Mickey, Wall_E) then
-trade, but nothing checks whether the *realized* PnL tracks the *expected* OOS
-PnL. Persistent divergence means decay or a broken assumption. This module reads
+The walk-forward scan promotes edges that live bridge bots then trade, but
+nothing checks whether the *realized* PnL tracks the *expected* OOS PnL.
+Persistent divergence means decay or a broken assumption. This module reads
 the scan's live plan (expected) and the freqtrade SQLite DBs (realized) and
 reports the gap per symbol, flagging meaningful divergences.
 """
@@ -12,10 +12,13 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-# noches bot databases (best-effort; absent → realized side is simply empty)
+from src import local_config
+
+# live bridge-bot databases from site-local config (best-effort; absent →
+# realized side is simply empty)
 DEFAULT_DB_PATHS = {
-    "mickey": "/home/h0551user/noches/user_data/mickey.sqlite",
-    "walle": "/home/h0551user/noches/user_data/walle.sqlite",
+    name.lower(): str(p)
+    for name, p in local_config.bridge_bot_databases().items()
 }
 
 

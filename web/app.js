@@ -989,7 +989,7 @@ function renderEdges(data) {
 }
 function edgesDeployPill(c) {
   // Distinguishes what a bot can actually trade (deployable) from a raw passed
-  // edge. Only `deployable` rows reach the QuantResearchBridge bot (Wall_E);
+  // edge. Only `deployable` rows reach the live bridge bot;
   // `robust` survived the cross-venue/DSR gate but isn't bridge-supported;
   // `passed` only cleared the loose OOS gate (often illiquid / curve-fit).
   if (c.deployable) return `<span class="pill" style="background:rgba(52,211,153,.18);color:#34d399;border:1px solid rgba(52,211,153,.35)">${t('edges_deploy_deployable')}</span>`;

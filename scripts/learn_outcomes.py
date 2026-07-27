@@ -6,7 +6,7 @@ persisted priors, fitness calibration, and a retrain/drop priority list.
     .venv/bin/python scripts/learn_outcomes.py --half-life 21 --quiet
 
 Cron (after the nightly rotation has appended the day's ledger rows):
-    30 23 * * * cd /home/h0551user/Quant_research && .venv/bin/python scripts/learn_outcomes.py --quiet >> logs/learn_outcomes.log 2>&1
+    30 23 * * * cd $QR_ROOT && .venv/bin/python scripts/learn_outcomes.py --quiet >> logs/learn_outcomes.log 2>&1
 """
 
 from __future__ import annotations

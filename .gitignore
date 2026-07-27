@@ -25,3 +25,7 @@ reports/**/*.html
 !outputs/figures/.gitkeep
 
 configs/app.json
+
+# ── site-local deployment overrides (never committed) ──
+configs/local.json
+configs/manual_drops.json

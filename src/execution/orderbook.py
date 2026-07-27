@@ -1,4 +1,4 @@
-"""L2 order-book microstructure features for the noches venues.
+"""L2 order-book microstructure features for the supported venues.
 
 Slippage analytics (slippage.py) tells you what execution *cost* after the fact.
 This tells you what it *would* cost right now, from live depth — the input a bot
@@ -11,7 +11,7 @@ no keys):
   * book imbalance over N levels  (bid_vol - ask_vol)/(bid_vol + ask_vol)
   * **sweep_bps(target_notional)** — how many bps you'd pay to market-fill a
     given notional by walking the book. This is a live, pre-trade slippage
-    estimate; the same number the bots bleed on taker exits (see Popeye).
+    estimate; the same number live bots bleed on taker exits.
 
 Order-flow imbalance (OFI) needs two consecutive snapshots, so it is computed
 downstream from the rolling parquet, not per-fetch.
@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import numpy as np
 
-# ccxt exchange id + defaultType per noches venue
+# ccxt exchange id + defaultType per supported venue
 VENUES = {
     "bybit": {"id": "bybit", "type": "swap"},
     "gate": {"id": "gateio", "type": "swap"},
