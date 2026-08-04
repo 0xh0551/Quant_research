@@ -848,6 +848,28 @@ def experiments() -> dict[str, Any]:
     return {"runs": recent_runs(50)}
 
 
+# ── Fleet risk aggregation ─────────────────────────────────────────────────────
+
+@app.get("/api/fleet-risk")
+def fleet_risk_route(cached: int = 0) -> dict[str, Any]:
+    """Fleet-wide exposure/leverage/crowding snapshot across all configured bots.
+
+    Live by default (sqlite + parquet reads, sub-second); ``?cached=1`` returns
+    the last written ``outputs/fleet_risk.json`` instead.
+    """
+    from src.portfolio import fleet_risk as _fleet
+
+    if cached:
+        path = OUTPUTS_DIR / "fleet_risk.json"
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return _fleet.write_snapshot()
+    except Exception as exc:  # degrade to an explicit empty snapshot, never 500
+        logger.exception("fleet risk snapshot failed")
+        return {"error": str(exc), "fleet": {}, "positions": [], "alerts": []}
+
+
 # ── Exchange-prefixed store ────────────────────────────────────────────────────
 
 class _ExchangePrefixedStore(ParquetDataStore):
