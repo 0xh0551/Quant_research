@@ -57,6 +57,11 @@
         <span data-i18n="nav_crossex">بین‌صرافی</span>
         <span class="nav-badge" style="background:var(--cyan);color:#04211d">α</span>
       </div>
+      <div class="nav-item" data-section="fleet" onclick="showSection('fleet')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6z"/><path d="M8 12l2.5 2.5L16 9"/></svg>
+        <span data-i18n="nav_fleet">ریسک ناوگان</span>
+        <span class="nav-badge" id="fleet-alert-badge" style="background:var(--red);display:none">!</span>
+      </div>
       <div class="nav-item" data-section="portfolio" onclick="showSection('portfolio')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z"/><path d="M3.27 6.96L12 12.01l8.73-5.05M12 22.08V12"/></svg>
         <span data-i18n="nav_portfolio">پرتفوی</span>
@@ -395,6 +400,28 @@
           <div id="epb-detail" style="font-size:11px;color:var(--text2);padding:5px 10px 2px;text-align:center"></div>
         </div>
         <div id="edges-body"><div class="empty-state"><span class="spinner" style="width:28px;height:28px"></span></div></div>
+      </div>
+
+      <!-- ═══ FLEET RISK ═══ -->
+      <div class="section" id="sec-fleet">
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--cyan)">🛡 <span data-i18n="fleet_title">ریسک تجمیعی ناوگان</span></div>
+            <div class="note" style="margin-top:4px" data-i18n="fleet_sub_note"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <span id="fleet-generated" style="font-size:12px;color:var(--text3)"></span>
+            <button class="btn btn-primary btn-sm" onclick="loadFleetRisk()">↻ <span data-i18n="fleet_refresh_live">اسنپ‌شات زنده</span></button>
+          </div>
+        </div>
+        <div id="fleet-alerts"></div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_metrics">شاخص‌های ناوگان</span></div><div class="metric-grid" id="fleet-metrics"></div></div>
+        <div class="grid-2">
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="fleet_exposure_chart">اکسپوژر خالص هر دارایی</span></div><div id="chart-fleet-exposure" style="height:340px"></div></div>
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="fleet_corr_chart">همبستگی دارایی‌های باز (۳۰ روز)</span></div><div id="chart-fleet-corr" style="height:340px"></div></div>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_per_bot">وضعیت هر بات</span></div><div class="table-wrap" id="fleet-bot-table"></div></div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_positions">پوزیشن‌های باز (کل ناوگان)</span></div><div class="table-wrap" id="fleet-pos-table" style="max-height:420px;overflow-y:auto"></div></div>
       </div>
 
       <!-- ═══ CROSS-EXCHANGE ═══ -->
