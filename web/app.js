@@ -117,6 +117,7 @@ function showSection(name) {
   if (name === 'portfolio') initPortfolio();
   if (name === 'models') loadModels();
   if (name === 'quality') loadQuality();
+  if (name === 'fleet') loadFleetRisk();
 }
 
 function refreshCurrentSection() {
@@ -132,6 +133,7 @@ function refreshCurrentSection() {
   else if (s === 'portfolio') initPortfolio();
   else if (s === 'models') loadModels();
   else if (s === 'quality') loadQuality();
+  else if (s === 'fleet') loadFleetRisk();
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -1552,6 +1554,125 @@ function loadQuality() {
     fwd.innerHTML = `<div class="table-wrap"><table><thead><tr><th>${t('fwd_col_symbol')}</th><th>${t('fwd_col_expected')}</th><th>${t('fwd_col_realized')}</th><th>${t('fwd_col_trades')}</th><th>${t('fwd_col_divergence')}</th><th>${t('fwd_col_status')}</th></tr></thead><tbody>${rows}</tbody></table></div>
       ${d.alerts && d.alerts.length ? '' : `<div class="note">${t('fwd_no_alerts')} · ${d.total_closed_trades} trades</div>`}`;
   });
+}
+
+// ═══════════════════════════════════════════════════════════════ FLEET RISK
+const fmtUsd = x => (x == null ? '—' : '$' + Number(x).toLocaleString('en-US', { maximumFractionDigits: 0 }));
+
+async function loadFleetRisk() {
+  const metrics = document.getElementById('fleet-metrics');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  let d;
+  try { d = await (await fetch('/api/fleet-risk')).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  state.fleet = d;
+
+  document.getElementById('fleet-generated').textContent =
+    d.generated_at ? fmtDateTime(d.generated_at) : '';
+
+  // alerts + sidebar badge
+  const alertsEl = document.getElementById('fleet-alerts');
+  const badge = document.getElementById('fleet-alert-badge');
+  const alerts = d.alerts || [];
+  if (badge) {
+    badge.style.display = alerts.length ? '' : 'none';
+    badge.textContent = alerts.length;
+  }
+  if (!alerts.length) {
+    alertsEl.innerHTML = `<div class="ok" style="margin-bottom:16px">✓ ${t('fleet_ok')}</div>`;
+  } else {
+    alertsEl.innerHTML = alerts.map(a => {
+      const msg = t('fleet_alert_' + a.code, { value: a.value == null ? '—' : a.value, limit: a.limit, context: esc(a.context || '') });
+      const crit = a.level === 'critical';
+      return `<div class="alert" style="${crit ? 'border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.08)' : ''}">
+        <b style="color:${crit ? 'var(--red)' : 'var(--yellow)'}">${crit ? '⛔' : '⚠'}</b> ${msg}</div>`;
+    }).join('');
+  }
+
+  const f = d.fleet || {};
+  if (!d.positions || !Object.keys(f).length) {
+    metrics.innerHTML = `<p class="muted" style="grid-column:1/-1">${t('fleet_empty')}</p>`;
+    return;
+  }
+  const mc = (label, val, cls) =>
+    `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}">${val}</div></div>`;
+  metrics.innerHTML =
+    mc(t('fleet_m_equity'), fmtUsd(f.equity_usd)) +
+    mc(t('fleet_m_gross'), fmtUsd(f.gross_notional)) +
+    mc(t('fleet_m_net'), fmtUsd(f.net_notional), f.net_notional >= 0 ? 'pos' : 'neg') +
+    mc(t('fleet_m_lev'), (f.gross_leverage ?? 0) + 'x') +
+    mc(t('fleet_m_delta'), fmtUsd(f.net_beta_delta) + (f.net_beta_delta_pct != null ? ` <span style="font-size:12px;color:var(--text3)">(${f.net_beta_delta_pct}%)</span>` : ''), f.net_beta_delta >= 0 ? 'pos' : 'neg') +
+    mc(t('fleet_m_hhi'), f.hhi ?? '—') +
+    mc(t('fleet_m_npos'), f.n_positions ?? 0) +
+    mc(t('fleet_m_corr'), f.avg_pairwise_corr ?? '—');
+
+  renderFleetExposureChart(d);
+  renderFleetCorrChart(d);
+  renderFleetBotTable(d);
+  renderFleetPosTable(d);
+}
+
+function renderFleetExposureChart(d) {
+  const assets = (d.per_asset || []).slice(0, 20).reverse();
+  const el = document.getElementById('chart-fleet-exposure');
+  if (!assets.length) { el.innerHTML = `<div class="empty-state"><p>${t('fleet_empty')}</p></div>`; return; }
+  Plotly.newPlot(el, [{
+    type: 'bar', orientation: 'h',
+    y: assets.map(a => a.base),
+    x: assets.map(a => a.beta_delta),
+    marker: { color: assets.map(a => a.beta_delta >= 0 ? '#34d399' : '#f87171') },
+    customdata: assets.map(a => [a.gross_notional, a.beta_btc ?? '—', a.bots.join(', ')]),
+    hovertemplate: '<b>%{y}</b><br>βΔ: %{x:$,.0f}<br>gross: %{customdata[0]:$,.0f}<br>β: %{customdata[1]}<br>%{customdata[2]}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 60, r: 20, t: 10, b: 40 },
+    xaxis: { gridcolor: GRID, zerolinecolor: '#3a4761' }, yaxis: { gridcolor: GRID },
+  }, { displayModeBar: false, responsive: true });
+}
+
+function renderFleetCorrChart(d) {
+  const c = d.correlation || {};
+  const el = document.getElementById('chart-fleet-corr');
+  if (!c.bases || c.bases.length < 2 || !c.matrix.length) {
+    el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return;
+  }
+  Plotly.newPlot(el, [{
+    type: 'heatmap', x: c.bases, y: c.bases, z: c.matrix,
+    zmin: -1, zmax: 1, colorscale: [[0, '#f87171'], [0.5, '#11151f'], [1, '#2dd4bf']],
+    hovertemplate: '%{y} × %{x}: %{z}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 60, r: 20, t: 10, b: 50 },
+  }, { displayModeBar: false, responsive: true });
+}
+
+function renderFleetBotTable(d) {
+  const rows = (d.per_bot || []).map(b => `<tr>
+    <td><b>${esc(b.bot)}</b>${b.db_found ? '' : ' <span class="badge badge-red">DB?</span>'}</td>
+    <td>${fmtUsd(b.equity_usd)}</td>
+    <td class="${b.realized_pnl >= 0 ? 'pos' : 'neg'}">${fmtUsd(b.realized_pnl)}</td>
+    <td class="${(b.unrealized_pnl || 0) >= 0 ? 'pos' : 'neg'}">${fmtUsd(b.unrealized_pnl)}</td>
+    <td>${fmtUsd(b.gross_notional)}</td>
+    <td>${b.gross_leverage != null ? b.gross_leverage + 'x' : '—'}</td>
+    <td>${b.n_open}</td></tr>`).join('');
+  document.getElementById('fleet-bot-table').innerHTML =
+    `<table><thead><tr><th>${t('fleet_h_bot')}</th><th>${t('fleet_h_equity')}</th><th>${t('fleet_h_realized')}</th><th>${t('fleet_h_upnl')}</th><th>${t('fleet_h_gross')}</th><th>${t('fleet_h_lev')}</th><th>${t('fleet_h_open')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderFleetPosTable(d) {
+  const betas = {};
+  (d.per_asset || []).forEach(a => { betas[a.base] = a.beta_btc; });
+  const rows = (d.positions || []).map(p => `<tr>
+    <td class="muted">${esc(p.bot)}</td>
+    <td><b>${esc(p.pair)}</b></td>
+    <td><span class="pill ${p.side}">${p.side}</span></td>
+    <td>${p.leverage}x</td>
+    <td>${fmtUsd(p.stake_usd)}</td>
+    <td>${fmtUsd(p.notional_usd)}</td>
+    <td class="${(p.unrealized_pnl || 0) >= 0 ? 'pos' : 'neg'}">${p.unrealized_pnl != null ? fmtUsd(p.unrealized_pnl) : '—'}</td>
+    <td>${betas[p.base] ?? '—'}</td>
+    <td class="muted">${p.price_age_hours != null ? p.price_age_hours + 'h' : '—'}${p.price_stale ? ` <span class="badge badge-yellow">${t('fleet_stale')}</span>` : ''}</td>
+  </tr>`).join('');
+  document.getElementById('fleet-pos-table').innerHTML =
+    `<table><thead><tr><th>${t('fleet_h_bot')}</th><th>${t('fleet_h_pair')}</th><th>${t('fleet_h_side')}</th><th>${t('fleet_h_lev')}</th><th>${t('fleet_h_stake')}</th><th>${t('fleet_h_notional')}</th><th>${t('fleet_h_upnl')}</th><th>${t('fleet_h_beta')}</th><th>${t('fleet_h_age')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT
