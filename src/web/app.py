@@ -869,6 +869,29 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
         return {"error": str(exc), "edges": []}
 
 
+# ── PnL attribution ───────────────────────────────────────────────────────────
+
+@app.get("/api/attribution")
+def attribution_route(days: float = 45.0, refresh: int = 0) -> dict[str, Any]:
+    """Per-bot decomposition of net PnL into intended alpha, entry/exit
+    slippage, fees, funding and residual + MFE exit-efficiency."""
+    from src.analysis import attribution as _attr
+
+    path = OUTPUTS_DIR / "attribution_report.json"
+    if not refresh and path.exists():
+        try:
+            cached = json.loads(path.read_text(encoding="utf-8"))
+            if cached.get("window_days") == days:
+                return cached
+        except Exception:
+            pass
+    try:
+        return _attr.write_report(since_days=days)
+    except Exception as exc:
+        logger.exception("attribution report failed")
+        return {"error": str(exc), "per_bot": [], "totals": {}}
+
+
 # ── Trial ledger (cumulative multiple-testing account) ────────────────────────
 
 @app.get("/api/trials")

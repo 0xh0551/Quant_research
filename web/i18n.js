@@ -254,6 +254,23 @@ const I18N = {
     fleet_alert_crowding_corr: 'میانگین همبستگی دارایی‌های باز {value} است (حد {limit}) — ریسک هم‌جهتی',
     fleet_empty: 'هیچ پوزیشن بازی در ناوگان نیست یا local.json پیکربندی نشده است.',
 
+    /* ── attribution ──────────────────────────────────────────────── */
+    nav_attribution: 'اتریبیوشن',
+    title_attribution: 'تجزیهٔ PnL', sub_attribution: 'هر دلار سود/ضرر: آلفای تصمیم، اسلیپیج، کارمزد، فاندینگ، MFE-Capture',
+    attr_title: 'تجزیهٔ PnL — هر دلار کجا رفت؟',
+    attr_sub_note: 'هر ترید بسته به پنج جزء تفکیک می‌شود: آلفایی که استراتژی تصمیم گرفت، آنچه اسلیپیج ورود/خروج پس داد، آنچه کارمزد برداشت، فاندینگ، و باقی‌مانده. جداکنندهٔ «زوال آلفا» از «زوال اجرا».',
+    attr_recalc: 'محاسبه',
+    attr_totals: 'جمع ناوگان',
+    attr_waterfall: 'آبشار PnL',
+    attr_capture_chart: 'میانگین MFE-Capture هر بات',
+    attr_bot_table: 'تفکیک بات‌ها',
+    attr_reason_table: 'تفکیک دلیل خروج (بات انتخاب‌شده)',
+    attr_fleet: 'کل ناوگان',
+    attr_m_intended: 'آلفای تصمیم', attr_m_slip: 'اسلیپیج', attr_m_fees: 'کارمزد',
+    attr_m_funding: 'فاندینگ', attr_m_net: 'خالص', attr_m_residual: 'باقی‌مانده',
+    attr_w_entry_slip: 'اسلیپیج ورود', attr_w_exit_slip: 'اسلیپیج خروج',
+    attr_h_trades: 'ترید', attr_h_reason: 'دلیل خروج',
+
     /* ── trial ledger ─────────────────────────────────────────────── */
     nav_trials: 'دفتر آزمون‌ها',
     title_trials: 'دفتر آزمون‌ها', sub_trials: 'حساب تجمعی چندآزمونی — DSR در برابر همهٔ فرضیه‌هایی که تا امروز آزموده‌ایم',
@@ -662,6 +679,23 @@ const I18N = {
     fleet_alert_bot_db_missing: 'Bot {context} database is unreachable',
     fleet_alert_crowding_corr: 'Average correlation of held assets is {value} (limit {limit}) — crowding risk',
     fleet_empty: 'No open positions in the fleet, or local.json is not configured.',
+
+    /* ── attribution ──────────────────────────────────────────────── */
+    nav_attribution: 'Attribution',
+    title_attribution: 'PnL Attribution', sub_attribution: 'Every dollar of PnL: decision alpha, slippage, fees, funding, MFE capture',
+    attr_title: 'PnL attribution — where did each dollar go?',
+    attr_sub_note: 'Each closed trade decomposes into five parts: the alpha the strategy decided, what entry/exit slippage gave back, what fees took, funding, and a residual. This separates alpha decay from execution decay.',
+    attr_recalc: 'Compute',
+    attr_totals: 'Fleet totals',
+    attr_waterfall: 'PnL waterfall',
+    attr_capture_chart: 'Mean MFE capture per bot',
+    attr_bot_table: 'Per-bot breakdown',
+    attr_reason_table: 'Exit-reason breakdown (selected bot)',
+    attr_fleet: 'Whole fleet',
+    attr_m_intended: 'Decision alpha', attr_m_slip: 'Slippage', attr_m_fees: 'Fees',
+    attr_m_funding: 'Funding', attr_m_net: 'Net', attr_m_residual: 'Residual',
+    attr_w_entry_slip: 'Entry slippage', attr_w_exit_slip: 'Exit slippage',
+    attr_h_trades: 'Trades', attr_h_reason: 'Exit reason',
 
     /* ── trial ledger ─────────────────────────────────────────────── */
     nav_trials: 'Trial Ledger',
