@@ -87,6 +87,11 @@
         <span data-i18n="nav_models">مدل‌ها</span>
         <span class="nav-badge" style="background:var(--purple)">ML</span>
       </div>
+      <div class="nav-item" data-section="pipeline" onclick="showSection('pipeline')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/><circle cx="18" cy="12" r="0.5"/></svg>
+        <span data-i18n="nav_pipeline">سلامت پایپ‌لاین</span>
+        <span class="nav-badge" id="pipeline-alert-badge" style="background:var(--red);display:none">!</span>
+      </div>
       <div class="nav-item" data-section="quality" onclick="showSection('quality')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
         <span data-i18n="nav_quality">کیفیت داده</span>
@@ -637,6 +642,23 @@
           <p style="font-size:12px;color:var(--text3);margin-bottom:12px" data-i18n="fwd_hint"></p>
           <div id="forward-test-body"></div>
         </div>
+      </div>
+
+      <!-- ═══ PIPELINE HEALTH ═══ -->
+      <div class="section" id="sec-pipeline">
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--cyan)">💓 <span data-i18n="pipe_title">ضربان پایپ‌لاین</span></div>
+            <div class="note" style="margin-top:4px" data-i18n="pipe_sub_note"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <span id="pipe-generated" style="font-size:12px;color:var(--text3)"></span>
+            <button class="btn btn-primary btn-sm" onclick="loadPipeline()">↻ <span data-i18n="pipe_audit">بازرسی</span></button>
+          </div>
+        </div>
+        <div id="pipe-banner"></div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="pipe_jobs">وضعیت جاب‌ها</span></div><div class="inv-grid" id="pipe-grid" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div></div>
+        <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="pipe_history">تاریخچهٔ سلامت (هر بازرسی)</span></div><div id="chart-pipe-history" style="height:280px"></div></div>
       </div>
 
       <!-- ═══ LOGS ═══ -->
