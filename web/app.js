@@ -434,6 +434,8 @@ async function startResearch() {
     initial_capital: parseFloat(document.getElementById('res-capital').value) || 10000,
     fee_bps: parseFloat(document.getElementById('res-fee').value) || 10,
     slippage_bps: parseFloat(document.getElementById('res-slippage').value) || 2,
+    execution_style: state.executionStyle || 'taker',
+    use_real_funding: document.getElementById('res-real-funding').checked,
   };
   try {
     const r = await fetch('/api/research', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
@@ -570,6 +572,16 @@ function renderMetricsTable() {
     { key: 'profit_factor', label: t('m_profit_factor'), fmt: n2, higher: true },
     { key: 'win_rate', label: t('m_win_rate'), fmt: pct, higher: true },
   ];
+  // execution-sim metrics appear only when the maker/realistic engine ran
+  if (strats.some(s => s.metrics.exec_fill_ratio !== undefined)) {
+    METRICS.push(
+      { key: 'exec_fill_ratio', label: t('m_exec_fill_ratio'), fmt: pct, higher: true },
+      { key: 'exec_maker_fill_rate', label: t('m_exec_maker_rate'), fmt: pct, higher: true },
+      { key: 'exec_fallback_rate', label: t('m_exec_fallback'), fmt: pct, higher: false },
+      { key: 'exec_missed_rate', label: t('m_exec_missed'), fmt: pct, higher: false },
+      { key: 'exec_effective_cost_bps', label: t('m_exec_cost'), fmt: n2, higher: false },
+    );
+  }
   const bhMetrics = ds.buy_hold_metrics || {};
   const rows = METRICS.map(m => { const vals = strats.map(s => s.metrics[m.key]); return { m, vals, bhVal: bhMetrics[m.key], best: m.higher ? Math.max(...vals) : Math.min(...vals), worst: m.higher ? Math.min(...vals) : Math.max(...vals) }; });
   document.getElementById('metrics-table-wrap').innerHTML = `<table>
@@ -1554,6 +1566,13 @@ function loadQuality() {
     fwd.innerHTML = `<div class="table-wrap"><table><thead><tr><th>${t('fwd_col_symbol')}</th><th>${t('fwd_col_expected')}</th><th>${t('fwd_col_realized')}</th><th>${t('fwd_col_trades')}</th><th>${t('fwd_col_divergence')}</th><th>${t('fwd_col_status')}</th></tr></thead><tbody>${rows}</tbody></table></div>
       ${d.alerts && d.alerts.length ? '' : `<div class="note">${t('fwd_no_alerts')} · ${d.total_closed_trades} trades</div>`}`;
   });
+}
+
+// ═══════════════════════════════════════════════════════════════ EXECUTION STYLE
+function setExecStyle(style, btn) {
+  state.executionStyle = style;
+  btn.parentElement.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
 }
 
 // ═══════════════════════════════════════════════════════════════ FLEET RISK

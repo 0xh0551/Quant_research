@@ -215,6 +215,17 @@
                 <div class="form-group"><label data-i18n="res_fee">کارمزد (bps)</label><input type="number" id="res-fee" value="10" min="0" max="100"/></div>
                 <div class="form-group"><label data-i18n="res_slippage">اسلیپیج (bps)</label><input type="number" id="res-slippage" value="2" min="0" max="50"/></div>
               </div>
+              <div class="form-group" style="margin-bottom:0">
+                <label data-i18n="res_exec_style">مدل اجرا</label>
+                <div class="toggle-group">
+                  <button class="toggle-btn active" onclick="setExecStyle('taker',this)" data-i18n="res_exec_taker">تیکر (سریع)</button>
+                  <button class="toggle-btn" onclick="setExecStyle('maker',this)" data-i18n="res_exec_maker">میکر (شبیه‌ساز سفارش)</button>
+                </div>
+                <label style="display:flex;align-items:center;gap:7px;margin:10px 0 0;font-size:12px;cursor:pointer">
+                  <input type="checkbox" id="res-real-funding"/><span data-i18n="res_real_funding">فاندینگ واقعی (تاریخچهٔ ذخیره‌شده، فقط فیوچرز)</span>
+                </label>
+                <div style="font-size:10px;color:var(--text3);margin-top:5px" data-i18n="res_exec_hint">میکر: فیل فقط با عبور قیمت از لیمیت + صبر/فال‌بک تیکر + فیل جزئی با سقف مشارکت حجم</div>
+              </div>
             </div>
           </div>
           <div>
