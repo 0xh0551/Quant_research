@@ -27,6 +27,7 @@ from src.analysis import cross_exchange as _cx
 from src.analysis import forward_test as _fwd
 from src.analysis.statistics import bootstrap_metric_ci
 from src.backtesting.engine import BacktestConfig, VectorizedBacktester
+from src.backtesting import execution_sim as _exec_sim
 from src.data.downloader import CCXTFallbackDownloader, DataIngestionPipeline, DownloadRequest
 from src.ml import model_eval as _ml_eval
 from src.portfolio import construction as _pf
@@ -141,6 +142,9 @@ class ResearchRequest(BaseModel):
     initial_capital: float = 10_000.0
     fee_bps: float = 10.0
     slippage_bps: float = 2.0
+    # execution realism (src.backtesting.execution_sim)
+    execution_style: str = "taker"      # "taker" (fast vectorized) | "maker" (order sim)
+    use_real_funding: bool = False      # accrue saved funding-rate history on futures
 
 
 class DetailedInsightRequest(BaseModel):
@@ -990,8 +994,32 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 slippage_bps=req.slippage_bps,
                 periods_per_year=ppy,
                 allow_short=allow_short,
+                hours_per_bar=8760.0 / ppy,
             )
             backtester = VectorizedBacktester(config)
+
+            # optional execution realism (maker order sim / real funding accrual)
+            realistic = req.execution_style == "maker" or req.use_real_funding
+            funding_series = None
+            if req.use_real_funding and allow_short:
+                funding_series = _exec_sim.load_funding_series(
+                    exchange.split("_")[0], symbol, ROOT / "data" / "funding"
+                )
+            exec_params = _exec_sim.ExecutionParams(
+                style=req.execution_style,
+                taker_fee_bps=req.fee_bps,
+                taker_slippage_bps=req.slippage_bps,
+            )
+
+            def _bt_run(signals: pd.Series):
+                if realistic:
+                    return _exec_sim.run_realistic(
+                        df.set_index("timestamp"),
+                        signals.set_axis(df["timestamp"]),
+                        config, exec_params, funding_series,
+                    )
+                return backtester.run(df, signals)
+
             bh_result = backtester.run(df, pd.Series(1.0, index=df.index))
             timestamps = df["timestamp"].dt.strftime("%Y-%m-%d %H:%M").tolist()
             price_ts = _downsample(timestamps, 1000)
@@ -1031,7 +1059,7 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 )
                 try:
                     signals = build_strategy_signals(df, strategy, allow_short=allow_short)
-                    result = backtester.run(df, signals)
+                    result = _bt_run(signals)
                     log_returns = np.log1p(result.returns)
                     equity_ds = _downsample(result.equity.tolist(), 1000)
                     dd_ds = _downsample((result.equity / result.equity.cummax() - 1).tolist(), 1000)
