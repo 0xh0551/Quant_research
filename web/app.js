@@ -121,6 +121,7 @@ function showSection(name) {
   if (name === 'capacity') loadCapacity();
   if (name === 'stress') loadStress();
   if (name === 'trials') loadTrials();
+  if (name === 'attribution') loadAttribution();
 }
 
 function refreshCurrentSection() {
@@ -140,6 +141,7 @@ function refreshCurrentSection() {
   else if (s === 'capacity') loadCapacity(true);
   else if (s === 'stress') loadStress();
   else if (s === 'trials') loadTrials();
+  else if (s === 'attribution') loadAttribution(true);
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -1928,6 +1930,119 @@ async function loadTrials() {
       <td>${demoted ? `<span class="badge badge-red">${t('trials_demoted')}</span>` : e.dsr_cum != null && e.dsr_cum >= 0.95 ? `<span class="badge badge-green">${t('trials_survives')}</span>` : `<span class="badge badge-gray">—</span>`}</td></tr>`;
     }).join('')}</tbody></table>`
     : `<p class="muted" style="padding:16px">${t('trials_empty_short')}</p>`;
+}
+
+// ═══════════════════════════════════════════════════════════════ ATTRIBUTION
+async function loadAttribution(refresh = false) {
+  const metrics = document.getElementById('attr-metrics');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  const days = document.getElementById('attr-days').value;
+  let d;
+  try { d = await (await fetch(`/api/attribution?days=${days}${refresh ? '&refresh=1' : ''}`)).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  state.attribution = d;
+
+  const tt = d.totals || {};
+  const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:19px">${val}</div></div>`;
+  const money = (v, invert) => v == null ? '—' : fmtUsd(invert ? -v : v);
+  const clsOf = (v, invert) => v == null ? '' : ((invert ? -v : v) >= 0 ? 'pos' : 'neg');
+  metrics.innerHTML =
+    mc(t('attr_m_intended'), money(tt.intended), clsOf(tt.intended)) +
+    mc(t('attr_m_slip'), money((tt.entry_slip || 0) + (tt.exit_slip || 0), true), clsOf((tt.entry_slip || 0) + (tt.exit_slip || 0), true)) +
+    mc(t('attr_m_fees'), money(tt.fees, true), 'neg') +
+    mc(t('attr_m_funding'), money(tt.funding), clsOf(tt.funding)) +
+    mc(t('attr_m_net'), money(tt.net), clsOf(tt.net)) +
+    mc(t('attr_m_residual'), money(tt.residual), 'muted');
+
+  const bots = (d.per_bot || []).filter(b => b.n_trades);
+  const sel = document.getElementById('attr-bot-select');
+  sel.innerHTML = `<option value="__fleet__">${t('attr_fleet')}</option>` +
+    bots.map(b => `<option value="${esc(b.bot)}">${esc(b.bot)}</option>`).join('');
+  renderAttrWaterfall();
+  renderAttrCapture(bots);
+  renderAttrBotTable(bots);
+}
+
+function renderAttrWaterfall() {
+  const d = state.attribution; if (!d) return;
+  const key = document.getElementById('attr-bot-select').value;
+  const bots = (d.per_bot || []).filter(b => b.n_trades);
+  const c = key === '__fleet__' ? d.totals : (bots.find(b => b.bot === key) || {}).components;
+  const el = document.getElementById('chart-attr-waterfall');
+  if (!c) { el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return; }
+  Plotly.newPlot(el, [{
+    type: 'waterfall', orientation: 'v',
+    measure: ['relative', 'relative', 'relative', 'relative', 'relative', 'relative', 'total'],
+    x: [t('attr_m_intended'), t('attr_w_entry_slip'), t('attr_w_exit_slip'), t('attr_m_fees'), t('attr_m_funding'), t('attr_m_residual'), t('attr_m_net')],
+    y: [c.intended, -(c.entry_slip || 0), -(c.exit_slip || 0), -(c.fees || 0), c.funding || 0, c.residual || 0, 0],
+    connector: { line: { color: '#2f3b57' } },
+    increasing: { marker: { color: '#34d399' } },
+    decreasing: { marker: { color: '#f87171' } },
+    totals: { marker: { color: '#818cf8' } },
+    hovertemplate: '%{x}: %{y:$,.2f}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 55, r: 20, t: 12, b: 70 },
+    yaxis: { gridcolor: GRID, zerolinecolor: '#3a4761' }, xaxis: { tickangle: -30 },
+  }, { displayModeBar: false, responsive: true });
+  renderAttrReasonTable();
+}
+
+function renderAttrCapture(bots) {
+  const el = document.getElementById('chart-attr-capture');
+  const withCap = bots.filter(b => b.mfe_capture_mean != null);
+  if (!withCap.length) { el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return; }
+  Plotly.newPlot(el, [{
+    type: 'bar',
+    x: withCap.map(b => b.bot),
+    y: withCap.map(b => b.mfe_capture_mean),
+    marker: { color: withCap.map(b => b.mfe_capture_mean >= 0.3 ? '#34d399' : b.mfe_capture_mean >= 0 ? '#fbbf24' : '#f87171') },
+    customdata: withCap.map(b => [b.mfe_mean_pct, b.n_capture_measured]),
+    hovertemplate: '<b>%{x}</b><br>capture: %{y}<br>MFE μ: %{customdata[0]}%<br>n: %{customdata[1]}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 50, r: 20, t: 12, b: 45 },
+    yaxis: { gridcolor: GRID, zerolinecolor: '#3a4761', title: { text: 'MFE capture', font: { size: 11 } } },
+  }, { displayModeBar: false, responsive: true });
+}
+
+function renderAttrBotTable(bots) {
+  const rows = bots.map(b => {
+    const c = b.components || {};
+    const slip = (c.entry_slip || 0) + (c.exit_slip || 0);
+    return `<tr><td><b>${esc(b.bot)}</b></td><td>${b.n_trades}</td>
+      <td class="${c.intended >= 0 ? 'pos' : 'neg'}">${fmtUsd(c.intended)}</td>
+      <td class="${slip <= 0 ? 'pos' : 'neg'}">${fmtUsd(-slip)}</td>
+      <td class="neg">${fmtUsd(-(c.fees || 0))}</td>
+      <td class="${(c.funding || 0) >= 0 ? 'pos' : 'neg'}">${fmtUsd(c.funding)}</td>
+      <td class="${c.net >= 0 ? 'pos' : 'neg'}"><b>${fmtUsd(c.net)}</b></td>
+      <td class="${b.mfe_capture_mean == null ? 'muted' : b.mfe_capture_mean >= 0.3 ? 'pos' : 'neg'}">${b.mfe_capture_mean ?? '—'}</td>
+      <td class="muted">${b.mae_mean_pct != null ? b.mae_mean_pct + '%' : '—'}</td></tr>`;
+  }).join('');
+  document.getElementById('attr-bot-table').innerHTML =
+    `<table><thead><tr><th>${t('fleet_h_bot')}</th><th>${t('attr_h_trades')}</th><th>${t('attr_m_intended')}</th><th>${t('attr_m_slip')}</th><th>${t('attr_m_fees')}</th><th>${t('attr_m_funding')}</th><th>${t('attr_m_net')}</th><th>MFE-cap</th><th>MAE μ</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderAttrReasonTable() {
+  const d = state.attribution; if (!d) return;
+  const key = document.getElementById('attr-bot-select').value;
+  const el = document.getElementById('attr-reason-table');
+  const bots = (d.per_bot || []).filter(b => b.n_trades);
+  let reasons;
+  if (key === '__fleet__') {
+    const merged = {};
+    bots.forEach(b => (b.by_exit_reason || []).forEach(r => {
+      const m = merged[r.exit_reason] || (merged[r.exit_reason] = { exit_reason: r.exit_reason, n: 0, net: 0, intended: 0 });
+      m.n += r.n; m.net += r.net; m.intended += r.intended;
+    }));
+    reasons = Object.values(merged).sort((a, b) => a.net - b.net);
+  } else {
+    reasons = (bots.find(b => b.bot === key) || {}).by_exit_reason || [];
+  }
+  el.innerHTML = reasons.length ? `<table>
+    <thead><tr><th>${t('attr_h_reason')}</th><th>${t('attr_h_trades')}</th><th>${t('attr_m_intended')}</th><th>${t('attr_m_net')}</th></tr></thead>
+    <tbody>${reasons.map(r => `<tr><td><b>${esc(r.exit_reason)}</b></td><td>${r.n}</td>
+      <td class="${r.intended >= 0 ? 'pos' : 'neg'}">${fmtUsd(r.intended)}</td>
+      <td class="${r.net >= 0 ? 'pos' : 'neg'}">${fmtUsd(r.net)}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="muted" style="padding:16px">—</p>`;
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT

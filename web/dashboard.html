@@ -62,6 +62,10 @@
         <span data-i18n="nav_fleet">ریسک ناوگان</span>
         <span class="nav-badge" id="fleet-alert-badge" style="background:var(--red);display:none">!</span>
       </div>
+      <div class="nav-item" data-section="attribution" onclick="showSection('attribution')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 010 20M12 12l7-7M12 12h10"/></svg>
+        <span data-i18n="nav_attribution">اتریبیوشن</span>
+      </div>
       <div class="nav-item" data-section="trials" onclick="showSection('trials')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5z"/><path d="M9 7h7M9 11h7"/></svg>
         <span data-i18n="nav_trials">دفتر آزمون‌ها</span>
@@ -445,6 +449,35 @@
         </div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_per_bot">وضعیت هر بات</span></div><div class="table-wrap" id="fleet-bot-table"></div></div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_positions">پوزیشن‌های باز (کل ناوگان)</span></div><div class="table-wrap" id="fleet-pos-table" style="max-height:420px;overflow-y:auto"></div></div>
+      </div>
+
+      <!-- ═══ ATTRIBUTION ═══ -->
+      <div class="section" id="sec-attribution">
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--cyan)">🧾 <span data-i18n="attr_title">تجزیهٔ PnL — هر دلار کجا رفت؟</span></div>
+            <div class="note" style="margin-top:4px" data-i18n="attr_sub_note"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center">
+            <select id="attr-days" style="width:110px" onchange="loadAttribution(true)">
+              <option value="7">7d</option><option value="30">30d</option>
+              <option value="45" selected>45d</option><option value="90">90d</option><option value="365">1y</option>
+            </select>
+            <button class="btn btn-primary btn-sm" onclick="loadAttribution(true)">↻ <span data-i18n="attr_recalc">محاسبه</span></button>
+          </div>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="attr_totals">جمع ناوگان</span></div><div class="metric-grid" id="attr-metrics"></div></div>
+        <div class="grid-2">
+          <div class="chart-container">
+            <div class="chart-header"><span class="chart-title" data-i18n="attr_waterfall">آبشار PnL</span>
+              <div class="chart-actions"><select id="attr-bot-select" onchange="renderAttrWaterfall()" style="width:150px"></select></div>
+            </div>
+            <div id="chart-attr-waterfall" style="height:360px"></div>
+          </div>
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="attr_capture_chart">میانگین MFE-Capture هر بات</span></div><div id="chart-attr-capture" style="height:360px"></div></div>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="attr_bot_table">تفکیک بات‌ها</span></div><div class="table-wrap" id="attr-bot-table"></div></div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="attr_reason_table">تفکیک دلیل خروج (بات انتخاب‌شده)</span></div><div class="table-wrap" id="attr-reason-table"></div></div>
       </div>
 
       <!-- ═══ TRIAL LEDGER ═══ -->
