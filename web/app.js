@@ -119,6 +119,7 @@ function showSection(name) {
   if (name === 'quality') loadQuality();
   if (name === 'fleet') loadFleetRisk();
   if (name === 'capacity') loadCapacity();
+  if (name === 'stress') loadStress();
 }
 
 function refreshCurrentSection() {
@@ -136,6 +137,7 @@ function refreshCurrentSection() {
   else if (s === 'quality') loadQuality();
   else if (s === 'fleet') loadFleetRisk();
   else if (s === 'capacity') loadCapacity(true);
+  else if (s === 'stress') loadStress();
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -1770,6 +1772,92 @@ function renderCapacityTable(edges) {
   }).join('');
   document.getElementById('cap-table').innerHTML =
     `<table><thead><tr><th>${t('symbol_label')}</th><th>${t('edges_strategy')}</th><th>${t('cap_h_edge')}</th><th>ADV</th><th>k(L2)</th><th>${t('cap_h_capacity')}</th><th>${t('cap_h_half')}</th><th>${t('cap_h_current')}</th><th>${t('cap_h_util')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════ STRESS
+const stressLabel = s => (LANG === 'fa' ? s.label_fa : s.label_en) || s.key;
+const VERDICT_BADGE = { ok: 'badge-green', hit: 'badge-yellow', critical: 'badge-red', wiped: 'badge-red' };
+
+async function loadStress() {
+  const metrics = document.getElementById('stress-metrics');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  let d;
+  try { d = await (await fetch('/api/stress')).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  state.stress = d;
+  document.getElementById('stress-generated').textContent = d.generated_at ? fmtDateTime(d.generated_at) : '';
+
+  const scns = d.scenarios || [];
+  if (!scns.length) {
+    metrics.innerHTML = `<p class="muted" style="grid-column:1/-1">${t('stress_empty')}</p>`;
+    return;
+  }
+  const worst = scns[0];
+  const totalLiq = Math.max(...scns.map(s => s.n_liquidations));
+  const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:19px">${val}</div></div>`;
+  metrics.innerHTML =
+    mc(t('stress_m_equity'), fmtUsd(d.equity_usd)) +
+    mc(t('stress_m_positions'), d.n_positions) +
+    mc(t('stress_m_worst'), stressLabel(worst), 'neg') +
+    mc(t('stress_m_worst_pnl'), fmtUsd(worst.fleet_pnl_usd) + (worst.fleet_pnl_pct != null ? ` (${worst.fleet_pnl_pct}%)` : ''), 'neg') +
+    mc(t('stress_m_liq'), totalLiq, totalLiq ? 'neg' : 'pos');
+
+  // bar chart of pnl% per scenario
+  const ordered = [...scns].reverse();
+  Plotly.newPlot(document.getElementById('chart-stress'), [{
+    type: 'bar', orientation: 'h',
+    y: ordered.map(stressLabel),
+    x: ordered.map(s => s.fleet_pnl_pct),
+    marker: { color: ordered.map(s => s.fleet_pnl_pct >= 0 ? '#34d399' : s.fleet_pnl_pct <= -30 ? '#f87171' : s.fleet_pnl_pct <= -10 ? '#fb923c' : '#fbbf24') },
+    customdata: ordered.map(s => [fmtUsd(s.fleet_pnl_usd), s.n_liquidations]),
+    hovertemplate: '<b>%{y}</b><br>%{x}% · %{customdata[0]}<br>liq: %{customdata[1]}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 170, r: 20, t: 10, b: 40 },
+    xaxis: { gridcolor: GRID, zerolinecolor: '#3a4761', ticksuffix: '%' }, yaxis: { gridcolor: GRID },
+  }, { displayModeBar: false, responsive: true });
+
+  // historical path selector
+  const hist = scns.filter(s => s.btc_path);
+  const sel = document.getElementById('stress-path-select');
+  sel.innerHTML = hist.length
+    ? hist.map(s => `<option value="${s.key}">${stressLabel(s)}</option>`).join('')
+    : `<option value="">—</option>`;
+  renderStressPath();
+  renderStressTable(scns);
+}
+
+function renderStressPath() {
+  const d = state.stress; if (!d) return;
+  const key = document.getElementById('stress-path-select').value;
+  const s = (d.scenarios || []).find(x => x.key === key && x.btc_path);
+  const el = document.getElementById('chart-stress-path');
+  if (!s) { el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return; }
+  Plotly.newPlot(el, [{
+    x: s.btc_path.dates, y: s.btc_path.returns.map(r => r * 100),
+    mode: 'lines+markers', fill: 'tozeroy',
+    line: { color: '#f87171', width: 2.5 }, fillcolor: 'rgba(248,113,113,.12)',
+    hovertemplate: '%{x}: %{y:.1f}%<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 50, r: 20, t: 12, b: 45 },
+    xaxis: { gridcolor: GRID }, yaxis: { gridcolor: GRID, ticksuffix: '%', zerolinecolor: '#3a4761' },
+  }, { displayModeBar: false, responsive: true });
+}
+
+function renderStressTable(scns) {
+  const rows = scns.map(s => {
+    const worstPos = (s.worst_positions || [])[0];
+    return `<tr>
+      <td><b>${stressLabel(s)}</b>${s.data_available === false ? ` <span class="badge badge-gray" title="${t('stress_fallback')}">≈</span>` : ''}</td>
+      <td class="${s.market_move >= 0 ? 'pos' : 'neg'}">${(s.market_move * 100).toFixed(1)}%</td>
+      <td class="${s.fleet_pnl_usd >= 0 ? 'pos' : 'neg'}">${fmtUsd(s.fleet_pnl_usd)} <span class="muted">(${s.fleet_pnl_pct ?? '—'}%)</span></td>
+      <td>${fmtUsd(s.exit_cost_usd)}</td>
+      <td class="${s.n_liquidations ? 'neg' : ''}">${s.n_liquidations}</td>
+      <td>${fmtUsd(s.equity_after)}</td>
+      <td class="muted" style="font-size:11px">${worstPos ? esc(worstPos.bot + ' · ' + worstPos.pair) + ' (' + fmtUsd(worstPos.pnl) + (worstPos.liquidated ? ' ⚠' : '') + ')' : '—'}</td>
+      <td><span class="badge ${VERDICT_BADGE[s.verdict] || 'badge-gray'}">${t('stress_v_' + s.verdict)}</span></td></tr>`;
+  }).join('');
+  document.getElementById('stress-table').innerHTML =
+    `<table><thead><tr><th>${t('stress_h_scenario')}</th><th>${t('stress_h_move')}</th><th>${t('stress_h_pnl')}</th><th>${t('stress_h_exit')}</th><th>${t('stress_h_liq')}</th><th>${t('stress_h_after')}</th><th>${t('stress_h_worst_pos')}</th><th>${t('stress_h_verdict')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT
