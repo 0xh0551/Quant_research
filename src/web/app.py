@@ -869,6 +869,26 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
         return {"error": str(exc), "edges": []}
 
 
+# ── Alt-data (positioning / implied vol / basis / liquidations) ───────────────
+
+@app.get("/api/altdata")
+def altdata_route(refresh: int = 0) -> dict[str, Any]:
+    """Latest alt-data snapshot; ``?refresh=1`` re-pulls the live feeds first
+    (network-bound — the cron refresh normally keeps the snapshot warm)."""
+    from src.data import altdata as _alt
+
+    try:
+        if refresh:
+            _alt.refresh_all()
+            return _alt.build_snapshot()
+        if _alt.SNAPSHOT_PATH.exists():
+            return json.loads(_alt.SNAPSHOT_PATH.read_text(encoding="utf-8"))
+        return _alt.build_snapshot()
+    except Exception as exc:
+        logger.exception("altdata snapshot failed")
+        return {"error": str(exc)}
+
+
 # ── Pipeline heartbeat ────────────────────────────────────────────────────────
 
 @app.get("/api/pipeline-health")
