@@ -869,6 +869,58 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
         return {"error": str(exc), "edges": []}
 
 
+# ── Trial ledger (cumulative multiple-testing account) ────────────────────────
+
+@app.get("/api/trials")
+def trials_route() -> dict[str, Any]:
+    """Edge-graveyard view: cumulative unique hypotheses, per-strategy pass
+    rates, discovery timeline, and tonight's top edges re-deflated against the
+    *cumulative* trial count (dsr_cum) instead of tonight's alone."""
+    from src.tracking.trial_ledger import default_ledger
+
+    try:
+        ledger = default_ledger()
+        stats = ledger.family_stats("wf_scan")
+        timeline = ledger.timeline("wf_scan")
+        strategies = ledger.strategy_breakdown("wf_scan")
+    except Exception as exc:
+        logger.exception("trial ledger read failed")
+        return {"error": str(exc), "stats": {}, "timeline": [], "strategies": [], "top_edges": []}
+
+    top_edges: list[dict[str, Any]] = []
+    report_path = OUTPUTS_DIR / "wf_report.json"
+    if report_path.exists():
+        try:
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            for e in (report.get("top") or [])[:20]:
+                sigma = float(e.get("oos_sigma_bar") or 0.0)
+                sr_pb = (float(e.get("oos_mu_bar") or 0.0) / sigma) if sigma else 0.0
+                dsr_cum = e.get("dsr_cum")
+                if dsr_cum is None or (isinstance(dsr_cum, float) and dsr_cum != dsr_cum):
+                    d = ledger.deflate("wf_scan", sr_pb, int(e.get("n_oos_bars") or 0))
+                    dsr_cum = round(d, 4) if d == d else None
+                top_edges.append({
+                    "symbol": e.get("symbol"), "strategy": e.get("strategy"),
+                    "timeframe": e.get("timeframe"),
+                    "oos_sharpe": e.get("oos_sharpe"),
+                    "dsr": e.get("dsr"), "dsr_cum": dsr_cum,
+                    "deployable": e.get("deployable"),
+                })
+            n_scanned_tonight = report.get("n_scanned")
+        except Exception:
+            n_scanned_tonight = None
+    else:
+        n_scanned_tonight = None
+
+    return {
+        "stats": stats,
+        "n_scanned_tonight": n_scanned_tonight,
+        "timeline": timeline,
+        "strategies": strategies,
+        "top_edges": top_edges,
+    }
+
+
 # ── Stress scenarios ──────────────────────────────────────────────────────────
 
 @app.get("/api/stress")

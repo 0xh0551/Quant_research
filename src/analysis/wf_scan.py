@@ -73,6 +73,8 @@ class ScanResult:
     venues_available: int = 0        # برای symbol×tf چند صرافی دیتا داریم
     robust: bool = False             # گیت استحکام (دفاع در برابر نفرین برنده)
     deployable: bool = False         # robust + قاعده در QuantResearchBridge پشتیبانی می‌شود
+    # DSR در برابر شمارِ تجمعیِ فرضیه‌های یکتای همهٔ اسکن‌های تاریخ (trial_ledger)
+    dsr_cum: float = float("nan")
 
 
 def _bars_per_year(timeframe: str) -> int:
@@ -248,7 +250,39 @@ def scan_processed_dir(
             # تاریخچهٔ محدود: پنجرهٔ کوچک‌تر تا حداقل ۵ split حاصل شود
             short_kwargs = {**kwargs, "train_size": _SHORT_TRAIN, "test_size": _SHORT_TEST}
             out.extend(scan_dataset(df, stem, **short_kwargs))
+    _record_and_deflate_cumulative(out)
     return out
+
+
+def _record_and_deflate_cumulative(results: list[ScanResult]) -> None:
+    """ثبت هر فرضیهٔ اسکن‌شده در trial_ledger و محاسبهٔ DSR تجمعی.
+
+    deflation شبانه فقط آزمون‌های *امشب* را می‌شمارد؛ اما سوگیری انتخاب در طول
+    شب‌ها انباشته می‌شود. dsr_cum هر نتیجه را در برابر شمار یکتای همهٔ
+    فرضیه‌هایی که این پلتفرم تا امروز آزموده deflate می‌کند.
+    """
+    if not results:
+        return
+    try:
+        from src.tracking.trial_ledger import default_ledger
+        ledger = default_ledger()
+        ledger.record_trials("wf_scan", (
+            {
+                "dataset": r.dataset, "exchange": r.exchange, "symbol": r.symbol,
+                "timeframe": r.timeframe, "strategy": r.strategy,
+                "direction": "short" if r.allow_short else "long",
+                "sr_pb": (r.oos_mu_bar / r.oos_sigma_bar) if r.oos_sigma_bar else 0.0,
+                "n_obs": r.n_oos_bars, "passed": r.passed,
+            }
+            for r in results
+        ))
+        for r in results:
+            sr_pb = (r.oos_mu_bar / r.oos_sigma_bar) if r.oos_sigma_bar else 0.0
+            d = ledger.deflate("wf_scan", sr_pb, r.n_oos_bars)
+            r.dsr_cum = round(d, 4) if np.isfinite(d) else float("nan")
+    except Exception:
+        # دفترچه هرگز نباید اسکن را بشکند — بدون ledger هم اسکن معتبر است
+        return
 
 
 def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
