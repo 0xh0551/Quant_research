@@ -123,6 +123,7 @@ function showSection(name) {
   if (name === 'trials') loadTrials();
   if (name === 'attribution') loadAttribution();
   if (name === 'pipeline') loadPipeline();
+  if (name === 'altdata') loadAltdata();
 }
 
 function refreshCurrentSection() {
@@ -144,6 +145,7 @@ function refreshCurrentSection() {
   else if (s === 'trials') loadTrials();
   else if (s === 'attribution') loadAttribution(true);
   else if (s === 'pipeline') loadPipeline();
+  else if (s === 'altdata') loadAltdata();
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -2108,6 +2110,92 @@ async function loadPipeline() {
   } else {
     el.innerHTML = `<div class="empty-state"><p>${t('pipe_history_empty')}</p></div>`;
   }
+}
+
+// ═══════════════════════════════════════════════════════════════ ALT-DATA
+async function loadAltdata(refresh = false) {
+  const metrics = document.getElementById('alt-metrics');
+  const btn = document.getElementById('alt-refresh-btn');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  if (refresh && btn) { btn.disabled = true; }
+  let d;
+  try { d = await (await fetch('/api/altdata' + (refresh ? '?refresh=1' : ''))).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; if (btn) btn.disabled = false; return; }
+  if (btn) btn.disabled = false;
+  state.altdata = d;
+  document.getElementById('alt-generated').textContent = d.generated_at ? fmtDateTime(d.generated_at) : '';
+
+  // regime hints
+  const hintsEl = document.getElementById('alt-hints');
+  const hints = d.regime_hints || [];
+  hintsEl.innerHTML = hints.length
+    ? hints.map(h => `<div class="alert">💡 ${t('alt_hint_' + h)}</div>`).join('')
+    : `<div class="ok" style="margin-bottom:16px">✓ ${t('alt_no_hints')}</div>`;
+
+  const btc = (d.per_symbol || []).find(s => s.symbol === 'BTCUSDT') || {};
+  const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:19px">${val}</div></div>`;
+  metrics.innerHTML =
+    mc('DVOL BTC', d.dvol?.BTC ?? '—') +
+    mc('DVOL ETH', d.dvol?.ETH ?? '—') +
+    mc(t('alt_m_ls'), btc.ls_ratio ?? '—', btc.ls_ratio >= 3 ? 'neg' : '') +
+    mc(t('alt_m_taker'), btc.taker_ratio ?? '—') +
+    mc(t('alt_m_liq24'), fmtUsd(d.liquidations_24h_usd)) +
+    mc(t('alt_m_perp_basis'), (() => {
+      const p = (d.term_structure?.BTCUSDT || []).find(x => x.tenor === 'perp');
+      return p ? p.basis_ann_pct + '%' : '—';
+    })());
+
+  // DVOL + L/S charts
+  const line = (elId, series, color, name) => {
+    const el = document.getElementById(elId);
+    if (!series || !series.ts || !series.ts.length) { el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return; }
+    Plotly.newPlot(el, [{ x: series.ts, y: series.values, name, mode: 'lines', fill: 'tozeroy',
+      line: { color, width: 2 }, fillcolor: color.replace(')', ',.1)').replace('rgb', 'rgba') }], {
+      ...PLOTLY_DARK, margin: { l: 45, r: 15, t: 10, b: 40 },
+      xaxis: { gridcolor: GRID, nticks: 6 }, yaxis: { gridcolor: GRID },
+    }, { displayModeBar: false, responsive: true });
+  };
+  line('chart-alt-dvol', d.dvol_series_btc, 'rgb(129,140,248)', 'DVOL');
+  line('chart-alt-ls', d.ls_series_btc, 'rgb(45,212,191)', 'L/S');
+
+  renderAltTerm();
+
+  // funding extremes
+  const ext = d.funding_extremes || [];
+  document.getElementById('alt-extremes-table').innerHTML = ext.length ? `<table>
+    <thead><tr><th>${t('symbol_label')}</th><th>${t('alt_h_funding_ann')}</th><th>${t('alt_h_premium')}</th></tr></thead>
+    <tbody>${ext.map(r => `<tr><td><b>${esc(r.symbol)}</b></td>
+      <td class="${Math.abs(r.funding_ann_pct) > 50 ? 'neg' : ''}">${r.funding_ann_pct}%</td>
+      <td class="${r.premium_bps >= 0 ? 'pos' : 'neg'}">${r.premium_bps}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="muted" style="padding:16px">—</p>`;
+
+  // liquidation tape
+  const liq = d.recent_liquidations || [];
+  document.getElementById('alt-liq-table').innerHTML = liq.length ? `<table>
+    <thead><tr><th>${t('alt_h_time')}</th><th>${t('alt_h_side')}</th><th>${t('alt_h_notional')}</th></tr></thead>
+    <tbody>${liq.map(r => `<tr><td class="muted" style="direction:ltr;text-align:end">${esc(String(r.ts).slice(0, 19))}</td>
+      <td><span class="pill ${r.side === 'buy' ? 'short' : 'long'}">${r.side === 'buy' ? t('alt_shorts_liq') : t('alt_longs_liq')}</span></td>
+      <td>${fmtUsd(r.notional_usd)}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="muted" style="padding:16px">—</p>`;
+}
+
+function renderAltTerm() {
+  const d = state.altdata; if (!d) return;
+  const key = document.getElementById('alt-term-select').value;
+  const term = (d.term_structure || {})[key] || [];
+  const el = document.getElementById('chart-alt-term');
+  if (!term.length) { el.innerHTML = `<div class="empty-state"><p>—</p></div>`; return; }
+  Plotly.newPlot(el, [{
+    type: 'bar',
+    x: term.map(x => x.tenor === 'perp' ? 'perp (funding)' : x.tenor),
+    y: term.map(x => x.basis_ann_pct),
+    marker: { color: term.map(x => x.basis_ann_pct >= 0 ? '#2dd4bf' : '#f87171') },
+    customdata: term.map(x => [x.days, x.price]),
+    hovertemplate: '<b>%{x}</b><br>%{y}% ann.<br>%{customdata[0]}d · $%{customdata[1]:,.0f}<extra></extra>',
+  }], {
+    ...PLOTLY_DARK, margin: { l: 45, r: 15, t: 10, b: 45 },
+    yaxis: { gridcolor: GRID, ticksuffix: '%', zerolinecolor: '#3a4761' },
+  }, { displayModeBar: false, responsive: true });
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT

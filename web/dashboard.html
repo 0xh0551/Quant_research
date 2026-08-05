@@ -62,6 +62,10 @@
         <span data-i18n="nav_fleet">ریسک ناوگان</span>
         <span class="nav-badge" id="fleet-alert-badge" style="background:var(--red);display:none">!</span>
       </div>
+      <div class="nav-item" data-section="altdata" onclick="showSection('altdata')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        <span data-i18n="nav_altdata">آلت-دیتا</span>
+      </div>
       <div class="nav-item" data-section="attribution" onclick="showSection('attribution')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a10 10 0 010 20M12 12l7-7M12 12h10"/></svg>
         <span data-i18n="nav_attribution">اتریبیوشن</span>
@@ -454,6 +458,31 @@
         </div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_per_bot">وضعیت هر بات</span></div><div class="table-wrap" id="fleet-bot-table"></div></div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_positions">پوزیشن‌های باز (کل ناوگان)</span></div><div class="table-wrap" id="fleet-pos-table" style="max-height:420px;overflow-y:auto"></div></div>
+      </div>
+
+      <!-- ═══ ALT-DATA ═══ -->
+      <div class="section" id="sec-altdata">
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--cyan)">🌐 <span data-i18n="alt_title">آلت-دیتا: پوزیشنینگ، وُل ضمنی، بیسیس، لیکوییدیشن</span></div>
+            <div class="note" style="margin-top:4px" data-i18n="alt_sub_note"></div>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center">
+            <span id="alt-generated" style="font-size:12px;color:var(--text3)"></span>
+            <button class="btn btn-primary btn-sm" id="alt-refresh-btn" onclick="loadAltdata(true)">↻ <span data-i18n="alt_refresh">دریافت زنده</span></button>
+          </div>
+        </div>
+        <div id="alt-hints"></div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="alt_metrics">وضعیت فعلی</span></div><div class="metric-grid" id="alt-metrics"></div></div>
+        <div class="grid-2">
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="alt_dvol_chart">DVOL بیت‌کوین (وُل ضمنی ۳۰ روزه)</span></div><div id="chart-alt-dvol" style="height:300px"></div></div>
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="alt_ls_chart">نسبت لانگ/شورت حساب‌ها (BTC)</span></div><div id="chart-alt-ls" style="height:300px"></div></div>
+        </div>
+        <div class="grid-2">
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="alt_term_chart">ساختار زمانی بیسیس (سالانه ٪)</span><div class="chart-actions"><select id="alt-term-select" onchange="renderAltTerm()" style="width:130px"><option value="BTCUSDT">BTC</option><option value="ETHUSDT">ETH</option></select></div></div><div id="chart-alt-term" style="height:300px"></div></div>
+          <div class="card" style="margin-bottom:0"><div class="card-title"><span class="dot"></span><span data-i18n="alt_extremes">فاندینگ‌های افراطی صرافی</span></div><div class="table-wrap" id="alt-extremes-table" style="max-height:270px;overflow-y:auto"></div></div>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="alt_liq">تیپ لیکوییدیشن (OKX BTC)</span></div><div class="table-wrap" id="alt-liq-table" style="max-height:300px;overflow-y:auto"></div></div>
       </div>
 
       <!-- ═══ ATTRIBUTION ═══ -->
