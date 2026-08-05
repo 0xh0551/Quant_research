@@ -62,6 +62,10 @@
         <span data-i18n="nav_fleet">ریسک ناوگان</span>
         <span class="nav-badge" id="fleet-alert-badge" style="background:var(--red);display:none">!</span>
       </div>
+      <div class="nav-item" data-section="trials" onclick="showSection('trials')">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20M4 19.5A2.5 2.5 0 006.5 22H20V2H6.5A2.5 2.5 0 004 4.5z"/><path d="M9 7h7M9 11h7"/></svg>
+        <span data-i18n="nav_trials">دفتر آزمون‌ها</span>
+      </div>
       <div class="nav-item" data-section="stress" onclick="showSection('stress')">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h7l-1 8 10-12h-7z"/></svg>
         <span data-i18n="nav_stress">استرس‌تست</span>
@@ -441,6 +445,23 @@
         </div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_per_bot">وضعیت هر بات</span></div><div class="table-wrap" id="fleet-bot-table"></div></div>
         <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="fleet_positions">پوزیشن‌های باز (کل ناوگان)</span></div><div class="table-wrap" id="fleet-pos-table" style="max-height:420px;overflow-y:auto"></div></div>
+      </div>
+
+      <!-- ═══ TRIAL LEDGER ═══ -->
+      <div class="section" id="sec-trials">
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <div>
+            <div style="font-size:15px;font-weight:700;color:var(--cyan)">🪦 <span data-i18n="trials_title">دفتر آزمون‌ها (گورستان لبه‌ها)</span></div>
+            <div class="note" style="margin-top:4px" data-i18n="trials_sub_note"></div>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="loadTrials()">↻ <span data-i18n="refresh">رفرش</span></button>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="trials_metrics">حساب تجمعی</span></div><div class="metric-grid" id="trials-metrics"></div></div>
+        <div class="grid-2">
+          <div class="chart-container"><div class="chart-header"><span class="chart-title" data-i18n="trials_timeline">فرضیه‌های یکتای تجمعی در طول زمان</span></div><div id="chart-trials-timeline" style="height:320px"></div></div>
+          <div class="card" style="margin-bottom:0"><div class="card-title"><span class="dot"></span><span data-i18n="trials_strategies">تفکیک استراتژی‌ها</span></div><div class="table-wrap" id="trials-strat-table" style="max-height:300px;overflow-y:auto"></div></div>
+        </div>
+        <div class="card"><div class="card-title"><span class="dot"></span><span data-i18n="trials_top">لبه‌های برتر: DSR شبانه در برابر DSR تجمعی</span></div><div class="table-wrap" id="trials-top-table"></div></div>
       </div>
 
       <!-- ═══ STRESS ═══ -->

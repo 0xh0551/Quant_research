@@ -254,6 +254,25 @@ const I18N = {
     fleet_alert_crowding_corr: 'میانگین همبستگی دارایی‌های باز {value} است (حد {limit}) — ریسک هم‌جهتی',
     fleet_empty: 'هیچ پوزیشن بازی در ناوگان نیست یا local.json پیکربندی نشده است.',
 
+    /* ── trial ledger ─────────────────────────────────────────────── */
+    nav_trials: 'دفتر آزمون‌ها',
+    title_trials: 'دفتر آزمون‌ها', sub_trials: 'حساب تجمعی چندآزمونی — DSR در برابر همهٔ فرضیه‌هایی که تا امروز آزموده‌ایم',
+    trials_title: 'دفتر آزمون‌ها (گورستان لبه‌ها)',
+    trials_sub_note: 'اسکن شبانه فقط آزمون‌های همان شب را در deflation می‌شمارد؛ اما سوگیری انتخاب در طول شب‌ها انباشته می‌شود. این دفتر هر فرضیهٔ یکتا را یک‌بار ثبت می‌کند و DSR واقعی را در برابر کل تاریخ جست‌وجو محاسبه می‌کند.',
+    trials_metrics: 'حساب تجمعی',
+    trials_timeline: 'فرضیه‌های یکتای تجمعی در طول زمان',
+    trials_strategies: 'تفکیک استراتژی‌ها',
+    trials_top: 'لبه‌های برتر: DSR شبانه در برابر DSR تجمعی',
+    trials_empty: 'دفترچه هنوز خالی است — با نخستین اسکن شبانهٔ بعدی، همهٔ فرضیه‌های آزموده‌شده در آن ثبت می‌شوند.',
+    trials_empty_short: 'هنوز داده‌ای ثبت نشده — منتظر نخستین اسکن.',
+    trials_m_unique: 'فرضیهٔ یکتا', trials_m_runs: 'کل اجراها', trials_m_tonight: 'اسکن اخیر',
+    trials_m_passed: 'حداقل یک‌بار pass', trials_m_srvar: 'واریانس شارپ',
+    trials_cumulative: 'تجمعی', trials_new: 'جدید در روز',
+    trials_h_hyps: 'فرضیه', trials_h_passed: 'pass شده', trials_h_passrate: 'نرخ pass',
+    trials_h_bestsr: 'بهترین SR/بار',
+    trials_h_dsr_night: 'DSR شبانه', trials_h_dsr_cum: 'DSR تجمعی', trials_h_verdict: 'حکم',
+    trials_demoted: 'با شمار تجمعی رد می‌شود', trials_survives: 'از deflation تجمعی جان به در برد',
+
     /* ── stress ───────────────────────────────────────────────────── */
     nav_stress: 'استرس‌تست',
     title_stress: 'استرس‌تست پرتفوی', sub_stress: 'بازپخش رویدادهای دنباله + شوک‌های پارامتریک روی بوک زنده',
@@ -643,6 +662,25 @@ const I18N = {
     fleet_alert_bot_db_missing: 'Bot {context} database is unreachable',
     fleet_alert_crowding_corr: 'Average correlation of held assets is {value} (limit {limit}) — crowding risk',
     fleet_empty: 'No open positions in the fleet, or local.json is not configured.',
+
+    /* ── trial ledger ─────────────────────────────────────────────── */
+    nav_trials: 'Trial Ledger',
+    title_trials: 'Trial Ledger', sub_trials: 'The cumulative multiple-testing account — DSR against every hypothesis ever tried',
+    trials_title: 'Trial Ledger (edge graveyard)',
+    trials_sub_note: 'Nightly scans deflate Sharpe only by that night’s trials, but selection bias compounds across nights. This ledger records every unique hypothesis once and recomputes the honest DSR against the entire search history.',
+    trials_metrics: 'Cumulative account',
+    trials_timeline: 'Cumulative unique hypotheses over time',
+    trials_strategies: 'Strategy breakdown',
+    trials_top: 'Top edges: nightly vs cumulative DSR',
+    trials_empty: 'The ledger is still empty — the next nightly scan will record every tested hypothesis.',
+    trials_empty_short: 'Nothing recorded yet — waiting for the first scan.',
+    trials_m_unique: 'Unique hypotheses', trials_m_runs: 'Total runs', trials_m_tonight: 'Latest scan',
+    trials_m_passed: 'Ever passed', trials_m_srvar: 'Sharpe variance',
+    trials_cumulative: 'Cumulative', trials_new: 'New per day',
+    trials_h_hyps: 'Hypotheses', trials_h_passed: 'Passed', trials_h_passrate: 'Pass rate',
+    trials_h_bestsr: 'Best SR/bar',
+    trials_h_dsr_night: 'Nightly DSR', trials_h_dsr_cum: 'Cumulative DSR', trials_h_verdict: 'Verdict',
+    trials_demoted: 'fails at cumulative count', trials_survives: 'survives cumulative deflation',
 
     /* ── stress ───────────────────────────────────────────────────── */
     nav_stress: 'Stress Test',

@@ -120,6 +120,7 @@ function showSection(name) {
   if (name === 'fleet') loadFleetRisk();
   if (name === 'capacity') loadCapacity();
   if (name === 'stress') loadStress();
+  if (name === 'trials') loadTrials();
 }
 
 function refreshCurrentSection() {
@@ -138,6 +139,7 @@ function refreshCurrentSection() {
   else if (s === 'fleet') loadFleetRisk();
   else if (s === 'capacity') loadCapacity(true);
   else if (s === 'stress') loadStress();
+  else if (s === 'trials') loadTrials();
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -1858,6 +1860,74 @@ function renderStressTable(scns) {
   }).join('');
   document.getElementById('stress-table').innerHTML =
     `<table><thead><tr><th>${t('stress_h_scenario')}</th><th>${t('stress_h_move')}</th><th>${t('stress_h_pnl')}</th><th>${t('stress_h_exit')}</th><th>${t('stress_h_liq')}</th><th>${t('stress_h_after')}</th><th>${t('stress_h_worst_pos')}</th><th>${t('stress_h_verdict')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════ TRIAL LEDGER
+async function loadTrials() {
+  const metrics = document.getElementById('trials-metrics');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  let d;
+  try { d = await (await fetch('/api/trials')).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  state.trials = d;
+
+  const s = d.stats || {};
+  const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:20px">${val}</div></div>`;
+  const passShare = s.n_unique ? (100 * s.n_ever_passed / s.n_unique).toFixed(1) + '%' : '—';
+  metrics.innerHTML =
+    mc(t('trials_m_unique'), (s.n_unique || 0).toLocaleString()) +
+    mc(t('trials_m_runs'), (s.n_runs_total || 0).toLocaleString()) +
+    mc(t('trials_m_tonight'), d.n_scanned_tonight != null ? d.n_scanned_tonight.toLocaleString() : '—') +
+    mc(t('trials_m_passed'), (s.n_ever_passed || 0).toLocaleString() + ` <span style="font-size:12px;color:var(--text3)">(${passShare})</span>`) +
+    mc(t('trials_m_srvar'), s.sr_variance != null ? Number(s.sr_variance).toExponential(2) : '—');
+  if (!s.n_unique) {
+    metrics.innerHTML += `<div class="metric-card" style="grid-column:1/-1"><div class="lbl">ℹ</div><div style="font-size:12px;color:var(--text2);margin-top:4px">${t('trials_empty')}</div></div>`;
+  }
+
+  // timeline
+  const tl = d.timeline || [];
+  const tlEl = document.getElementById('chart-trials-timeline');
+  if (tl.length) {
+    Plotly.newPlot(tlEl, [
+      { x: tl.map(p => p.date), y: tl.map(p => p.cumulative), name: t('trials_cumulative'),
+        mode: 'lines', fill: 'tozeroy', line: { color: '#818cf8', width: 2.5 }, fillcolor: 'rgba(129,140,248,.12)' },
+      { x: tl.map(p => p.date), y: tl.map(p => p.new), name: t('trials_new'), type: 'bar',
+        marker: { color: '#2dd4bf' }, yaxis: 'y2' },
+    ], {
+      ...PLOTLY_DARK, margin: { l: 55, r: 45, t: 12, b: 45 },
+      xaxis: { gridcolor: GRID }, yaxis: { gridcolor: GRID },
+      yaxis2: { overlaying: 'y', side: 'right', gridcolor: 'transparent' },
+      legend: { orientation: 'h', y: 1.12 },
+    }, { displayModeBar: false, responsive: true });
+  } else {
+    tlEl.innerHTML = `<div class="empty-state"><p>${t('trials_empty_short')}</p></div>`;
+  }
+
+  // strategy breakdown
+  const st = d.strategies || [];
+  document.getElementById('trials-strat-table').innerHTML = st.length ? `<table>
+    <thead><tr><th>${t('edges_strategy')}</th><th>${t('trials_h_hyps')}</th><th>${t('trials_h_passed')}</th><th>${t('trials_h_passrate')}</th><th>${t('trials_h_bestsr')}</th></tr></thead>
+    <tbody>${st.map(r => `<tr><td><b>${esc(strategyLabel(r.strategy))}</b></td>
+      <td>${r.n_hypotheses}</td><td>${r.n_ever_passed}</td>
+      <td class="${r.pass_rate > 0.1 ? 'pos' : 'muted'}">${(r.pass_rate * 100).toFixed(1)}%</td>
+      <td>${r.best_sr_pb}</td></tr>`).join('')}</tbody></table>`
+    : `<p class="muted" style="padding:16px">${t('trials_empty_short')}</p>`;
+
+  // top edges: nightly vs cumulative DSR
+  const top = d.top_edges || [];
+  const dsrCls = v => v == null ? 'muted' : v >= 0.95 ? 'pos' : v >= 0.5 ? 'cell-yellow' : 'neg';
+  document.getElementById('trials-top-table').innerHTML = top.length ? `<table>
+    <thead><tr><th>${t('symbol_label')}</th><th>${t('edges_strategy')}</th><th>${t('timeframe')}</th><th>OOS Sharpe</th><th>${t('trials_h_dsr_night')}</th><th>${t('trials_h_dsr_cum')}</th><th>${t('trials_h_verdict')}</th></tr></thead>
+    <tbody>${top.map(e => {
+      const demoted = e.dsr != null && e.dsr_cum != null && e.dsr >= 0.95 && e.dsr_cum < 0.95;
+      return `<tr><td><b>${esc(e.symbol)}</b> ${e.deployable ? '<span class="badge badge-green">live</span>' : ''}</td>
+      <td class="muted">${esc(strategyLabel(e.strategy))}</td><td><span class="tf-badge">${esc(e.timeframe || '—')}</span></td>
+      <td>${e.oos_sharpe ?? '—'}</td>
+      <td class="${dsrCls(e.dsr)}">${e.dsr ?? '—'}</td>
+      <td class="${dsrCls(e.dsr_cum)}">${e.dsr_cum ?? '—'}</td>
+      <td>${demoted ? `<span class="badge badge-red">${t('trials_demoted')}</span>` : e.dsr_cum != null && e.dsr_cum >= 0.95 ? `<span class="badge badge-green">${t('trials_survives')}</span>` : `<span class="badge badge-gray">—</span>`}</td></tr>`;
+    }).join('')}</tbody></table>`
+    : `<p class="muted" style="padding:16px">${t('trials_empty_short')}</p>`;
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT
