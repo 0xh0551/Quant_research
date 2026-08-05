@@ -122,6 +122,7 @@ function showSection(name) {
   if (name === 'stress') loadStress();
   if (name === 'trials') loadTrials();
   if (name === 'attribution') loadAttribution();
+  if (name === 'pipeline') loadPipeline();
 }
 
 function refreshCurrentSection() {
@@ -142,6 +143,7 @@ function refreshCurrentSection() {
   else if (s === 'stress') loadStress();
   else if (s === 'trials') loadTrials();
   else if (s === 'attribution') loadAttribution(true);
+  else if (s === 'pipeline') loadPipeline();
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -2043,6 +2045,69 @@ function renderAttrReasonTable() {
       <td class="${r.intended >= 0 ? 'pos' : 'neg'}">${fmtUsd(r.intended)}</td>
       <td class="${r.net >= 0 ? 'pos' : 'neg'}">${fmtUsd(r.net)}</td></tr>`).join('')}</tbody></table>`
     : `<p class="muted" style="padding:16px">—</p>`;
+}
+
+// ═══════════════════════════════════════════════════════════════ PIPELINE HEALTH
+const PIPE_STATUS = {
+  ok: { color: 'var(--green)', badge: 'badge-green' },
+  late: { color: 'var(--yellow)', badge: 'badge-yellow' },
+  missing: { color: 'var(--red)', badge: 'badge-red' },
+};
+
+async function loadPipeline() {
+  const grid = document.getElementById('pipe-grid');
+  grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  let d;
+  try { d = await (await fetch('/api/pipeline-health')).json(); }
+  catch (e) { grid.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  document.getElementById('pipe-generated').textContent = d.generated_at ? fmtDateTime(d.generated_at) : '';
+
+  const c = d.counts || {};
+  const failing = (c.late || 0) + (c.missing || 0);
+  const badge = document.getElementById('pipeline-alert-badge');
+  if (badge) { badge.style.display = failing ? '' : 'none'; badge.textContent = failing; }
+
+  const banner = document.getElementById('pipe-banner');
+  if (d.healthy) {
+    banner.innerHTML = `<div class="ok" style="margin-bottom:16px">✓ ${t('pipe_all_ok', { n: d.n_jobs })}</div>`;
+  } else {
+    const crit = (d.critical_failing || []).join(', ');
+    banner.innerHTML = `<div class="alert" style="border-color:rgba(248,113,113,.5);background:rgba(248,113,113,.08);margin-bottom:16px">
+      ⛔ ${t('pipe_failing', { late: c.late || 0, missing: c.missing || 0 })}${crit ? ` — <b>${esc(crit)}</b>` : ''}</div>`;
+  }
+
+  grid.innerHTML = (d.jobs || []).map(j => {
+    const s = PIPE_STATUS[j.status] || PIPE_STATUS.missing;
+    const desc = LANG === 'fa' ? j.desc_fa : j.desc_en;
+    return `<div class="inv-card" style="cursor:default;border-inline-start:3px solid ${s.color}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div class="exch">${esc(j.name)}</div>
+        <span class="badge ${s.badge}">${t('pipe_s_' + j.status)}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text2);margin-top:6px;min-height:32px">${esc(desc || '')}</div>
+      <div class="dates" style="display:flex;justify-content:space-between">
+        <span>${t('pipe_age')}: <b style="color:${s.color}">${j.age_hours != null ? j.age_hours + 'h' : '—'}</b> / ${j.max_age_hours}h</span>
+        <span>${j.severity === 'critical' ? '🔴' : '🟡'}</span>
+      </div>
+      <div class="rows" style="direction:ltr;text-align:end;opacity:.7">${esc(j.artifact)}</div>
+    </div>`;
+  }).join('');
+
+  const h = d.history || [];
+  const el = document.getElementById('chart-pipe-history');
+  if (h.length > 1) {
+    Plotly.newPlot(el, [
+      { x: h.map(p => p.ts), y: h.map(p => p.ok), name: 'ok', stackgroup: 'a', line: { color: '#34d399', width: 0.5 } },
+      { x: h.map(p => p.ts), y: h.map(p => p.late), name: 'late', stackgroup: 'a', line: { color: '#fbbf24', width: 0.5 } },
+      { x: h.map(p => p.ts), y: h.map(p => p.missing), name: 'missing', stackgroup: 'a', line: { color: '#f87171', width: 0.5 } },
+    ], {
+      ...PLOTLY_DARK, margin: { l: 40, r: 20, t: 12, b: 45 },
+      xaxis: { gridcolor: GRID }, yaxis: { gridcolor: GRID },
+      legend: { orientation: 'h', y: 1.15 },
+    }, { displayModeBar: false, responsive: true });
+  } else {
+    el.innerHTML = `<div class="empty-state"><p>${t('pipe_history_empty')}</p></div>`;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT
