@@ -74,6 +74,14 @@
       "desc_en": "Aggregate fleet-risk snapshot"
     },
     {
+      "name": "altdata_refresh",
+      "artifact": "outputs/altdata_snapshot.json",
+      "max_age_hours": 8,
+      "severity": "warn",
+      "desc_fa": "به‌روزرسانی آلت-دیتا (DVOL/پوزیشنینگ/بیسیس/لیکوییدیشن)",
+      "desc_en": "Alt-data refresh (DVOL/positioning/basis/liquidations)"
+    },
+    {
       "name": "web_dashboard",
       "artifact": "logs/app.log",
       "max_age_hours": 24,
