@@ -869,6 +869,23 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
         return {"error": str(exc), "edges": []}
 
 
+# ── Stress scenarios ──────────────────────────────────────────────────────────
+
+@app.get("/api/stress")
+def stress_route(refresh: int = 1) -> dict[str, Any]:
+    """Named tail-event replays + parametric shocks against the live fleet book."""
+    from src.analysis import stress as _stress
+
+    path = OUTPUTS_DIR / "stress_report.json"
+    if not refresh and path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return _stress.write_report()
+    except Exception as exc:
+        logger.exception("stress report failed")
+        return {"error": str(exc), "scenarios": []}
+
+
 # ── Fleet risk aggregation ─────────────────────────────────────────────────────
 
 @app.get("/api/fleet-risk")
