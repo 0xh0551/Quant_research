@@ -852,6 +852,23 @@ def experiments() -> dict[str, Any]:
     return {"runs": recent_runs(50)}
 
 
+# ── Capacity / market impact ──────────────────────────────────────────────────
+
+@app.get("/api/capacity")
+def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]:
+    """Per-edge capacity curves (L2-calibrated √-impact vs measured OOS edge)."""
+    from src.execution import capacity as _cap
+
+    path = OUTPUTS_DIR / "capacity_report.json"
+    if not refresh and path.exists():
+        return json.loads(path.read_text(encoding="utf-8"))
+    try:
+        return _cap.write_report(fee_rt_bps=fee_rt_bps)
+    except Exception as exc:
+        logger.exception("capacity report failed")
+        return {"error": str(exc), "edges": []}
+
+
 # ── Fleet risk aggregation ─────────────────────────────────────────────────────
 
 @app.get("/api/fleet-risk")

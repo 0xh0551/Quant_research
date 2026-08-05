@@ -118,6 +118,7 @@ function showSection(name) {
   if (name === 'models') loadModels();
   if (name === 'quality') loadQuality();
   if (name === 'fleet') loadFleetRisk();
+  if (name === 'capacity') loadCapacity();
 }
 
 function refreshCurrentSection() {
@@ -134,6 +135,7 @@ function refreshCurrentSection() {
   else if (s === 'models') loadModels();
   else if (s === 'quality') loadQuality();
   else if (s === 'fleet') loadFleetRisk();
+  else if (s === 'capacity') loadCapacity(true);
 }
 
 // ═══════════════════════════════════════════════════════════════ EXCHANGES
@@ -1692,6 +1694,82 @@ function renderFleetPosTable(d) {
   </tr>`).join('');
   document.getElementById('fleet-pos-table').innerHTML =
     `<table><thead><tr><th>${t('fleet_h_bot')}</th><th>${t('fleet_h_pair')}</th><th>${t('fleet_h_side')}</th><th>${t('fleet_h_lev')}</th><th>${t('fleet_h_stake')}</th><th>${t('fleet_h_notional')}</th><th>${t('fleet_h_upnl')}</th><th>${t('fleet_h_beta')}</th><th>${t('fleet_h_age')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ═══════════════════════════════════════════════════════════════ CAPACITY
+async function loadCapacity(refresh = false) {
+  const metrics = document.getElementById('cap-metrics');
+  metrics.innerHTML = `<div class="empty-state" style="grid-column:1/-1;padding:24px"><span class="spinner"></span></div>`;
+  let d;
+  try { d = await (await fetch('/api/capacity' + (refresh ? '?refresh=1' : ''))).json(); }
+  catch (e) { metrics.innerHTML = `<p class="neg">${esc(e.message)}</p>`; return; }
+  state.capacity = d;
+  document.getElementById('cap-generated').textContent = d.generated_at ? fmtDateTime(d.generated_at) : '';
+
+  const edges = d.edges || [];
+  if (!edges.length) {
+    metrics.innerHTML = `<p class="muted" style="grid-column:1/-1">${t('cap_empty')}</p>`;
+    document.getElementById('cap-table').innerHTML = '';
+    return;
+  }
+  const caps = edges.map(e => e.capacity_notional || 0);
+  const utils = edges.filter(e => e.utilization_pct != null).map(e => e.utilization_pct);
+  const zeroCap = edges.filter(e => !e.capacity_notional).length;
+  const median = arr => { const s = [...arr].sort((a, b) => a - b); return s.length ? s[Math.floor(s.length / 2)] : 0; };
+  const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:19px">${val}</div></div>`;
+  metrics.innerHTML =
+    mc(t('cap_m_edges'), edges.length) +
+    mc(t('cap_m_books'), d.n_books || 0) +
+    mc(t('cap_m_median'), fmtUsd(median(caps))) +
+    mc(t('cap_m_zero'), zeroCap, zeroCap ? 'neg' : 'pos') +
+    mc(t('cap_m_maxutil'), utils.length ? Math.max(...utils) + '%' : '—',
+      utils.length && Math.max(...utils) > 50 ? 'neg' : 'pos');
+
+  // symbol selector
+  const sel = document.getElementById('cap-symbol-select');
+  sel.innerHTML = edges.map((e, i) =>
+    `<option value="${i}">${esc(e.symbol)} · ${esc(e.strategy)}</option>`).join('');
+  renderCapacityCurve();
+  renderCapacityTable(edges);
+}
+
+function renderCapacityCurve() {
+  const d = state.capacity; if (!d || !d.edges || !d.edges.length) return;
+  const i = parseInt(document.getElementById('cap-symbol-select').value || '0', 10);
+  const e = d.edges[i] || d.edges[0];
+  const el = document.getElementById('chart-capacity-curve');
+  const xs = e.curve.map(p => p.notional);
+  Plotly.newPlot(el, [
+    { x: xs, y: e.curve.map(p => p.net_edge_bps), name: t('cap_net_edge'),
+      mode: 'lines+markers', line: { color: '#2dd4bf', width: 2.5 } },
+    { x: xs, y: e.curve.map(p => p.impact_rt_bps), name: t('cap_impact'),
+      mode: 'lines', line: { color: '#f87171', dash: 'dot' } },
+  ], {
+    ...PLOTLY_DARK, margin: { l: 55, r: 20, t: 12, b: 45 },
+    xaxis: { type: 'log', title: { text: 'USD', font: { size: 11 } }, gridcolor: GRID },
+    yaxis: { title: { text: 'bps', font: { size: 11 } }, gridcolor: GRID, zerolinecolor: '#3a4761', zerolinewidth: 2 },
+    legend: { orientation: 'h', y: 1.12 },
+    shapes: e.capacity_notional ? [{ type: 'line', x0: e.capacity_notional, x1: e.capacity_notional, y0: 0, y1: 1, yref: 'paper', line: { color: '#fbbf24', dash: 'dash' } }] : [],
+    annotations: e.capacity_notional ? [{ x: Math.log10(e.capacity_notional), y: 1, yref: 'paper', text: t('cap_capacity_line'), showarrow: false, font: { color: '#fbbf24', size: 11 }, yanchor: 'bottom' }] : [],
+  }, { displayModeBar: false, responsive: true });
+}
+
+function renderCapacityTable(edges) {
+  const rows = edges.map(e => {
+    const utilCls = e.utilization_pct == null ? 'muted' : e.utilization_pct > 50 ? 'neg' : e.utilization_pct > 25 ? 'cell-yellow' : 'pos';
+    return `<tr>
+      <td><b>${esc(e.symbol)}</b> ${e.deployable ? '<span class="badge badge-green">live</span>' : ''}</td>
+      <td class="muted">${esc(e.strategy)}</td>
+      <td>${e.edge_rt_bps} bps</td>
+      <td>${e.adv_usd ? fmtUsd(e.adv_usd) : '—'}</td>
+      <td>${e.k_l2 ?? '—'}</td>
+      <td class="${e.capacity_notional ? '' : 'neg'}">${e.capacity_notional ? fmtUsd(e.capacity_notional) : '0'}</td>
+      <td>${e.half_edge_notional ? fmtUsd(e.half_edge_notional) : '—'}</td>
+      <td>${e.current_order_usd ? fmtUsd(e.current_order_usd) : '—'}</td>
+      <td class="${utilCls}">${e.utilization_pct != null ? e.utilization_pct + '%' : '—'}</td></tr>`;
+  }).join('');
+  document.getElementById('cap-table').innerHTML =
+    `<table><thead><tr><th>${t('symbol_label')}</th><th>${t('edges_strategy')}</th><th>${t('cap_h_edge')}</th><th>ADV</th><th>k(L2)</th><th>${t('cap_h_capacity')}</th><th>${t('cap_h_half')}</th><th>${t('cap_h_current')}</th><th>${t('cap_h_util')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 
 // ═══════════════════════════════════════════════════════════════ BOOT
