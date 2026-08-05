@@ -254,6 +254,23 @@ const I18N = {
     fleet_alert_crowding_corr: 'میانگین همبستگی دارایی‌های باز {value} است (حد {limit}) — ریسک هم‌جهتی',
     fleet_empty: 'هیچ پوزیشن بازی در ناوگان نیست یا local.json پیکربندی نشده است.',
 
+    /* ── capacity ─────────────────────────────────────────────────── */
+    nav_capacity: 'ظرفیت',
+    title_capacity: 'ظرفیت لبه‌ها', sub_capacity: 'چه سرمایه‌ای را هر لبه قبل از خوردنِ آلفا تحمل می‌کند',
+    cap_title: 'ظرفیت لبه‌ها (مدل امپکت √)',
+    cap_sub_note: 'امپکت واقعی از هزینهٔ sweep دفتر سفارش (L2) کالیبره می‌شود و در برابر لبهٔ اندازه‌گیری‌شدهٔ OOS هر لبه قرار می‌گیرد؛ ظرفیت = اندازه‌ای که انتظار خالص صفر می‌شود.',
+    cap_recalc: 'محاسبهٔ دوباره',
+    cap_metrics: 'خلاصه',
+    cap_curve_title: 'منحنی لبهٔ خالص در برابر اندازهٔ سفارش',
+    cap_table: 'ظرفیت هر لبه',
+    cap_empty: 'گزارش ظرفیت در دسترس نیست — ابتدا اسکن لبه‌ها و جمع‌آوری L2 باید اجرا شده باشند.',
+    cap_m_edges: 'لبهٔ تحلیل‌شده', cap_m_books: 'دفتر L2', cap_m_median: 'ظرفیت میانه',
+    cap_m_zero: 'ظرفیت صفر', cap_m_maxutil: 'بیشترین استفاده',
+    cap_net_edge: 'لبهٔ خالص (bps)', cap_impact: 'امپکت رفت‌وبرگشت (bps)',
+    cap_capacity_line: 'ظرفیت',
+    cap_h_edge: 'لبه/معامله', cap_h_capacity: 'ظرفیت', cap_h_half: 'نیم-لبه',
+    cap_h_current: 'سفارش فعلی', cap_h_util: 'استفاده',
+
     /* edges — statistical rigor */
     edges_rigor_title: 'اعتبار آماری (دفاع در برابر سوگیری انتخاب)',
     edges_rigor_hint: 'با اسکن صدها ترکیب، شارپ بالا تنها وقتی معتبر است که شارپِ تعدیل‌شده (DSR) بالای ۰٫۹۵ بماند و PBO پایین باشد.',
@@ -607,6 +624,23 @@ const I18N = {
     fleet_alert_bot_db_missing: 'Bot {context} database is unreachable',
     fleet_alert_crowding_corr: 'Average correlation of held assets is {value} (limit {limit}) — crowding risk',
     fleet_empty: 'No open positions in the fleet, or local.json is not configured.',
+
+    /* ── capacity ─────────────────────────────────────────────────── */
+    nav_capacity: 'Capacity',
+    title_capacity: 'Edge Capacity', sub_capacity: 'How much size each edge carries before impact eats the alpha',
+    cap_title: 'Edge Capacity (√-impact model)',
+    cap_sub_note: 'Impact is calibrated from real L2 order-book sweep costs and set against each edge’s measured OOS alpha; capacity = the size where net expectancy hits zero.',
+    cap_recalc: 'Recalculate',
+    cap_metrics: 'Summary',
+    cap_curve_title: 'Net edge vs order size',
+    cap_table: 'Per-edge capacity',
+    cap_empty: 'No capacity report yet — run the edge scan and L2 collection first.',
+    cap_m_edges: 'Edges analysed', cap_m_books: 'L2 books', cap_m_median: 'Median capacity',
+    cap_m_zero: 'Zero capacity', cap_m_maxutil: 'Max utilization',
+    cap_net_edge: 'Net edge (bps)', cap_impact: 'Round-trip impact (bps)',
+    cap_capacity_line: 'capacity',
+    cap_h_edge: 'Edge/trade', cap_h_capacity: 'Capacity', cap_h_half: 'Half-edge',
+    cap_h_current: 'Current order', cap_h_util: 'Utilization',
 
     /* edges — statistical rigor */
     edges_rigor_title: 'Statistical rigor (selection-bias defences)',
