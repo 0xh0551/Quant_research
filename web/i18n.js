@@ -254,6 +254,20 @@ const I18N = {
     fleet_alert_crowding_corr: 'میانگین همبستگی دارایی‌های باز {value} است (حد {limit}) — ریسک هم‌جهتی',
     fleet_empty: 'هیچ پوزیشن بازی در ناوگان نیست یا local.json پیکربندی نشده است.',
 
+    /* ── pipeline health ──────────────────────────────────────────── */
+    nav_pipeline: 'سلامت پایپ‌لاین',
+    title_pipeline: 'ضربان پایپ‌لاین', sub_pipeline: 'هر جاب زمان‌بندی‌شده باید ردی تازه بگذارد — این‌جا همه یک‌جا بازرسی می‌شوند',
+    pipe_title: 'ضربان پایپ‌لاین',
+    pipe_sub_note: 'کرانتب پاک‌شده، واچر مرده یا دیسک پر، بی‌صدا جاب شبانه را می‌کشد. این‌جا تازگیِ خروجیِ هر جاب ثبت‌شده ممیزی می‌شود؛ جاب بحرانیِ عقب‌افتاده = آلارم.',
+    pipe_audit: 'بازرسی',
+    pipe_jobs: 'وضعیت جاب‌ها',
+    pipe_history: 'تاریخچهٔ سلامت (هر بازرسی)',
+    pipe_history_empty: 'هنوز تاریخچه‌ای نیست — هر اجرای ممیزی یک نقطه اضافه می‌کند.',
+    pipe_all_ok: 'هر {n} جاب خروجی تازه دارند — پایپ‌لاین سالم است.',
+    pipe_failing: '{late} جاب عقب‌افتاده و {missing} جاب بدون خروجی',
+    pipe_s_ok: 'تازه', pipe_s_late: 'عقب‌افتاده', pipe_s_missing: 'غایب',
+    pipe_age: 'عمر',
+
     /* ── attribution ──────────────────────────────────────────────── */
     nav_attribution: 'اتریبیوشن',
     title_attribution: 'تجزیهٔ PnL', sub_attribution: 'هر دلار سود/ضرر: آلفای تصمیم، اسلیپیج، کارمزد، فاندینگ، MFE-Capture',
@@ -679,6 +693,20 @@ const I18N = {
     fleet_alert_bot_db_missing: 'Bot {context} database is unreachable',
     fleet_alert_crowding_corr: 'Average correlation of held assets is {value} (limit {limit}) — crowding risk',
     fleet_empty: 'No open positions in the fleet, or local.json is not configured.',
+
+    /* ── pipeline health ──────────────────────────────────────────── */
+    nav_pipeline: 'Pipeline Health',
+    title_pipeline: 'Pipeline Heartbeat', sub_pipeline: 'Every scheduled job must leave a fresh artifact — audited in one sweep',
+    pipe_title: 'Pipeline heartbeat',
+    pipe_sub_note: 'A wiped crontab, dead watcher or full disk kills nightly jobs silently. This audits the freshness of every registered job’s artifact; a stale critical job raises the alarm.',
+    pipe_audit: 'Audit now',
+    pipe_jobs: 'Job status',
+    pipe_history: 'Health history (per audit)',
+    pipe_history_empty: 'No history yet — every audit run adds a point.',
+    pipe_all_ok: 'All {n} jobs have fresh artifacts — the pipeline is healthy.',
+    pipe_failing: '{late} jobs late and {missing} missing artifacts',
+    pipe_s_ok: 'fresh', pipe_s_late: 'late', pipe_s_missing: 'missing',
+    pipe_age: 'Age',
 
     /* ── attribution ──────────────────────────────────────────────── */
     nav_attribution: 'Attribution',

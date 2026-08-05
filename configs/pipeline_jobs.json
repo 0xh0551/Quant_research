@@ -1,0 +1,85 @@
+{
+  "_comment": "Pipeline heartbeat registry — every scheduled job that must leave a fresh artifact. Site-local additions/overrides go in configs/local.json under 'heartbeat_jobs' (same shape; matching names override).",
+  "jobs": [
+    {
+      "name": "wf_scan",
+      "artifact": "outputs/wf_report.json",
+      "max_age_hours": 30,
+      "severity": "critical",
+      "desc_fa": "اسکن شبانهٔ walk-forward لبه‌ها",
+      "desc_en": "Nightly walk-forward edge scan"
+    },
+    {
+      "name": "wf_candidates",
+      "artifact": "outputs/wf_candidates.json",
+      "max_age_hours": 30,
+      "severity": "critical",
+      "desc_fa": "مانیفست کاندیداهای قابل استقرار",
+      "desc_en": "Deployable candidate manifest"
+    },
+    {
+      "name": "pair_rotation",
+      "artifact": "outputs/pair_assignments.json",
+      "max_age_hours": 30,
+      "severity": "critical",
+      "desc_fa": "چرخش شبانهٔ جفت‌ارز بات‌ها",
+      "desc_en": "Nightly bot pair rotation"
+    },
+    {
+      "name": "funding_refresh",
+      "artifact": "data/funding/*.parquet",
+      "max_age_hours": 30,
+      "severity": "warn",
+      "desc_fa": "به‌روزرسانی تاریخچهٔ فاندینگ/OI",
+      "desc_en": "Funding-rate / OI history refresh"
+    },
+    {
+      "name": "l2_collector",
+      "artifact": "outputs/microstructure_latest.json",
+      "max_age_hours": 8,
+      "severity": "warn",
+      "desc_fa": "جمع‌آوری اسنپ‌شات L2 و هزینهٔ sweep",
+      "desc_en": "L2 order-book snapshot collection"
+    },
+    {
+      "name": "event_risk",
+      "artifact": "outputs/event_risk.json",
+      "max_age_hours": 30,
+      "severity": "warn",
+      "desc_fa": "لایهٔ ریسک رویدادها",
+      "desc_en": "Event-risk overlay"
+    },
+    {
+      "name": "execution_report",
+      "artifact": "outputs/execution_report.json",
+      "max_age_hours": 30,
+      "severity": "warn",
+      "desc_fa": "گزارش اجرای/اسلیپیج ناوگان",
+      "desc_en": "Fleet execution/slippage report"
+    },
+    {
+      "name": "golive_scorecard",
+      "artifact": "outputs/golive_scorecard.json",
+      "max_age_hours": 30,
+      "severity": "warn",
+      "desc_fa": "اسکورکارد go-live بات‌ها",
+      "desc_en": "Bot go-live scorecard"
+    },
+    {
+      "name": "fleet_risk",
+      "artifact": "outputs/fleet_risk.json",
+      "max_age_hours": 26,
+      "severity": "warn",
+      "desc_fa": "اسنپ‌شات ریسک تجمیعی ناوگان",
+      "desc_en": "Aggregate fleet-risk snapshot"
+    },
+    {
+      "name": "web_dashboard",
+      "artifact": "logs/app.log",
+      "max_age_hours": 24,
+      "severity": "warn",
+      "desc_fa": "سرور وب داشبورد (لاگ فعال)",
+      "desc_en": "Dashboard web server (active log)"
+    }
+  ]
+}

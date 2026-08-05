@@ -869,6 +869,22 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
         return {"error": str(exc), "edges": []}
 
 
+# ── Pipeline heartbeat ────────────────────────────────────────────────────────
+
+@app.get("/api/pipeline-health")
+def pipeline_health_route() -> dict[str, Any]:
+    """Freshness audit of every registered scheduled job + reliability history."""
+    from src.ops import heartbeat as _hb
+
+    try:
+        report = _hb.audit()
+        report["history"] = _hb.read_history(200)
+        return report
+    except Exception as exc:
+        logger.exception("pipeline health audit failed")
+        return {"error": str(exc), "jobs": [], "counts": {}, "history": []}
+
+
 # ── PnL attribution ───────────────────────────────────────────────────────────
 
 @app.get("/api/attribution")
