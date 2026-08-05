@@ -254,6 +254,25 @@ const I18N = {
     fleet_alert_crowding_corr: 'میانگین همبستگی دارایی‌های باز {value} است (حد {limit}) — ریسک هم‌جهتی',
     fleet_empty: 'هیچ پوزیشن بازی در ناوگان نیست یا local.json پیکربندی نشده است.',
 
+    /* ── stress ───────────────────────────────────────────────────── */
+    nav_stress: 'استرس‌تست',
+    title_stress: 'استرس‌تست پرتفوی', sub_stress: 'بازپخش رویدادهای دنباله + شوک‌های پارامتریک روی بوک زنده',
+    stress_title: 'استرس‌تست پرتفوی زنده',
+    stress_sub_note: 'هر سناریو روی پوزیشن‌های باز فعلی ناوگان اجرا می‌شود: حرکت β-مقیاس هر دارایی، لیکوییدیشن ایزوله، فاندینگ همزمان و هزینهٔ فلت‌کردن در بوکِ تحت فشار.',
+    stress_run: 'اجرای سناریوها',
+    stress_summary: 'خلاصه',
+    stress_chart: 'ضربه به اکوییتی در هر سناریو (٪)',
+    stress_path_chart: 'مسیر BTC در سناریوی تاریخی',
+    stress_table: 'جزئیات سناریوها',
+    stress_empty: 'پوزیشن بازی برای استرس وجود ندارد.',
+    stress_fallback: 'دادهٔ محلی این پنجره را ندارد — از حرکت مستندشدهٔ تاریخی استفاده شد',
+    stress_m_equity: 'اکوییتی', stress_m_positions: 'پوزیشن باز', stress_m_worst: 'بدترین سناریو',
+    stress_m_worst_pnl: 'ضرر بدترین سناریو', stress_m_liq: 'حداکثر لیکوییدیشن',
+    stress_h_scenario: 'سناریو', stress_h_move: 'حرکت بازار', stress_h_pnl: 'PnL ناوگان',
+    stress_h_exit: 'هزینهٔ خروج', stress_h_liq: 'لیکویید', stress_h_after: 'اکوییتی بعد',
+    stress_h_worst_pos: 'بدترین پوزیشن', stress_h_verdict: 'وضعیت',
+    stress_v_ok: 'قابل تحمل', stress_v_hit: 'ضربهٔ جدی', stress_v_critical: 'بحرانی', stress_v_wiped: 'نابودی',
+
     /* ── capacity ─────────────────────────────────────────────────── */
     nav_capacity: 'ظرفیت',
     title_capacity: 'ظرفیت لبه‌ها', sub_capacity: 'چه سرمایه‌ای را هر لبه قبل از خوردنِ آلفا تحمل می‌کند',
@@ -624,6 +643,25 @@ const I18N = {
     fleet_alert_bot_db_missing: 'Bot {context} database is unreachable',
     fleet_alert_crowding_corr: 'Average correlation of held assets is {value} (limit {limit}) — crowding risk',
     fleet_empty: 'No open positions in the fleet, or local.json is not configured.',
+
+    /* ── stress ───────────────────────────────────────────────────── */
+    nav_stress: 'Stress Test',
+    title_stress: 'Portfolio Stress Test', sub_stress: 'Tail-event replays + parametric shocks on the live book',
+    stress_title: 'Live-book stress testing',
+    stress_sub_note: 'Every scenario runs against the fleet’s current open positions: β-scaled asset moves, isolated-margin liquidations, concurrent funding and the cost of flattening into a stressed book.',
+    stress_run: 'Run scenarios',
+    stress_summary: 'Summary',
+    stress_chart: 'Equity impact per scenario (%)',
+    stress_path_chart: 'BTC path in the historical scenario',
+    stress_table: 'Scenario details',
+    stress_empty: 'No open positions to stress.',
+    stress_fallback: 'Local data misses this window — documented historical move used',
+    stress_m_equity: 'Equity', stress_m_positions: 'Open positions', stress_m_worst: 'Worst scenario',
+    stress_m_worst_pnl: 'Worst-case loss', stress_m_liq: 'Max liquidations',
+    stress_h_scenario: 'Scenario', stress_h_move: 'Market move', stress_h_pnl: 'Fleet PnL',
+    stress_h_exit: 'Exit cost', stress_h_liq: 'Liq.', stress_h_after: 'Equity after',
+    stress_h_worst_pos: 'Worst position', stress_h_verdict: 'Verdict',
+    stress_v_ok: 'survivable', stress_v_hit: 'serious hit', stress_v_critical: 'critical', stress_v_wiped: 'wiped out',
 
     /* ── capacity ─────────────────────────────────────────────────── */
     nav_capacity: 'Capacity',
