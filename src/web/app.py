@@ -108,7 +108,7 @@ BARS_30D = {
 _symbol_cache: dict[str, list[str]] = {}
 _symbol_cache_lock = threading.Lock()
 
-app = FastAPI(title="Quant Research Platform", version="1.3.0")
+app = FastAPI(title="Quant Research Platform", version="1.4.0")
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
