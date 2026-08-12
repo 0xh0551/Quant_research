@@ -292,6 +292,21 @@ def _record_and_deflate_cumulative(results: list[ScanResult]) -> None:
         return
 
 
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    """tmp + os.replace — خواننده یا نسخهٔ قبلی را می‌بیند یا نسخهٔ کامل را.
+
+    مانیفست/گزارش را چند مصرف‌کننده‌ی هم‌زمان می‌خوانند (rotate_bot_pairs،
+    refresh_qr_bridge، خودِ بات‌ها، داشبورد). write_text مستقیم روی مسیرِ نهایی
+    می‌نویسد، پس یک خواننده می‌توانست JSONِ نصفه ببیند. با نوشتنِ اتمیک، این
+    فایل‌ها دیگر برای نوشته‌شدن به .fleet_ops.lock نیاز ندارند.
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(_json_safe(payload), ensure_ascii=False, indent=2,
+                              allow_nan=False), encoding="utf-8")
+    tmp.replace(path)
+
+
 def _json_safe(o):
     """NaN/Inf → None. استاندارد JSON این مقادیر را ندارد؛ پایتون آن‌ها را بدون
     کوتیشن می‌نویسد و هر مصرف‌کنندهٔ مرورگری (داشبورد QR و تب «کوانت ریسرچ» در
@@ -317,10 +332,7 @@ def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
         "n_passed": len(survivors),
         "candidates": [asdict(r) for r in survivors],
     }
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(_json_safe(manifest), ensure_ascii=False, indent=2, allow_nan=False),
-        encoding="utf-8")
+    _write_json_atomic(output_path, manifest)
     return output_path
 
 
@@ -540,10 +552,7 @@ def build_report(
 def write_report(report: dict, output_path: Path,
                  history_path: Path | None = None) -> Path:
     """گزارش را می‌نویسد و یک خط خلاصه به history (JSONL) اضافه می‌کند."""
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(
-        json.dumps(_json_safe(report), ensure_ascii=False, indent=2, allow_nan=False),
-        encoding="utf-8")
+    _write_json_atomic(output_path, report)
     if history_path is not None:
         history_path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps({
