@@ -192,8 +192,12 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
         for _, r in df.iterrows():
             res = llm.complete(_trade_prompt(r), tier=per_trade_tier, system=SYSTEM_RUBRIC,
                                json_schema=VERDICT_SCHEMA, max_tokens=400)
-            verdicts[int(r["id"])] = res.get("data") or {"primary_cause": "noise", "confidence": 0,
-                                                          "evidence": "parse_error", "suggested_fix": "-"}
+            # Record WHY a verdict is missing (budget skip vs truncation vs bad JSON) —
+            # a blanket "parse_error" hid which of those was happening.
+            verdicts[int(r["id"])] = res.get("data") or {
+                "primary_cause": "noise", "confidence": 0, "suggested_fix": "-",
+                "evidence": "unclassified: " + str(res.get("skipped") or res.get("parse_error")
+                                                   or "no_data")}
 
     return _finish(bot, df, verdicts, llm, synth_tier, write)
 
@@ -243,8 +247,48 @@ def _synthesize(bot, causes, loss_by_cause, trades_out, llm, tier) -> dict:
         "recover the most money, ordered by expected impact. Ground each fix in the dollar-weighted "
         "cause breakdown.\n\n" + json.dumps(ev, default=str)
     )
-    res = llm.complete(prompt, tier=tier, system=SYSTEM_RUBRIC, json_schema=SYNTH_SCHEMA, max_tokens=800)
-    return res.get("data") or {"headline": "synthesis parse error", "systemic_fixes": []}
+    # 1500 = room for a headline + 3 grounded fixes; the client adds the thinking
+    # allowance on top (Sonnet spent 905 tokens thinking before writing a character,
+    # which is what truncated the old 800-token budget into "synthesis parse error").
+    res = llm.complete(prompt, tier=tier, system=SYSTEM_RUBRIC, json_schema=SYNTH_SCHEMA,
+                       max_tokens=1500)
+    data = res.get("data")
+    if data:
+        return data
+    # Never hand the dashboard an error string: fall back to the deterministic roll-up
+    # the per-trade verdicts already support, and label it so nobody mistakes it for
+    # Claude's synthesis.
+    return _fallback_synthesis(bot, loss_by_cause, trades_out,
+                               reason=res.get("skipped") or res.get("parse_error") or "no_data")
+
+
+def _fallback_synthesis(bot, loss_by_cause, trades_out, *, reason: str) -> dict:
+    """Deterministic stand-in when the synthesis call is unusable ($0, no LLM).
+
+    Ranks causes by dollars bled and promotes the per-trade `suggested_fix` from the
+    worst trade of each cause — grounded in the same evidence, just not synthesised.
+    """
+    ranked = sorted(loss_by_cause.items(), key=lambda kv: kv[1])  # most negative first
+    fixes = []
+    for cause, bled in ranked[:3]:
+        worst = min(
+            (t for t in trades_out if (t.get("verdict") or {}).get("primary_cause") == cause),
+            key=lambda t: t["close_profit_abs"], default=None)
+        if worst is None:
+            continue
+        fixes.append({
+            "fix": (worst.get("verdict") or {}).get("suggested_fix", ""),
+            "rationale": f"{cause} bled {bled:.2f} quote across the analysed losers; "
+                         f"worst single trade {worst.get('pair')} {worst['close_profit_abs']:.2f}.",
+            "addresses_cause": cause,
+        })
+    top = ranked[0] if ranked else ("noise", 0.0)
+    return {
+        "headline": f"[deterministic fallback — synthesis unavailable: {reason}] "
+                    f"{bot}: {top[0]} is the biggest bleed ({top[1]:.2f} quote).",
+        "systemic_fixes": fixes,
+        "degraded": reason,
+    }
 
 
 def collect(bot: str, batch_id: str, *, since_days: float = 45.0, n_worst: int = 12,

@@ -19,10 +19,13 @@ Model IDs are the current canonical strings; do not append date suffixes.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_log = logging.getLogger(__name__)
 
 # canonical current model IDs (no date suffixes)
 MODELS = {
@@ -41,13 +44,58 @@ PRICES = {
 SONNET_INTRO_END = date(2026, 8, 31)
 SONNET_STANDARD = (3.0, 15.0)
 
-# Hard monthly spend ceiling — even manual runs cannot exceed this. Raised to $5 for
-# the "balanced" analytics package. Enforced as a TRUE cap: complete()/batch_submit()
+# 2026-08-12: Sonnet/Opus emit adaptive `thinking` blocks even when `thinking` is not
+# requested, and those tokens are billed against max_tokens BEFORE a single character of
+# the answer. A max_tokens sized for the JSON alone therefore returns a JSON string cut
+# mid-token -> json.loads fails -> the caller silently degrades. That is exactly how the
+# nightly post-mortems shipped `"headline": "synthesis parse error"` to the dashboard
+# (800 tokens: 905 wanted for thinking alone) and how the market brief quietly fell back
+# to its deterministic text. So max_tokens now means "budget for the answer" and this
+# allowance is added on top for models that think.
+THINKING_MODELS = {"claude-sonnet-5", "claude-opus-4-8", "claude-opus-5", "claude-fable-5"}
+THINKING_HEADROOM = 2048
+MAX_OUTPUT_TOKENS = 32000  # ceiling for the truncation retry
+
+
+def _parse_structured(text: str, stop_reason: str | None) -> tuple[Any | None, str | None]:
+    """json.loads with the usual rescues. -> (data, parse_error).
+
+    Structured output normally returns bare JSON, but a fenced block or a stray
+    preamble should not cost us the whole answer. A truncated answer is reported as
+    such so the caller can retry with a bigger budget instead of guessing.
+    """
+    if not text:
+        return None, ("truncated_before_text" if stop_reason == "max_tokens" else "empty")
+    for candidate in (text, _strip_fence(text), _outermost_object(text)):
+        if not candidate:
+            continue
+        try:
+            return json.loads(candidate), None
+        except Exception:
+            continue
+    return None, ("truncated" if stop_reason == "max_tokens" else "invalid_json")
+
+
+def _strip_fence(text: str) -> str | None:
+    t = text.strip()
+    if not t.startswith("```"):
+        return None
+    body = t.split("\n", 1)[1] if "\n" in t else ""
+    return body.rsplit("```", 1)[0].strip() or None
+
+
+def _outermost_object(text: str) -> str | None:
+    start, end = text.find("{"), text.rfind("}")
+    return text[start:end + 1] if 0 <= start < end else None
+
+# Hard monthly spend ceiling — even manual runs cannot exceed this. 2026-08-09: owner
+# set the target at $3-4/mo → 3.5 (fits: strategist via Batch ~$1.5 + postmortems
+# ~$1.2 + market brief ~$0.3). Enforced as a TRUE cap: complete()/batch_submit()
 # pre-reserve each call's worst-case cost via budget_ok(est), so spend can never cross
 # MONTHLY_BUDGET_USD (no last-call overshoot). Override with QUANT_LLM_MONTHLY_BUDGET.
 _ROOT = Path(__file__).resolve().parents[2]
 SPEND_FILE = _ROOT / "outputs" / "llm_spend.json"
-MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "5.0"))
+MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "3.5"))
 WEB_SEARCH_USD = 0.01  # ~$10 / 1000 Anthropic web searches
 
 from src import local_config
@@ -149,19 +197,49 @@ class QuantLLM:
         max_tokens: int = 4096,
         thinking: bool = False,
         cache_system: bool = True,
+        thinking_headroom: int | None = None,
+        retry_on_truncation: bool = True,
     ) -> dict[str, Any]:
         """One request. Returns {"text", "data"(if json_schema), "usage", "model", "cost_usd"}.
 
         `system` is sent as a cached block when `cache_system` (reads ~0.1x on
         repeated calls with the same prefix). `json_schema` forces a validated
         JSON object via output_config.format and populates `data`.
+
+        `max_tokens` is the budget for the *answer*. Thinking-capable models spend
+        output tokens on `thinking` blocks first (see THINKING_HEADROOM), so an
+        extra allowance is added on top automatically; pass `thinking_headroom=0`
+        to opt out. On a truncated structured answer the call is retried once with
+        a doubled budget (disable with `retry_on_truncation=False`).
         """
         model = self.model_for(tier)
+        headroom = thinking_headroom if thinking_headroom is not None else (
+            THINKING_HEADROOM if model in THINKING_MODELS else 0)
+        budget = max_tokens + headroom
+        attempt, out = 0, None
+        while True:
+            out = self._complete_once(model, prompt, system=system, json_schema=json_schema,
+                                      budget=budget, thinking=thinking, tier=tier,
+                                      cache_system=cache_system)
+            truncated = out.get("stop_reason") == "max_tokens"
+            if (out.get("skipped") or not json_schema or out.get("data") is not None
+                    or not truncated or not retry_on_truncation or attempt >= 1):
+                break
+            # The answer was cut mid-JSON — almost always thinking ate the budget.
+            attempt += 1
+            budget = min(budget * 2, MAX_OUTPUT_TOKENS)
+            _log.warning("%s: structured answer truncated (output=%s, thinking=%s); "
+                         "retrying with max_tokens=%s", model,
+                         out["usage"].get("output"), out["usage"].get("thinking"), budget)
+        return out
+
+    def _complete_once(self, model, prompt, *, system, json_schema, budget,
+                       thinking, tier, cache_system) -> dict[str, Any]:
         # Pre-reserve this call's WORST-CASE cost so the monthly ceiling is a hard cap
         # (no final-call overshoot): conservatively assume up to 10k input tokens (covers
-        # cache-write inflation) + the full max_tokens output at this model's rate.
+        # cache-write inflation) + the full output budget at this model's rate.
         pin, pout = self._price_for(model)
-        est = (10000 * pin + max_tokens * pout) / 1e6
+        est = (10000 * pin + budget * pout) / 1e6
         if not self.budget_ok(est):
             return {"text": "", "data": None, "model": model, "cost_usd": 0.0,
                     "usage": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
@@ -169,7 +247,7 @@ class QuantLLM:
                     "budget_remaining": self.budget_remaining()}
         kwargs: dict[str, Any] = {
             "model": model,
-            "max_tokens": max_tokens,
+            "max_tokens": budget,
             "messages": [{"role": "user", "content": prompt}],
         }
         if system:
@@ -184,23 +262,24 @@ class QuantLLM:
 
         resp = self._c().messages.create(**kwargs)
         text = "".join(b.text for b in resp.content if getattr(b, "type", None) == "text")
+        details = getattr(resp.usage, "output_tokens_details", None)
         out: dict[str, Any] = {
             "text": text,
             "model": resp.model,
+            "stop_reason": getattr(resp, "stop_reason", None),
+            "max_tokens": budget,
             "usage": {
                 "input": resp.usage.input_tokens,
                 "output": resp.usage.output_tokens,
                 "cache_read": getattr(resp.usage, "cache_read_input_tokens", 0) or 0,
                 "cache_write": getattr(resp.usage, "cache_creation_input_tokens", 0) or 0,
+                "thinking": getattr(details, "thinking_tokens", 0) or 0,
             },
         }
         out["cost_usd"] = self._cost(model, out["usage"])
         self._record_spend(out["cost_usd"])
         if json_schema:
-            try:
-                out["data"] = json.loads(text)
-            except Exception:
-                out["data"] = None
+            out["data"], out["parse_error"] = _parse_structured(text, out["stop_reason"])
         return out
 
     def record_web_search(self, usage, model: str, n_searches: int) -> float:
@@ -233,16 +312,22 @@ class QuantLLM:
         json_schema: dict | None = None,
         max_tokens: int = 2048,
         cache_system: bool = True,
+        thinking_headroom: int | None = None,
     ) -> str:
         """items = [{"custom_id": str, "prompt": str}, ...] -> batch id.
 
         A shared `system` (e.g. the post-mortem rubric) is cached across the whole
         batch, so a big fixed prefix is billed once at the cache-write rate.
+        `max_tokens` is the answer budget; thinking headroom is added as in complete()
+        — a batch cannot be retried cheaply, so getting the budget right matters more.
         """
         from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
         from anthropic.types.messages.batch_create_params import Request
 
         model = self.model_for(tier)
+        headroom = thinking_headroom if thinking_headroom is not None else (
+            THINKING_HEADROOM if model in THINKING_MODELS else 0)
+        max_tokens = max_tokens + headroom
         pin, pout = self._price_for(model)
         est = len(items) * (10000 * pin + max_tokens * pout) / 1e6 * 0.5  # Batch is 50% off
         if not self.budget_ok(est):
@@ -288,10 +373,9 @@ class QuantLLM:
             batch_cost += self._cost(msg.model, u) * 0.5  # Batch API is 50% off
             text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
             if as_json:
-                try:
-                    out[res.custom_id] = json.loads(text)
-                except Exception:
-                    out[res.custom_id] = {"_parse_error": text[:200]}
+                data, err = _parse_structured(text, getattr(msg, "stop_reason", None))
+                out[res.custom_id] = data if data is not None else {
+                    "_parse_error": err, "_text": text[:200]}
             else:
                 out[res.custom_id] = text
         self._record_spend(batch_cost)
@@ -303,7 +387,15 @@ class QuantLLM:
         """(input, output) $/1M — date-aware so Sonnet reverts to standard after intro."""
         if model == "claude-sonnet-5" and datetime.now(timezone.utc).date() > SONNET_INTRO_END:
             return SONNET_STANDARD
-        return PRICES.get(model, (0.0, 0.0))
+        if model in PRICES:
+            return PRICES[model]
+        # فیکس 2026-08-08: API گاهی idِ اسنپ‌شاتِ تاریخ‌دار برمی‌گرداند
+        # (claude-sonnet-5-20260203) → قبلاً (0,0) یعنی هزینه‌ی ثبت‌نشده و
+        # فرسایشِ بی‌صدای سقفِ بودجه. اول prefix-match، وگرنه گران‌ترین تعرفه.
+        for known, price in PRICES.items():
+            if model.startswith(known):
+                return price
+        return max(PRICES.values(), key=lambda p: p[1])
 
     @staticmethod
     def _cost(model: str, usage: dict) -> float:
