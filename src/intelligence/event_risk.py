@@ -20,6 +20,7 @@ the site-local config).
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -182,12 +183,45 @@ EVENT_SCHEMA = {
 }
 
 
-def event_layer(bases: list[str], tier: str = "cheap", max_uses: int = 2) -> dict[str, tuple[float, str]]:
+# A verdict that admits no research happened is NOT a risk reading. Dropping these
+# is the whole point of _priority_bases: unknown must fall through to 0.0 (no signal),
+# never to the 0.5 the model likes to hedge with.
+_NO_RESEARCH = re.compile(
+    r"unable to search|insufficient data|could not (?:search|verify|find|access)|"
+    r"no (?:data|information) available|unverified", re.I)
+
+
+def _priority_bases(bases: list[str], k: int) -> list[str]:
+    """The k bases actually worth researching: biggest live gross exposure first.
+
+    2026-08-12: this used to ask about every whitelisted base (41 of them) with a
+    2-search budget. The model researched two and hedged the other 39 at risk 0.5
+    with reason "Unable to search" — paying for a signal that was 89% "I don't
+    know". A catalyst only costs money where money is at risk, so rank by the
+    fleet's gross notional per base and research the top of that list properly.
+    Bases with no open exposure fall back to the deterministic layer, which is
+    what they had anyway.
+    """
+    weight: dict[str, float] = {}
+    try:
+        fr = json.loads((OUT / "fleet_risk.json").read_text())
+        for a in fr.get("per_asset") or []:
+            b = str(a.get("base") or "").upper()
+            if b:
+                weight[b] = float(a.get("gross_notional") or 0.0)
+    except Exception:
+        pass  # no exposure file -> fall through to the whitelist order
+    return sorted(bases, key=lambda b: -weight.get(b.upper(), 0.0))[:k]
+
+
+def event_layer(bases: list[str], tier: str = "cheap", max_uses: int = 5,
+                top_k: int = 6) -> dict[str, tuple[float, str]]:
     """Claude + web_search for near-term catalysts. Returns {base: (risk, reason)}.
 
-    Uses Haiku + a low web-search cap, and respects the client's hard monthly
-    budget: if the budget is exhausted it returns {} (deterministic-only) rather
-    than spending. This is a MANUAL-only path (no cron) — see event_risk_scan.py.
+    Only the `top_k` bases with the most live exposure are researched, with a
+    search budget sized to actually cover them (see _priority_bases). Uses Haiku
+    and respects the client's hard monthly budget: if the budget is exhausted it
+    returns {} (deterministic-only) rather than spending.
     """
     from src.llm.client import WEB_SEARCH_USD, get_llm
 
@@ -199,13 +233,18 @@ def event_layer(bases: list[str], tier: str = "cheap", max_uses: int = 2) -> dic
     if not llm.budget_ok(est):
         print(f"[event_layer] skipped — monthly LLM budget reached (spent ${llm.month_spend():.2f})")
         return {}
+    bases = _priority_bases(bases, top_k)
+    if not bases:
+        return {}
     prompt = (
         "For each of these crypto assets, search for MAJOR near-term (next 7 days) catalysts that raise "
         "downside/volatility risk for a short-horizon futures bot: large token unlocks/vesting cliffs, "
         "exchange listing or DELISTING, mainnet/hard-fork events, or known regulatory/legal dates. "
         "Return event_risk 0 (nothing notable) to 1 (major imminent catalyst). Cite what you found in "
-        "reason; if you find nothing for an asset, set 0 and say 'none found'. Assets: "
-        + ", ".join(bases)
+        "reason; if you searched and found nothing for an asset, set 0 and say 'none found'. "
+        "CRITICAL: if you could NOT research an asset, OMIT it from the output entirely — never guess "
+        "a middling score for it, and never return a row whose reason says you could not search. "
+        "Assets: " + ", ".join(bases)
     )
     try:
         # web_search server tool (dynamic-filtering variant on current models)
@@ -235,9 +274,20 @@ def event_layer(bases: list[str], tier: str = "cheap", max_uses: int = 2) -> dic
         )
         data = coerce.get("data") or {}
         out: dict[str, tuple[float, str]] = {}
+        dropped = []
         for row in data.get("symbols", []):
+            reason = row.get("reason", "")
+            # Belt and braces alongside the prompt: an "I couldn't look it up" row is
+            # not evidence of risk, and build() blends anything > 0 at event_weight
+            # 0.6 — so letting a hedged 0.5 through would impose a 0.30 risk floor on
+            # that symbol for nothing.
+            if _NO_RESEARCH.search(reason):
+                dropped.append(row.get("base", "?"))
+                continue
             r = float(np.clip(row.get("event_risk", 0), 0, 1))
-            out[row["base"].upper()] = (round(r, 3), row.get("reason", "")[:200])
+            out[row["base"].upper()] = (round(r, 3), reason[:200])
+        if dropped:
+            print(f"[event_layer] dropped {len(dropped)} un-researched rows: {', '.join(dropped)}")
         _write_event_cache(out)
         return out
     except Exception as e:
