@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -28,6 +29,22 @@ from src.data.downloader import (  # noqa: E402
 )
 
 PROCESSED = ROOT / "data" / "processed"
+
+
+def _write_atomic(df: pd.DataFrame, path: Path) -> None:
+    """پارکت را اتمیک بنویس: tmp + os.replace.
+
+    to_parquet مستقیم روی مسیرِ نهایی می‌نویسد، پس هر خواننده‌ای که هم‌زمان
+    برسد فایلِ نصفه می‌بیند. تا وقتی رفرشِ دیتا زیر .fleet_ops.lock بود این
+    اتفاق نمی‌افتاد؛ حالا که آن قفل فقط مراحلِ استقرار را می‌گیرد (تا چرخشِ
+    جفت‌ارز و کیل‌سوییچ ۲۰ ساعت گرسنه نمانند)، نوشتنِ اتمیک همان تضمین را
+    بدون قفل می‌دهد. rename روی همان فایل‌سیستم اتمیک است.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)
+
+
 COVERAGE_PATH = ROOT / "outputs" / "data_coverage.json"
 BUFFER_DAYS = 5
 
@@ -182,7 +199,7 @@ def bootstrap_one(ccxt_id: str, market_type: str, symbol: str, tf: str) -> str:
     if new is None or new.empty:
         return f"WARN  {path.name}: no data returned"
     PROCESSED.mkdir(parents=True, exist_ok=True)
-    new.to_parquet(path, index=False)
+    _write_atomic(new, path)
     return f"bootstrap {path.name}  {len(new)} bars"
 
 
@@ -216,7 +233,7 @@ def deepen_one(path: Path) -> str:
     added = len(merged) - len(old)
     if added <= 0:
         return f"ok   {path.name} (nothing to prepend)"
-    merged.to_parquet(path, index=False)
+    _write_atomic(merged, path)
     return f"deepen {path.name}  +{added} bars → {len(merged)} (from {merged['timestamp'].min():%Y-%m-%d})"
 
 
@@ -243,7 +260,7 @@ def refresh_one(path: Path) -> str:
                 .sort_values("timestamp")
                 .reset_index(drop=True))
     added = len(merged) - len(old)
-    merged.to_parquet(path, index=False)
+    _write_atomic(merged, path)
     return f"ok   {path.name}  +{added} bars → {len(merged)} (to {merged['timestamp'].max():%Y-%m-%d})"
 
 
