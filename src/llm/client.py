@@ -88,14 +88,22 @@ def _outermost_object(text: str) -> str | None:
     start, end = text.find("{"), text.rfind("}")
     return text[start:end + 1] if 0 <= start < end else None
 
-# Hard monthly spend ceiling — even manual runs cannot exceed this. 2026-08-09: owner
-# set the target at $3-4/mo → 3.5 (fits: strategist via Batch ~$1.5 + postmortems
-# ~$1.2 + market brief ~$0.3). Enforced as a TRUE cap: complete()/batch_submit()
-# pre-reserve each call's worst-case cost via budget_ok(est), so spend can never cross
-# MONTHLY_BUDGET_USD (no last-call overshoot). Override with QUANT_LLM_MONTHLY_BUDGET.
+# Hard monthly spend ceiling — even manual runs cannot exceed this. Enforced as a TRUE
+# cap: complete()/batch_submit() pre-reserve each call's worst-case cost via
+# budget_ok(est), so spend can never cross MONTHLY_BUDGET_USD (no last-call overshoot).
+# Override per-run with QUANT_LLM_MONTHLY_BUDGET.
+#
+# 2026-08-09: owner set $3-4/mo -> 3.5 (strategist via Batch ~$1.5 + post-mortems ~$1.2
+#             + market brief ~$0.3).
+# 2026-08-12: owner raised to 5.0. The 3.5 target was written when the strategist brief
+#             was weekly; it went daily on 08-09 and the burn rate roughly doubled
+#             (July $0.117/day -> August $0.225/day), so 3.5 was going to run out around
+#             the 15th and silently mute every LLM feature until the 1st. NOTE 5.0 still
+#             does not cover a full month at 0.225/day (~$7 would) — it buys to ~the
+#             22nd. Revisit the strategist cadence if the mute recurs.
 _ROOT = Path(__file__).resolve().parents[2]
 SPEND_FILE = _ROOT / "outputs" / "llm_spend.json"
-MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "3.5"))
+MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "5.0"))
 WEB_SEARCH_USD = 0.01  # ~$10 / 1000 Anthropic web searches
 
 from src import local_config
