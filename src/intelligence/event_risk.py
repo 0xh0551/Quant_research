@@ -256,9 +256,14 @@ def _write_event_cache(events: dict[str, tuple[float, str]]) -> None:
         pass
 
 
-def _load_event_cache(max_age_h: float = 8.0) -> dict[str, tuple[float, str]]:
+def _load_event_cache(max_age_h: float = 26.0) -> dict[str, tuple[float, str]]:
     """Reuse recent LLM catalysts so the cheap hourly blend keeps the event signal
-    between the (less frequent) --with-events refreshes."""
+    between the (less frequent) --with-events refreshes.
+
+    2026-08-08: 8h→26h. با ران روزانه‌ی --with-events، کش ۸ساعته یعنی لایه‌ی
+    رویداد ۱۶h/روز کور بود (آنلاک AVAX فلگ‌شده ولی event_risk صفر، sizing ×1.2
+    روی پوزیشن باز). کاتالیزورها افق چندروزه دارند؛ ۲۶h یک ران خطارفته را هم
+    پوشش می‌دهد. ران دومِ روزانه (16:17) تازگی را به ≤۸h می‌رساند."""
     if not EVENT_CACHE.exists():
         return {}
     try:
@@ -274,6 +279,87 @@ def _load_event_cache(max_age_h: float = 8.0) -> dict[str, tuple[float, str]]:
 # --------------------------------------------------------------------------- #
 # combine + write
 # --------------------------------------------------------------------------- #
+# ── altdata blend (2026-08-05): DVOL/positioning پیش‌نگر + بایاسِ فاندینگ ─────
+_ALTDATA_PATH = OUT / "altdata_snapshot.json"
+_ALTDATA_STALE_H = 9.0  # کرونِ altdata هر ۶ ساعت است
+
+
+def _load_altdata() -> dict | None:
+    try:
+        st = _ALTDATA_PATH.stat()
+        if (pd.Timestamp.utcnow().timestamp() - st.st_mtime) > _ALTDATA_STALE_H * 3600:
+            return None
+        return json.loads(_ALTDATA_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
+def altdata_global_risk(alt: dict | None) -> tuple[float, str]:
+    """ریسکِ رژیمِ پیش‌نگر از دیتای جایگزین — مکملِ regime_risk (که گذشته‌نگر است).
+
+    دو مؤلفه، هر دو کران‌دار و fail-safe:
+      • DVOL: سطحِ فعلی نسبت به توزیعِ ۳۰روزهٔ خودش (percentile) + جهشِ ۲۴ساعته.
+        وولِ ضمنی «قیمتِ آینده» است؛ اسپایکش قبل از ریزش در OHLCV دیده می‌شود.
+      • L/S crowding: انحرافِ شدیدِ نسبتِ long/short بایننس = جمعیتِ یک‌طرفه →
+        ریسکِ liquidation-cascade.
+    خروجی حداکثر 0.5 — مثل گیتِ chop هرگز به‌تنهایی وتو نمی‌کند."""
+    if not alt:
+        return 0.0, ""
+    risk, reasons = 0.0, []
+    try:
+        series = alt.get("dvol_series_btc") or {}
+        vals = [float(v) for v in (series.get("values") or []) if v is not None]
+        if len(vals) >= 48:
+            cur = vals[-1]
+            pctile = sum(1 for v in vals if v <= cur) / len(vals)
+            chg24 = (cur / vals[-25] - 1.0) if len(vals) >= 25 and vals[-25] > 0 else 0.0
+            dvol_risk = 0.0
+            if pctile >= 0.90:
+                dvol_risk += 0.25
+            elif pctile >= 0.75:
+                dvol_risk += 0.12
+            if chg24 >= 0.15:
+                dvol_risk += 0.20
+            elif chg24 >= 0.08:
+                dvol_risk += 0.10
+            if dvol_risk > 0:
+                reasons.append(f"DVOL {cur:.0f} (p{pctile*100:.0f}, {chg24:+.0%}/24h)")
+            risk = max(risk, min(0.4, dvol_risk))
+    except Exception:
+        pass
+    try:
+        ls = alt.get("ls_series_btc") or {}
+        lvals = [float(v) for v in (ls.get("values") or []) if v is not None]
+        if lvals:
+            cur_ls = lvals[-1]
+            if cur_ls >= 2.2 or cur_ls <= 0.45:
+                risk = min(0.5, risk + 0.15)
+                reasons.append(f"L/S crowding {cur_ls:.2f}")
+    except Exception:
+        pass
+    return round(risk, 3), "; ".join(reasons)
+
+
+def altdata_funding_bias(alt: dict | None) -> dict[str, float]:
+    """{BASE: funding_ann_pct} از فاندینگ‌های افراطیِ altdata. قرارداد علامت:
+    مثبت = لانگ‌ها می‌پردازند (استاندارد پرپ). مصرف‌کننده: _risk_overlay.entry_mult
+    که ورودِ خلافِ فاندینگِ شدید را کوچک/وتو می‌کند و ورودِ گیرندهٔ فاندینگ را
+    کمی جایزه می‌دهد."""
+    if not alt:
+        return {}
+    out: dict[str, float] = {}
+    try:
+        for row in alt.get("funding_extremes") or []:
+            sym = str(row.get("symbol", ""))
+            base = sym[:-4] if sym.endswith("USDT") else (sym[:-4] if sym.endswith("USDC") else sym)
+            ann = row.get("funding_ann_pct")
+            if base and ann is not None:
+                out[base] = round(float(ann), 1)
+    except Exception:
+        return {}
+    return out
+
+
 def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
           weights=(0.35, 0.30, 0.35), event_weight: float = 0.6, write: bool = True) -> dict:
     """venue_symbols = {venue: [pair,...]} -> event_risk.json payload.
@@ -314,11 +400,21 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
             }
 
     g_risk, g_reason = regime_risk()
+    # altdata blend (2026-08-05): رژیمِ پیش‌نگر (DVOL/L-S) با گیتِ گذشته‌نگرِ chop
+    # max می‌شود؛ بایاسِ فاندینگ به‌صورت کلیدِ مجزا منتشر می‌شود (side-آگاه است و
+    # نمی‌تواند داخل ریسکِ بی‌جهتِ symbols حل شود).
+    alt = _load_altdata()
+    alt_risk, alt_reason = altdata_global_risk(alt)
+    if alt_risk > g_risk:
+        g_risk, g_reason = alt_risk, (alt_reason or "altdata regime")
+    elif alt_reason:
+        g_reason = f"{g_reason or 'nominal'}; {alt_reason}"
     payload = {
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
         "with_events": with_events,
         "n_symbols": len(result),
         "global": {"risk": g_risk, "reason": g_reason or "nominal"},
+        "funding_bias": altdata_funding_bias(alt),
         "symbols": result,
     }
     if write:

@@ -313,15 +313,22 @@ def rsi_mean_reversion(data: pd.DataFrame, config: RSIMeanReversionConfig, allow
     rsi = _rsi(data["close"], config.window)
     position = pd.Series(0.0, index=data.index)
     state = 0  # 0=flat, 1=long, -1=short
+    # فیکس 2026-08-08: ماشین‌حالتِ قبلی در حالتِ فیوچرز هرگز flat نمی‌شد —
+    # خروجِ لانگ در RSI>exit (۵۰!) مستقیم شورت می‌گرفت (نه در short_entry=70)
+    # و شاخه‌ی خروجِ شورت هم unreachable بود (همان باگِ never-flat که در
+    # _stateful_signal فیکس شده بود، این‌جا زنده مانده بود).
     for idx, value in rsi.items():
-        if value < config.entry:
-            state = 1
-        elif allow_short and value > config.short_entry:
-            state = -1
-        elif value > config.exit and state == 1:
-            state = 0 if not allow_short else -1
-        elif value < config.entry and state == -1:
-            state = 0
+        if state == 0:
+            if value < config.entry:
+                state = 1
+            elif allow_short and value > config.short_entry:
+                state = -1
+        elif state == 1:
+            if value > config.exit:
+                state = -1 if (allow_short and value > config.short_entry) else 0
+        else:  # state == -1
+            if value < config.exit:
+                state = 1 if value < config.entry else 0
         position.loc[idx] = float(state)
     if not allow_short:
         position = position.clip(lower=0.0)
