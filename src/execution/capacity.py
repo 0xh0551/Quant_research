@@ -94,11 +94,19 @@ def calibrate_all(books: dict[str, dict[str, Any]]) -> tuple[dict[str, float], d
 
 # ── ADV from the parquet store ──────────────────────────────────────────────
 
-def adv_usd(base: str, prefer_tfs: tuple[str, ...] = ("15m", "1h", "4h", "1d")) -> float | None:
+def adv_usd(base: str, prefer_tfs: tuple[str, ...] = ("15m", "1h", "4h", "1d"),
+            exchange: str | None = None) -> float | None:
     for tf in prefer_tfs:
+        # فیکس 2026-08-08: هایپرلیکویید با کوتِ USDC ذخیره می‌شود — glob فقط-USDT
+        # یعنی ADV لبه‌های HL از بازارهای عمیق‌ترِ USDT صرافی‌های دیگر می‌آمد
+        # (ظرفیتِ HL بیش‌نمایی) و بیسِ HL-only اصلاً ADV نداشت. اگر exchange
+        # داده شود اول همان venue را می‌گیریم.
         matches = sorted(
-            PROCESSED_DIR.glob(f"*_{base}USDT_{tf}.parquet"),
-            key=lambda p: p.stat().st_mtime, reverse=True,
+            [p for q in ("USDT", "USDC")
+             for p in PROCESSED_DIR.glob(f"*_{base}{q}_{tf}.parquet")],
+            key=lambda p: (exchange is not None and p.name.startswith(f"{exchange}_"),
+                           p.stat().st_mtime),
+            reverse=True,
         )
         if not matches:
             continue
@@ -205,11 +213,23 @@ def build_report(fee_rt_bps: float = DEFAULT_FEE_RT_BPS, max_edges: int = 40) ->
         mean_ret = float(entry.get("oos_mean_return") or 0.0)
         if trades <= 0:
             continue
-        edge_rt_bps = mean_ret / trades * 1e4  # OOS return per round trip, in bps
-        base = str(entry.get("symbol") or "").replace("USDT", "")
+        # فیکس 2026-08-08: trades_per_split «تغییرِ پوزیشن» می‌شمارد (۲ per
+        # round-trip) ولی این‌جا با هزینه‌ی کاملِ رفت‌وبرگشت مقایسه می‌شود —
+        # بدون ÷2، لبه‌ی هر round-trip نصف و ظرفیت ~۲× کم‌نمایی می‌شد.
+        round_trips = max(trades / 2.0, 1.0)
+        edge_rt_bps = mean_ret / round_trips * 1e4  # OOS return per round trip, bps
+        # فیکس 2026-08-08: replace("USDT","") جفت‌های USDC (هایپرلیکویید) را
+        # دست‌نخورده می‌گذاشت (UNIUSDC→UNIUSDC) و بیس‌های حاویِ USDT را خراب
+        # می‌کرد → کلیدها هرگز با sizing/whitelist مچ نمی‌شدند. حذفِ پسوندِ کوت.
+        _sym = str(entry.get("symbol") or "")
+        base = _sym.split("/")[0] if "/" in _sym else _sym
+        for _q in ("USDT", "USDC", "BUSD"):
+            if base.endswith(_q) and len(base) > len(_q):
+                base = base[: -len(_q)]
+                break
         venue = str(entry.get("exchange") or "").split("_")[0]
         k = k_base.get(base, k_venue.get(venue))
-        adv = adv_usd(base)
+        adv = adv_usd(base, exchange=venue or None)
         cap = capacity_curve(edge_rt_bps, fee_rt_bps, k, adv)
         current = live_sizes.get(base)
         capacity = cap["capacity_notional"]

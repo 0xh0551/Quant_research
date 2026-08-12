@@ -14,6 +14,7 @@ read it without importing this package.
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -276,13 +277,33 @@ def _record_and_deflate_cumulative(results: list[ScanResult]) -> None:
             }
             for r in results
         ))
+        # فیکس 2026-08-08: family_stats یک‌بار — نه per-result (دو فول-اسکنِ جدولِ
+        # ~42k×6.6k نتیجه = O(N²) که وسط راه می‌مرد و باقی نتایج NaN می‌ماند).
+        stats = ledger.family_stats("wf_scan")
         for r in results:
             sr_pb = (r.oos_mu_bar / r.oos_sigma_bar) if r.oos_sigma_bar else 0.0
-            d = ledger.deflate("wf_scan", sr_pb, r.n_oos_bars)
+            d = ledger.deflate("wf_scan", sr_pb, r.n_oos_bars, stats=stats)
             r.dsr_cum = round(d, 4) if np.isfinite(d) else float("nan")
-    except Exception:
-        # دفترچه هرگز نباید اسکن را بشکند — بدون ledger هم اسکن معتبر است
+    except Exception as exc:
+        # دفترچه هرگز نباید اسکن را بشکند — بدون ledger هم اسکن معتبر است؛
+        # ولی شکستِ بی‌صدا هم ممنوع (دو ماه NaN بی‌گزارش).
+        import logging
+        logging.getLogger(__name__).warning("trial-ledger deflation failed: %s", exc)
         return
+
+
+def _json_safe(o):
+    """NaN/Inf → None. استاندارد JSON این مقادیر را ندارد؛ پایتون آن‌ها را بدون
+    کوتیشن می‌نویسد و هر مصرف‌کنندهٔ مرورگری (داشبورد QR و تب «کوانت ریسرچ» در
+    پنل نریمانی) روی JSON.parse می‌شکند. dsr_cum وقتی دفترچهٔ trial داده کافی
+    ندارد NaN است — یعنی «نامعلوم» که در JSON همان null است."""
+    if isinstance(o, float):
+        return o if math.isfinite(o) else None
+    if isinstance(o, dict):
+        return {k: _json_safe(v) for k, v in o.items()}
+    if isinstance(o, (list, tuple)):
+        return [_json_safe(v) for v in o]
+    return o
 
 
 def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
@@ -297,7 +318,9 @@ def write_manifest(results: list[ScanResult], output_path: Path) -> Path:
         "candidates": [asdict(r) for r in survivors],
     }
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(_json_safe(manifest), ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8")
     return output_path
 
 
@@ -518,7 +541,9 @@ def write_report(report: dict, output_path: Path,
                  history_path: Path | None = None) -> Path:
     """گزارش را می‌نویسد و یک خط خلاصه به history (JSONL) اضافه می‌کند."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    output_path.write_text(
+        json.dumps(_json_safe(report), ensure_ascii=False, indent=2, allow_nan=False),
+        encoding="utf-8")
     if history_path is not None:
         history_path.parent.mkdir(parents=True, exist_ok=True)
         line = json.dumps({

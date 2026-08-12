@@ -77,8 +77,29 @@ def load_closed_trades(db_path: Path, since_days: float | None) -> pd.DataFrame:
         )
     except Exception:
         df = pd.DataFrame()
-    finally:
-        con.close()
+    if not df.empty:
+        # فیکس 2026-08-08: برای تریدهای چندفیلی (DCA)، open_rate_requestedِ تک-سفارشی
+        # در برابر VWAPِ کلِ ترید «اسلیپیج/intended» را با میانگین‌گیریِ DCA قاطی
+        # می‌کرد (Bender: entry_slip منفیِ ناممکن روی سفارش‌های limit). VWAPِ
+        # قیمت‌های درخواستیِ همه‌ی سفارش‌های فیل‌شده‌ی همان سمت، مرجعِ درست است.
+        try:
+            orders = pd.read_sql_query(
+                "SELECT ft_trade_id AS id, ft_order_side AS o_side, "
+                "SUM(COALESCE(price, average) * filled) / SUM(filled) AS req_vwap "
+                "FROM orders WHERE filled > 0 GROUP BY ft_trade_id, ft_order_side",
+                con,
+            )
+            ent = df["is_short"].fillna(0).astype(int).map({0: "buy", 1: "sell"})
+            for leg, col in (("entry", "open_rate_requested"),
+                             ("exit", "close_rate_requested")):
+                side = ent if leg == "entry" else ent.map({"buy": "sell", "sell": "buy"})
+                m = orders.merge(
+                    pd.DataFrame({"id": df["id"], "o_side": side}), on=["id", "o_side"])
+                vw = df["id"].map(m.set_index("id")["req_vwap"])
+                df[col] = vw.where(vw.notna() & (vw > 0), df[col])
+        except Exception:
+            pass
+    con.close()
     if df.empty:
         return df
     for c in ("open_date", "close_date"):
@@ -127,7 +148,10 @@ _candle_cache: dict[str, pd.DataFrame | None] = {}
 def _candles_for(base: str) -> pd.DataFrame | None:
     if base in _candle_cache:
         return _candle_cache[base]
-    matches = sorted(PROCESSED_DIR.glob(f"*_{base}USDT_{MFE_TIMEFRAME}.parquet"),
+    # 2026-08-08: هایپرلیکویید با کوتِ USDC ذخیره می‌شود — بدونِ آن، MFE جفت‌های
+    # HL-only بی‌صدا اندازه‌گیری نمی‌شد.
+    matches = sorted([p for q in ("USDT", "USDC")
+                      for p in PROCESSED_DIR.glob(f"*_{base}{q}_{MFE_TIMEFRAME}.parquet")],
                      key=lambda p: p.stat().st_mtime, reverse=True)
     df = None
     if matches:
