@@ -150,9 +150,16 @@ class TrialLedger:
     def deflate(
         self, family: str, sr_pb: float, n_obs: int,
         skew: float = 0.0, kurtosis: float = 3.0,
+        stats: dict | None = None,
     ) -> float:
-        """DSR of one candidate against the family's cumulative unique trials."""
-        stats = self.family_stats(family)
+        """DSR of one candidate against the family's cumulative unique trials.
+
+        stats: خروجیِ از-پیش-محاسبه‌ی family_stats — برای حلقه‌های بزرگ (اسکنِ
+        شبانه ~6.6k نتیجه) پاس بدهید تا per-result دو کوئریِ کاملِ جدول نخورد
+        (فیکس 2026-08-08: همین O(N²) بود که deflation را وسطِ کار می‌کشت).
+        """
+        if stats is None:
+            stats = self.family_stats(family)
         if stats["n_unique"] < 2 or stats["sr_variance"] <= 0 or n_obs < 3:
             return float("nan")
         return deflated_sharpe_ratio(

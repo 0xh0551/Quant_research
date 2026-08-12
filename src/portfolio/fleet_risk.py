@@ -109,8 +109,11 @@ def _find_dataset(base: str, prefer_tfs: tuple[str, ...] = ("15m", "1h", "4h", "
     if not PROCESSED_DIR.exists():
         return None
     for tf in prefer_tfs:
+        # 2026-08-08: کوتِ USDC (هایپرلیکویید) هم پوشش داده شود — وگرنه mark/β
+        # بیسِ HL-only پیدا نمی‌شد.
         matches = sorted(
-            PROCESSED_DIR.glob(f"*_{base}USDT_{tf}.parquet"),
+            [p for q in ("USDT", "USDC")
+             for p in PROCESSED_DIR.glob(f"*_{base}{q}_{tf}.parquet")],
             key=lambda p: p.stat().st_mtime,
             reverse=True,
         )

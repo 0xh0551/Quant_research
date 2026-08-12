@@ -31,3 +31,8 @@ configs/app.json
 # ── site-local deployment overrides (never committed) ──
 configs/local.json
 configs/manual_drops.json
+
+# local backups / pre-change snapshots (never source)
+backups/
+*.bak_*
+*.pre_v4*

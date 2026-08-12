@@ -239,7 +239,8 @@ def fetch_liquidations(inst_family: str = "BTC-USDT", limit: int = 100) -> pd.Da
 
 # ── incremental parquet persistence ─────────────────────────────────────────
 
-def _append_parquet(df: pd.DataFrame, name: str, dedupe_on: str = "timestamp") -> Path | None:
+def _append_parquet(df: pd.DataFrame, name: str,
+                    dedupe_on: str | list[str] = "timestamp") -> Path | None:
     if df.empty:
         return None
     ALTDATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -250,7 +251,8 @@ def _append_parquet(df: pd.DataFrame, name: str, dedupe_on: str = "timestamp") -
             df = pd.concat([old, df], ignore_index=True)
         except Exception:
             pass
-    df = df.drop_duplicates(subset=[dedupe_on], keep="last").sort_values(dedupe_on)
+    keys = [dedupe_on] if isinstance(dedupe_on, str) else list(dedupe_on)
+    df = df.drop_duplicates(subset=keys, keep="last").sort_values(keys[0])
     df.to_parquet(path, index=False)
     return path
 
@@ -282,7 +284,11 @@ def refresh_all() -> dict[str, int]:
         _append_parquet(tk, f"taker_ratio_{sym}")
         counts[f"taker_ratio_{sym}"] = len(tk)
     liq = fetch_liquidations("BTC-USDT")
-    _append_parquet(liq, "liquidations_BTC", dedupe_on="timestamp")
+    # فیکس 2026-08-08: dedupe فقط-روی-timestamp فیل‌های متمایزِ هم‌میلی‌ثانیه‌ی
+    # آبشارِ لیکوییدیشن را به یک ردیف فرو می‌ریخت — دقیقاً رژیمی که این فید
+    # برایش وجود دارد.
+    _append_parquet(liq, "liquidations_BTC",
+                    dedupe_on=["timestamp", "inst", "side", "price"])
     counts["liquidations_BTC"] = len(liq)
     return counts
 
@@ -326,7 +332,9 @@ def build_snapshot() -> dict[str, Any]:
             "values": [round(float(v), 4) for v in df[col]],
         }
 
-    liq = _read_series("liquidations_BTC", tail=500)
+    # 2026-08-08: در آبشارِ واقعی 500 ردیف حتی ۲۴h را پوشش نمی‌دهد → جمعِ
+    # liquidations_24h_usd بی‌صدا کم‌نمایی می‌شد. نمایش همچنان tail(30) است.
+    liq = _read_series("liquidations_BTC", tail=20000)
     liq_24h = 0.0
     liq_rows: list[dict[str, Any]] = []
     if not liq.empty:
