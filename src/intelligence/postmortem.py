@@ -181,28 +181,87 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
     if not llm.is_enabled():
         return {"bot": bot, "note": "LLM disabled (no key)", "n_losers": int(len(df))}
 
+    # A closed trade's evidence never changes, so neither can its verdict — reuse
+    # last night's. Measured 2026-08-12: the 10 worst losers in a 45-day window are
+    # almost the same set every night (bot1 and bot6 overlapped 100% on eight
+    # consecutive runs), so ~92% of the per-trade calls were re-classifying trades
+    # that had already been classified.
+    cached = _cached_verdicts(_prior_run(bot))
+
     verdicts: dict[int, dict] = {}
     if mode == "batch":
-        items = [{"custom_id": str(r["id"]), "prompt": _trade_prompt(r)} for _, r in df.iterrows()]
+        todo = [r for _, r in df.iterrows() if int(r["id"]) not in cached]
+        if not todo:
+            verdicts = {int(r["id"]): cached[int(r["id"])] for _, r in df.iterrows()}
+            return _finish(bot, df, verdicts, llm, synth_tier, write, n_reused=len(verdicts))
+        items = [{"custom_id": str(r["id"]), "prompt": _trade_prompt(r)} for r in todo]
         batch_id = llm.batch_submit(items, tier=per_trade_tier, system=SYSTEM_RUBRIC,
                                     json_schema=VERDICT_SCHEMA, max_tokens=400)
         return {"bot": bot, "mode": "batch", "batch_id": batch_id, "n_submitted": len(items),
+                "n_reused": len(df) - len(items),
                 "note": "poll batch_status(batch_id); then collect() to finish"}
-    else:
-        for _, r in df.iterrows():
-            res = llm.complete(_trade_prompt(r), tier=per_trade_tier, system=SYSTEM_RUBRIC,
-                               json_schema=VERDICT_SCHEMA, max_tokens=400)
-            # Record WHY a verdict is missing (budget skip vs truncation vs bad JSON) —
-            # a blanket "parse_error" hid which of those was happening.
-            verdicts[int(r["id"])] = res.get("data") or {
-                "primary_cause": "noise", "confidence": 0, "suggested_fix": "-",
-                "evidence": "unclassified: " + str(res.get("skipped") or res.get("parse_error")
-                                                   or "no_data")}
 
-    return _finish(bot, df, verdicts, llm, synth_tier, write)
+    n_reused = 0
+    for _, r in df.iterrows():
+        tid = int(r["id"])
+        if tid in cached:
+            verdicts[tid] = cached[tid]
+            n_reused += 1
+            continue
+        res = llm.complete(_trade_prompt(r), tier=per_trade_tier, system=SYSTEM_RUBRIC,
+                           json_schema=VERDICT_SCHEMA, max_tokens=400)
+        # Record WHY a verdict is missing (budget skip vs truncation vs bad JSON) —
+        # a blanket "parse_error" hid which of those was happening.
+        verdicts[tid] = res.get("data") or {
+            "primary_cause": "noise", "confidence": 0, "suggested_fix": "-",
+            "evidence": "unclassified: " + str(res.get("skipped") or res.get("parse_error")
+                                               or "no_data")}
+
+    return _finish(bot, df, verdicts, llm, synth_tier, write, n_reused=n_reused)
 
 
-def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, write: bool) -> dict:
+def _prior_run(bot: str) -> dict:
+    """Last night's post-mortem for this bot ({} if none/unreadable)."""
+    try:
+        return json.loads((OUT / f"postmortem_{bot.lower()}.json").read_text())
+    except Exception:
+        return {}
+
+
+def _ids(trades) -> set[int]:
+    """Trade ids as plain ints — the stored JSON and a live pandas row do not
+    otherwise compare equal (numpy int64 vs int vs str)."""
+    out = set()
+    for t in trades:
+        try:
+            out.add(int(t["id"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _cached_verdicts(prior: dict) -> dict[int, dict]:
+    """{trade_id: verdict} from a previous run — only verdicts worth reusing.
+
+    An `unclassified:` verdict is a failed call, not an answer, so it is never
+    cached; that trade gets another attempt tonight.
+    """
+    out: dict[int, dict] = {}
+    for t in prior.get("trades") or []:
+        v = t.get("verdict") or {}
+        if not v.get("primary_cause"):
+            continue
+        if str(v.get("evidence", "")).startswith("unclassified"):
+            continue
+        try:
+            out[int(t["id"])] = v
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, write: bool,
+            *, n_reused: int = 0) -> dict:
     from collections import Counter
 
     causes = Counter(v.get("primary_cause", "noise") for v in verdicts.values())
@@ -219,11 +278,23 @@ def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, wr
         trades_out.append({**{k: r[k] for k in ("id", "pair", "enter_tag", "exit_reason",
                                                 "close_profit_abs", "exit_slip_bps", "prior_flag")}, "verdict": v})
 
-    synth = _synthesize(bot, causes, loss_by_cause, trades_out, llm, synth_tier)
+    # The synthesis is the expensive call (Sonnet). Its whole input is the verdict
+    # set — so when that set is unchanged, buying it again returns the same answer
+    # at full price. Reuse the previous one instead.
+    prior = _prior_run(bot)
+    prior_syn = prior.get("synthesis") or {}
+    same_trades = _ids(prior.get("trades") or []) == _ids(trades_out)
+    reusable = bool(prior_syn.get("systemic_fixes")) and not prior_syn.get("degraded")
+    if same_trades and reusable:
+        synth = {**prior_syn, "reused_from": prior.get("generated_at")}
+    else:
+        synth = _synthesize(bot, causes, loss_by_cause, trades_out, llm, synth_tier)
+
     out = {
         "bot": bot,
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
         "n_analyzed": int(len(df)),
+        "n_verdicts_reused": int(n_reused),
         "cause_counts": dict(causes),
         "loss_by_cause_quote": {k: round(v, 2) for k, v in sorted(loss_by_cause.items(), key=lambda x: x[1])},
         "synthesis": synth,
