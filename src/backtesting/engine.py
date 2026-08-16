@@ -120,7 +120,10 @@ def calculate_metrics(returns: pd.Series, equity: pd.Series, periods_per_year: i
         return dict.fromkeys(metric_names, 0.0)
     total_return = equity.iloc[-1] / equity.iloc[0] - 1
     years = max(len(returns) / periods_per_year, 1 / periods_per_year)
-    cagr = (1 + total_return) ** (1 / years) - 1
+    # اکوییتیِ صفر/منفی (وایپ‌اوت در سگمنتِ اهرمی) → پایهٔ منفی به توانِ کسری =
+    # NaN + RuntimeWarning. تا ۲۰۲۶-۰۸-۱۵ این هشدار ۱۲MB لاگِ اسکن را پر کرده بود
+    # و cagr/calmar را بی‌صدا NaN می‌کرد. وایپ‌اوت یعنی cagr = -۱۰۰٪، نه «نامعلوم».
+    cagr = (1 + total_return) ** (1 / years) - 1 if total_return > -1 else -1.0
     volatility = returns.std() * np.sqrt(periods_per_year)
     sharpe = returns.mean() * periods_per_year / volatility if volatility else 0.0
     downside = returns[returns < 0].std() * np.sqrt(periods_per_year)
