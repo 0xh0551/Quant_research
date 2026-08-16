@@ -271,10 +271,89 @@ def build_retrain_queue(prio: list[dict]) -> list[dict]:
     return sorted(q, key=lambda d: d["priority"], reverse=True)
 
 
+def bridge_priors(half_life_days: float = 14.0, max_adj: float = 0.25,
+                  full_scale_avg: float = 0.02) -> dict:
+    """Priors for bots OUTSIDE the rotation ledger (configs/local.json
+    `bridge_bots`, e.g. Mickey/Wall_E) — computed straight from their own
+    sqlite with the same time-decayed EWMA. Why (2026-08-12): the nightly
+    postmortem joins on pair_priors.json[(bot, base)]; bridge bots were absent
+    so every verdict came back prior_flag="unknown" and the postmortem agent
+    analyzed blind. Same key set as build_priors so downstream needs no change
+    (`latest_selected_score` stays None — bridge bots have no fitness score)."""
+    import sqlite3
+    from datetime import datetime, timezone
+
+    try:
+        cfg = json.loads((ROOT / "configs" / "local.json").read_text())
+    except Exception:
+        return {}
+    bots = cfg.get("bridge_bots") or []
+    dbs = cfg.get("bot_dbs") or {}
+    if not cfg.get("user_data"):
+        return {}
+    user_data = Path(cfg["user_data"])
+    out: dict = {}
+    now = datetime.now(timezone.utc)
+    for bot in bots:
+        db = dbs.get(bot)
+        if not db or not (user_data / db).exists():
+            continue
+        try:
+            con = sqlite3.connect(f"file:{user_data / db}?mode=ro", uri=True)
+            rows = con.execute(
+                "SELECT pair, close_profit, close_date FROM trades "
+                "WHERE is_open=0 AND close_profit IS NOT NULL "
+                "ORDER BY close_date DESC LIMIT 2000").fetchall()
+            con.close()
+        except sqlite3.Error:
+            continue
+        per: dict = {}
+        for pair, profit, close_date in rows:
+            base = str(pair).split("/")[0]
+            per.setdefault(base, []).append((float(profit), str(close_date)))
+        for base, trades in per.items():
+            if len(trades) < 3:
+                continue
+            num = den = 0.0
+            wins = 0
+            dates = []
+            for profit, cd in trades:
+                try:
+                    age_d = (now - datetime.fromisoformat(cd).replace(
+                        tzinfo=timezone.utc)).total_seconds() / 86400.0
+                except ValueError:
+                    age_d = half_life_days
+                w = 0.5 ** (age_d / half_life_days)
+                num += w * profit
+                den += w
+                wins += 1 if profit > 0 else 0
+                dates.append(cd[:10])
+            decayed = num / den if den > 0 else 0.0
+            adj = max(-max_adj, min(max_adj, (decayed / full_scale_avg) * max_adj))
+            out.setdefault(bot, {})[base] = {
+                "decayed_avg_profit": round(decayed, 5),
+                "latest_avg_profit": round(float(np.mean([p for p, _ in trades])), 5),
+                "latest_win_rate": round(wins / len(trades), 3),
+                "latest_trades": len(trades),
+                "latest_selected_score": None,
+                "n_snapshots": len(set(dates)),
+                "first_seen": min(dates),
+                "last_seen": max(dates),
+                "prior_mult": round(1.0 + adj, 4),
+                "source": "bridge_sqlite",
+            }
+    return out
+
+
 def run(half_life_days: float = 14.0, write: bool = True) -> dict:
     df = load_ledger()
     calib = score_calibration(df)
     priors = build_priors(df, half_life_days=half_life_days)
+    # bridge bots (Mickey/Wall_E): ledger ندارند → prior از sqlite خودشان؛
+    # کلیدهای ledger-محور دست نمی‌خورند (ledger مرجعِ بات‌های روتیشنی می‌ماند)
+    for bot, bases in bridge_priors(half_life_days=half_life_days).items():
+        if bot not in priors:
+            priors[bot] = bases
     prio = retrain_priority(df, priors)
     manual = _load_manual_drops()
     drop_list = build_drop_list(prio, manual)

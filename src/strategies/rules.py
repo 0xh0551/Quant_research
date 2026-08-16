@@ -594,16 +594,17 @@ def ml_signal(data: pd.DataFrame, config: MLSignalConfig, allow_short: bool = Fa
 # ── Signal helpers ────────────────────────────────────────────────────────────
 
 def _stateful_long_signal(entry: pd.Series, exit_signal: pd.Series) -> pd.Series:
-    """Hold long position between entry and exit events."""
-    position = pd.Series(0.0, index=entry.index)
-    active = False
-    for idx in entry.index:
-        if bool(entry.loc[idx]):
-            active = True
-        elif bool(exit_signal.loc[idx]):
-            active = False
-        position.loc[idx] = float(active)
-    return position
+    """Hold long position between entry and exit events.
+
+    Vectorized 2026-08-15 (بود: حلقهٔ پایتونی با `position.loc[idx] = ...`، که
+    در پروفایلِ اسکن ۵۱۵ هزار فراخوانیِ pandas setitem در هر دیتاست تولید
+    می‌کرد). ورود بر خروج اولویت دارد؛ بین رویدادها حالت حفظ می‌شود — یعنی
+    دقیقاً یک forward-fill روی رویدادها. خروجی بیت‌به‌بیت با نسخهٔ حلقه‌ای یکی است.
+    """
+    e = entry.to_numpy().astype(bool)
+    x = exit_signal.to_numpy().astype(bool)
+    events = np.where(e, 1.0, np.where(x, 0.0, np.nan))
+    return pd.Series(events, index=entry.index).ffill().fillna(0.0)
 
 
 def _stateful_signal(
@@ -618,17 +619,26 @@ def _stateful_signal(
     the opposite side. Previously an exit flipped straight to the opposite
     position, so the strategy was never flat — in futures mode this forced these
     mean-reversion / channel rules to sit short on assets that only trended up.
+
+    خروج مشروط به حالتِ جاری است، پس برخلاف _stateful_long_signal یک ffill
+    ساده نیست و حلقه لازم است — ولی حلقه روی آرایهٔ numpy اجرا می‌شود نه با
+    `position.loc[idx] = ...` (۲۰۲۶-۰۸-۱۵؛ همان منطق و همان ترتیب، فقط بدون
+    سربارِ ایندکس‌گذاریِ pandas که ~۶۰µs در هر گام بود).
     """
-    position = pd.Series(0.0, index=long_entry.index)
+    le = long_entry.to_numpy().astype(bool)
+    se = short_entry.to_numpy().astype(bool)
+    lx = long_exit.to_numpy().astype(bool)
+    sx = short_exit.to_numpy().astype(bool)
+    position = np.zeros(le.size, dtype=float)
     state = 0  # 0=flat, 1=long, -1=short
-    for idx in long_entry.index:
-        if bool(long_entry.loc[idx]):
+    for i in range(le.size):
+        if le[i]:
             state = 1
-        elif bool(short_entry.loc[idx]):
+        elif se[i]:
             state = -1
-        elif state == 1 and bool(long_exit.loc[idx]):
+        elif state == 1 and lx[i]:
             state = 0
-        elif state == -1 and bool(short_exit.loc[idx]):
+        elif state == -1 and sx[i]:
             state = 0
-        position.loc[idx] = float(state)
-    return position
+        position[i] = float(state)
+    return pd.Series(position, index=long_entry.index)
