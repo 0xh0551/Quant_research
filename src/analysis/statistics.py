@@ -196,19 +196,46 @@ def probability_of_backtest_overfitting(
     block_idx = np.array_split(np.arange(T), s)
     blocks = list(range(s))
 
-    def sr(sub: np.ndarray) -> np.ndarray:
-        mu = sub.mean(axis=0)
-        sd = sub.std(axis=0, ddof=1)
-        sd[sd == 0] = np.nan
-        return mu / sd
+    # ── پیش‌محاسبهٔ آماره‌های بلاکی (۲۰۲۶-۰۸-۱۵) ─────────────────────────────
+    # هر پارتیشنِ IS/OOS یک *اجتماعِ بلاک* است، پس mean/std آن از روی
+    # count/sum/sum² همان بلاک‌ها به‌دست می‌آید — به‌جای کپی‌کردنِ نصفِ ماتریسِ
+    # T×N و reduce دوباره، برای هر کدام از C(16,8)=12,870 ترکیب. در پروفایلِ
+    # اسکن این تابع ۵۲٪ کلِ زمان بود (۲۵٬۷۴۰ فراخوانیِ sr).
+    # داده اول حول میانگینِ ستونی مرکز می‌شود تا فرمولِ sum² دچار cancellation
+    # نشود؛ واریانس نسبت به انتقال ناوردا است و میانگین دوباره اضافه می‌شود،
+    # پس نتیجه با محاسبهٔ مستقیم یکی است.
+    col_mu = M.mean(axis=0)
+    Mc = M - col_mu
+    n_b = np.array([len(b) for b in block_idx], dtype=float)          # (s,)
+    S_b = np.stack([Mc[b].sum(axis=0) for b in block_idx])            # (s, N)
+    Q_b = np.stack([(Mc[b] ** 2).sum(axis=0) for b in block_idx])     # (s, N)
+
+    combos = np.array(list(itertools.combinations(blocks, s // 2)))   # (C, s/2)
+    C = combos.shape[0]
+    member = np.zeros((C, s), dtype=float)
+    member[np.arange(C)[:, None], combos] = 1.0
+    comp = 1.0 - member
+
+    def _sr_bulk(mem: np.ndarray) -> np.ndarray:
+        """sr برای همهٔ ترکیب‌ها یک‌جا — (C, N)."""
+        n = mem @ n_b                       # (C,)
+        S = mem @ S_b                       # (C, N)
+        Q = mem @ Q_b                       # (C, N)
+        n_col = n[:, None]
+        mu = S / n_col + col_mu
+        with np.errstate(invalid="ignore", divide="ignore"):
+            var = (Q - S * S / n_col) / (n_col - 1.0)
+            sd = np.sqrt(np.maximum(var, 0.0))
+            sd[sd == 0] = np.nan
+            return mu / sd
+
+    is_perf_all = _sr_bulk(member)
+    oos_perf_all = _sr_bulk(comp)
 
     logits: list[float] = []
-    for is_combo in itertools.combinations(blocks, s // 2):
-        is_set = set(is_combo)
-        is_rows = np.concatenate([block_idx[b] for b in blocks if b in is_set])
-        oos_rows = np.concatenate([block_idx[b] for b in blocks if b not in is_set])
-        is_perf = sr(M[is_rows])
-        oos_perf = sr(M[oos_rows])
+    for i in range(C):
+        is_perf = is_perf_all[i]
+        oos_perf = oos_perf_all[i]
         if not np.isfinite(is_perf).any():
             continue
         best = int(np.nanargmax(is_perf))

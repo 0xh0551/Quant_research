@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 from src.analysis.statistics import (
     bootstrap_metric_ci,
     deflated_sharpe_ratio,
@@ -51,3 +52,72 @@ def test_pbo_low_for_one_genuine_signal_amid_noise():
     res = probability_of_backtest_overfitting(matrix, n_splits=10)
     assert 0.0 <= res["pbo"] <= 1.0
     assert res["pbo"] < 0.5  # the real edge should not look overfit
+
+
+def _pbo_reference(returns_matrix, n_splits=16):
+    """Pre-2026-08-15 implementation: rebuild every IS/OOS partition by slicing.
+
+    The fast path precomputes per-block count/sum/sum-of-squares and derives each
+    partition's mean/std from those, which is what makes the nightly scan ~2x
+    cheaper overall. It must stay numerically identical to this reference.
+    """
+    import itertools
+    import math
+
+    from scipy import stats as _stats
+
+    M = np.asarray(returns_matrix, dtype=float)
+    T, N = M.shape
+    s = n_splits - (n_splits % 2)
+    block_idx = np.array_split(np.arange(T), s)
+    blocks = list(range(s))
+
+    def sr(sub):
+        mu = sub.mean(axis=0)
+        sd = sub.std(axis=0, ddof=1)
+        sd[sd == 0] = np.nan
+        return mu / sd
+
+    logits = []
+    for is_combo in itertools.combinations(blocks, s // 2):
+        is_set = set(is_combo)
+        is_perf = sr(M[np.concatenate([block_idx[b] for b in blocks if b in is_set])])
+        oos_perf = sr(M[np.concatenate([block_idx[b] for b in blocks if b not in is_set])])
+        if not np.isfinite(is_perf).any():
+            continue
+        best = int(np.nanargmax(is_perf))
+        valid = np.isfinite(oos_perf)
+        if valid.sum() < 2:
+            continue
+        rank = _stats.rankdata(oos_perf[valid])[np.where(valid)[0] == best]
+        if rank.size == 0:
+            continue
+        w = min(max(float(rank[0] / (valid.sum() + 1)), 1e-6), 1 - 1e-6)
+        logits.append(math.log(w / (1.0 - w)))
+    arr = np.array(logits)
+    return {"pbo": float((arr <= 0).mean()), "median_logit": float(np.median(arr)),
+            "n_combinations": int(arr.size)}
+
+
+@pytest.mark.parametrize("shape,loc,scale", [
+    ((900, 8), 2e-4, 6e-3),      # typical stitched OOS returns
+    ((300, 4), 0.0, 1e-2),       # short series
+    ((1200, 20), 1e-5, 3e-3),    # many configs, near-zero drift
+])
+def test_pbo_block_precompute_matches_slicing_reference(shape, loc, scale):
+    rng = np.random.default_rng(5)
+    M = rng.normal(loc, scale, shape)
+    fast = probability_of_backtest_overfitting(M, n_splits=10)
+    ref = _pbo_reference(M, n_splits=10)
+    assert fast["n_combinations"] == ref["n_combinations"]
+    assert fast["pbo"] == pytest.approx(ref["pbo"], abs=1e-12)
+    assert fast["median_logit"] == pytest.approx(ref["median_logit"], abs=1e-9)
+
+
+def test_pbo_handles_constant_column():
+    """A zero-variance config must yield NaN sr, not blow up the partition math."""
+    rng = np.random.default_rng(6)
+    M = np.hstack([rng.normal(0, 5e-3, (600, 5)), np.zeros((600, 1))])
+    fast = probability_of_backtest_overfitting(M, n_splits=10)
+    ref = _pbo_reference(M, n_splits=10)
+    assert fast["pbo"] == pytest.approx(ref["pbo"], abs=1e-12)

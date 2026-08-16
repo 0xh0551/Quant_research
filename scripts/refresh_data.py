@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -50,7 +51,24 @@ BUFFER_DAYS = 5
 
 GATE_TOP_N = 100
 HL_TOP_N = 30          # top Hyperliquid perps by volume (excluding synthetics)
+OKX_TOP_N = 30         # top OKX USDT swaps — صرافیِ زندهٔ bot4
 DISCOVER_TIMEFRAMES = ["4h", "1h", "15m"]
+
+# وایت‌لیستِ bot4 از کانفیگِ زنده خوانده می‌شود تا جفت‌هایی که واقعاً روی OKX
+# معامله می‌شوند حتماً دیتای بومیِ همان صرافی داشته باشند — نه صرفاً پراکسیِ
+# gate/bybit. (چرخشِ شبانه وایت‌لیست را عوض می‌کند، پس ثابت نوشتنش کار نمی‌کند.)
+# مسیر از configs/local.json (site-local, gitignored) خوانده می‌شود؛ نبودِ آن
+# یعنی صرفاً این وایت‌لیست کمکی خالی می‌ماند — OSS بدونش هم کار می‌کند.
+def _bot4_config_path() -> Path | None:
+    try:
+        cfg = json.loads((ROOT / "configs" / "local.json").read_text())
+        user_data = cfg.get("user_data")
+        return Path(user_data) / "bot4_config.json" if user_data else None
+    except Exception:
+        return None
+
+
+bot4_CONFIG = _bot4_config_path()
 BOOTSTRAP_DAYS = 730
 
 # اسکنِ wf (scan_processed_dir) فایل‌های کوتاه‌تر از این را نادیده می‌گیرد؛
@@ -58,9 +76,14 @@ BOOTSTRAP_DAYS = 730
 MIN_SCAN_BARS = 6000
 
 # صرافی‌هایی که از ccxt قابل‌رفرش نیستند (دیتای موجودشان دست‌نخورده می‌ماند)
+#
+# ۲۰۲۶-۰۸-۱۵: قرنطینهٔ okx («okx fetch_ohlcv broken in ccxt 4.5.56») برداشته شد.
+# روی همان ccxt 4.5.56 دوباره آزمایش شد و هم ccxt خام و هم
+# CCXTFallbackDownloader سالم کندل می‌دهند. قرنطینه ~۷۱ روز پس از رفعِ مشکل
+# سرِ جایش مانده بود و دیتای okx را بی‌صدا متوقف کرده بود — در حالی که bot4
+# روی همین صرافی معامله می‌کند و امتیازِ چرخشِ جفت‌ارزش از این اسکن می‌آید.
 SKIP_EXCHANGES = {
     "nobitex": "not a ccxt source",
-    "okx": "okx fetch_ohlcv broken in ccxt 4.5.56",
 }
 
 # محدودیتِ نگاه به عقبِ هر صرافی (بر حسب تعداد کندل). Gate برای کندل‌های قدیمی‌تر
@@ -172,6 +195,63 @@ def discover_hyperliquid_pairs(n: int = HL_TOP_N) -> list[tuple[str, str, str, s
     except Exception as exc:
         print(f"  WARN  Hyperliquid discovery failed ({exc}); falling back to static pairs")
         return []
+
+
+def _bot4_whitelist_bases() -> list[str]:
+    """'SOL/USDT:USDT' → 'SOLUSDT' برای جفت‌های زندهٔ bot4.
+
+    کانفیگ‌های freqtrade کامنتِ // دارند و json.loads رویشان می‌شکند، پس مثل
+    rotate_bot_pairs.read_whitelist فقط همان آرایه با regex بیرون کشیده می‌شود.
+    """
+    if bot4_CONFIG is None:
+        return []
+    try:
+        text = bot4_CONFIG.read_text(encoding="utf-8")
+        block = re.search(r'"pair_whitelist"\s*:\s*\[([^\]]*)\]', text, re.S)
+        if not block:
+            return []
+        return [p.split(":")[0].replace("/", "") for p in re.findall(r'"([^"]+)"', block.group(1))]
+    except Exception as exc:
+        print(f"  WARN  could not read bot4 whitelist ({exc})")
+        return []
+
+
+def discover_okx_pairs(n: int = OKX_TOP_N) -> list[tuple[str, str, str, str]]:
+    """Top N OKX USDT-settled swaps by 24h volume, ∪ bot4's live whitelist.
+
+    ⚠️ برخلاف Gate، تیکرهای OKX فیلدِ quoteVolume را پر نمی‌کنند (هر ۴۴۶ تیکر
+    None است) و فقط baseVolume دارند. کپی‌کردنِ منطقِ Gate این‌جا بی‌صدا صفر جفت
+    برمی‌گرداند — همان الگوی خرابیِ خاموش که ۷۱ روز دیتای OKX را متوقف کرد. پس
+    رتبه‌بندی روی baseVolume × last است و لیستِ خالی با WARN بلند گزارش می‌شود.
+    """
+    forced = _bot4_whitelist_bases()
+    try:
+        exchange = ccxt.okx({"options": {"defaultType": "swap"}, "enableRateLimit": True})
+        tickers = exchange.fetch_tickers()
+        ranked = sorted(
+            [
+                (sym, float(t.get("baseVolume") or 0) * float(t.get("last") or 0))
+                for sym, t in tickers.items()
+                if sym.endswith(":USDT")
+            ],
+            key=lambda x: -x[1],
+        )
+        ranked = [(s, v) for s, v in ranked if v > 0]
+        if not ranked:
+            print("  WARN  OKX discovery ranked 0 pairs — بررسی کنید فیلدِ حجم عوض نشده باشد")
+        bases = [sym.split(":")[0].replace("/", "") for sym, _ in ranked[:n]]
+    except Exception as exc:
+        print(f"  WARN  OKX discovery failed ({exc}); falling back to bot4 whitelist only")
+        bases = []
+
+    # جفت‌های زندهٔ bot4 همیشه وارد می‌شوند، حتی اگر خارج از top-N باشند
+    for b in forced:
+        if b not in bases:
+            bases.append(b)
+    result = [("okx", "futures", b, tf) for b in bases for tf in DISCOVER_TIMEFRAMES]
+    print(f"  okx discovered {len(bases)} pairs ({len(forced)} از وایت‌لیست bot4) "
+          f"× {len(DISCOVER_TIMEFRAMES)} timeframes = {len(result)} datasets")
+    return result
 
 
 def _parse(stem: str) -> tuple[str, str, str, str]:
@@ -305,6 +385,8 @@ def main() -> int:
     dynamic = discover_gate_futures_pairs()
     print("discovering Hyperliquid top USDC perps…")
     dynamic += discover_hyperliquid_pairs()
+    print("discovering OKX top USDT swaps (venue زندهٔ bot4)…")
+    dynamic += discover_okx_pairs()
     all_bootstrap = list(dict.fromkeys(dynamic + FALLBACK_PAIRS))  # dedup, preserve order
     print(f"bootstrapping {len(all_bootstrap)} datasets (skips existing)…")
     for args in all_bootstrap:

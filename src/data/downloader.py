@@ -122,6 +122,31 @@ class CCXTFallbackDownloader:
                 return f"{base}/{quote}"
         return raw  # already normalised or unknown format
 
+    def _first_available_ms(self, symbol: str, timeframe: str, lo: int, hi: int, limit: int) -> int | None:
+        """کوچک‌ترین `since` در بازهٔ [lo, hi] که کندل برمی‌گرداند.
+
+        صرافی‌ها برای `since`ی که از تاریخ لیست‌شدنِ جفت عقب‌تر است لیستِ خالی
+        می‌دهند (نه خطا). چون pagination با اولین بچِ خالی متوقف می‌شود، هر جفتی
+        که تازه‌تر از BOOTSTRAP_DAYS لیست شده بود بی‌صدا «no data returned»
+        می‌گرفت — مثلاً MEGA/ON روی OKX که bot4 واقعاً معامله‌شان می‌کند.
+        شرطِ «داده می‌دهد» یکنواخت است، پس دودویی جست‌وجو می‌شود (~۲۰ درخواست).
+        """
+        best: int | None = None
+        for _ in range(24):
+            if lo >= hi:
+                break
+            mid = lo + (hi - lo) // 2
+            try:
+                batch = self.exchange.fetch_ohlcv(symbol, timeframe, since=mid, limit=limit)
+            except Exception:
+                batch = None
+            if batch:
+                best = int(batch[0][0])
+                hi = mid
+            else:
+                lo = mid + 1
+        return best
+
     def fetch(self, request: DownloadRequest, limit: int = 1000) -> pd.DataFrame:
         """Fetch candles from CCXT using paginated requests."""
 
@@ -132,6 +157,26 @@ class CCXTFallbackDownloader:
         step = timeframe_to_milliseconds(request.timeframe)
         rows: list[list[float]] = []
         symbol = self._ccxt_symbol(request.symbol, self.market_type)
+
+        # جفتِ تازه‌لیست‌شده: `since` قبل از لیست‌شدن → بچِ خالی → قبلاً همین‌جا
+        # تمام می‌شد. اولین بچ همین‌جا مصرف می‌شود (نه دور ریخته) تا مسیرِ عادی
+        # حتی یک درخواستِ اضافه هم نگیرد؛ فقط اگر خالی بود دنبالِ تاریخِ
+        # لیست‌شدن می‌گردیم.
+        first_batch: list | None
+        try:
+            first_batch = self.exchange.fetch_ohlcv(symbol, request.timeframe, since=since, limit=limit)
+        except Exception:
+            first_batch = None
+        if first_batch:
+            rows.extend(first_batch)
+            since = int(first_batch[-1][0]) + step
+        elif first_batch is not None:
+            found = self._first_available_ms(symbol, request.timeframe, since, end_ms, limit)
+            if found is None:
+                since = end_ms  # واقعاً داده‌ای نیست
+            else:
+                since = found
+
         while since < end_ms:
             try:
                 batch = self.exchange.fetch_ohlcv(symbol, request.timeframe, since=since, limit=limit)

@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import json
 import math
+import os
+import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import pyarrow.parquet as pq
 
 from src.analysis.statistics import (
     bootstrap_metric_ci,
@@ -218,6 +221,41 @@ def _attach_rigor_stats(
             res.sharpe_ci_high = round(ci["high"], 3)
 
 
+# ── ضربانِ پیشرفتِ اسکن ───────────────────────────────────────────────────────
+# اسکنِ کامل ~۱۸ ساعت طول می‌کشد و تا ۲۰۲۶-۰۸-۱۵ در تمامِ این مدت *یک خط* هم
+# چاپ نمی‌کرد؛ تنها چیزی که به لاگ می‌رسید RuntimeWarningهای اتفاقیِ engine بود.
+# داشبورد «گیرکردگی» را از روی سکوتِ لاگ تشخیص می‌دهد (۴۵ دقیقه) — یعنی یک اجرای
+# کاملاً سالم هر شب «گیر کرده» اعلام می‌شد و دکمهٔ «اجرای الان» را باز می‌کرد.
+# حالا هر ۱۲۰ ثانیه یک خطِ پیشرفت + یک فایلِ JSON می‌نویسیم: سکوتِ لاگ دوباره
+# معنادار می‌شود (سکوت = واقعاً مرده).
+_HEARTBEAT_SEC = 120.0
+_PROGRESS_PATH = Path(__file__).resolve().parents[2] / "outputs" / "wf_scan_progress.json"
+_last_beat = 0.0
+
+
+def _scan_heartbeat(idx: int, total: int, dataset: str, n_results: int, started: float) -> None:
+    global _last_beat
+    now = time.monotonic()
+    if idx > 1 and idx < total and now - _last_beat < _HEARTBEAT_SEC:
+        return
+    _last_beat = now
+    elapsed = now - started
+    eta = elapsed / idx * (total - idx) if idx else 0.0
+    print(f"[wf_scan] {idx}/{total} ({100 * idx / max(total, 1):.1f}%) {dataset} "
+          f"· combos={n_results} · elapsed={elapsed / 3600:.1f}h · eta={eta / 3600:.1f}h",
+          flush=True)
+    try:
+        tmp = _PROGRESS_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps({
+            "done": idx, "total": total, "dataset": dataset, "n_results": n_results,
+            "elapsed_sec": round(elapsed), "eta_sec": round(eta),
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S+00:00", time.gmtime()),
+        }), encoding="utf-8")
+        os.replace(tmp, _PROGRESS_PATH)
+    except OSError:
+        pass  # ضربان هرگز نباید اسکن را بشکند
+
+
 # حداقل بار برای اسکنِ کامل (train=4000, test=1000) و اسکنِ کوتاه (train=2000, test=500)
 _FULL_MIN_BARS = 6000
 _SHORT_MIN_BARS = 2500
@@ -237,12 +275,25 @@ def scan_processed_dir(
     در robustness gate به عنوان venue مستقل شمرده شوند؛ نتایج آن‌ها split کمتری دارند
     و DSR deflation قدرت آن‌ها را به‌درستی تعدیل می‌کند.
     """
+    paths = sorted(Path(processed_dir).glob("*.parquet"))
+    total = len(paths)
+    started = time.monotonic()
     out: list[ScanResult] = []
-    for path in sorted(Path(processed_dir).glob("*.parquet")):
+    for idx, path in enumerate(paths, 1):
         stem = path.stem
         _, symbol, _ = _parse_dataset(stem)
         if only_symbols and symbol not in only_symbols:
             continue
+        # تعدادِ ردیف از متادیتای parquet خوانده می‌شود، نه از خودِ فایل: ۲۴۶
+        # دیتاست زیرِ _SHORT_MIN_BARS هستند و هر شب کامل از دیسک خوانده و بی‌درنگ
+        # دور ریخته می‌شدند (scan_dataset برایشان [] برمی‌گرداند). این میان‌بر
+        # دقیقاً همان خروجی را می‌دهد، فقط بدون خواندنِ بی‌فایده.
+        try:
+            if pq.ParquetFile(path).metadata.num_rows < _SHORT_MIN_BARS:
+                continue
+        except Exception:
+            pass  # متادیتای خراب → مسیرِ عادی تصمیم بگیرد
+        _scan_heartbeat(idx, total, stem, len(out), started)
         df = pd.read_parquet(path)
         n = len(df)
         if n >= _FULL_MIN_BARS:

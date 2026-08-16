@@ -276,7 +276,11 @@ def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, wr
     for _, r in df.iterrows():
         v = verdicts.get(int(r["id"]), {})
         trades_out.append({**{k: r[k] for k in ("id", "pair", "enter_tag", "exit_reason",
-                                                "close_profit_abs", "exit_slip_bps", "prior_flag")}, "verdict": v})
+                                                "close_profit_abs", "exit_slip_bps", "prior_flag",
+                                                # 2026-08-12: تا امروز محاسبه می‌شدند ولی به آرتیفکت
+                                                # نمی‌رسیدند → پایین‌دست null می‌دید
+                                                "prior_decayed", "prior_mult", "selected_score")},
+                           "verdict": v})
 
     # The synthesis is the expensive call (Sonnet). Its whole input is the verdict
     # set — so when that set is unchanged, buying it again returns the same answer
