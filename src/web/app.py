@@ -363,13 +363,19 @@ def get_edges() -> dict[str, Any]:
     }
 
 
-_PIPELINE_STAGE_FA = {
-    "init": "شروع",
-    "data_refresh": "دانلود دیتا",
-    "wf_scan": "اسکن walk-forward",
-    "pair_rotation": "چرخش جفت‌ارز",
+# Fallback labels only. The `step` *code* is what travels in message_params;
+# the dashboard i18n layer resolves it (epb_stage_*) so the stage name follows
+# the selected language. These strings surface only for a consumer that ignores
+# message_code — hence English, like every other job message in this file.
+_PIPELINE_STAGE_LABEL = {
+    "init": "starting",
+    "data_refresh": "data download",
+    "wf_scan": "walk-forward scan",
+    "pair_rotation": "pair rotation",
+    "qr_bridge_refresh": "bridge refresh",
 }
-_PIPELINE_STAGE_PROGRESS = {"init": 2.0, "data_refresh": 10.0, "wf_scan": 30.0, "pair_rotation": 90.0}
+_PIPELINE_STAGE_PROGRESS = {"init": 2.0, "data_refresh": 10.0, "wf_scan": 30.0,
+                            "pair_rotation": 90.0, "qr_bridge_refresh": 95.0}
 
 
 def _pipeline_status_now() -> dict:
@@ -412,18 +418,19 @@ def _run_edge_refresh(job_id: str) -> None:
     ps = _pipeline_status_now()
     if ps.get("state") == "running" and not ps.get("stale"):
         mins = ps.get("running_minutes", 0)
-        step_fa = _PIPELINE_STAGE_FA.get(ps.get("step", ""), ps.get("step", "?"))
+        step = ps.get("step", "")
+        label = _PIPELINE_STAGE_LABEL.get(step, step or "?")
         job_manager.update(
             job_id, status=JobStatus.RUNNING,
-            progress=_PIPELINE_STAGE_PROGRESS.get(ps.get("step", ""), 20.0),
-            message=f"پایپ‌لاین از {mins} دقیقه پیش در حال اجراست — مرحله: {step_fa}",
+            progress=_PIPELINE_STAGE_PROGRESS.get(step, 20.0),
+            message=f"Pipeline has been running for {mins} min — stage: {label}",
             message_code="job_edge_already_running",
-            message_params={"step": ps.get("step", ""), "minutes": mins},
+            message_params={"step": step, "label": label, "minutes": mins},
         )
         return
 
     job_manager.update(job_id, status=JobStatus.RUNNING, progress=2.0,
-                       message="پایپ‌لاین شروع شد", message_code="job_edge_start")
+                       message="Pipeline started", message_code="job_edge_start")
 
     # Fire the pipeline shell script detached (setsid) so it survives web-server restarts
     script = ROOT / "scripts" / "refresh_candidates.sh"
@@ -438,7 +445,7 @@ def _run_edge_refresh(job_id: str) -> None:
     except Exception as exc:
         _log.exception("edge refresh failed to start")
         job_manager.update(job_id, status=JobStatus.ERROR, error=str(exc),
-                           message=f"شروع پایپ‌لاین ناموفق: {exc}",
+                           message=f"Pipeline failed to start: {exc}",
                            message_code="job_error", message_params={"error": str(exc)})
         return
 
@@ -466,27 +473,29 @@ def _run_edge_refresh(job_id: str) -> None:
                 n_alerts = len(report.get("alerts", []))
                 job_manager.update(
                     job_id, status=JobStatus.DONE, progress=100.0,
-                    message=f"اسکن کامل — {n_passed} لبه، {n_alerts} هشدار",
+                    message=f"Scan complete — {n_passed} edges, {n_alerts} alerts",
                     message_code="job_edge_done",
                     message_params={"passed": n_passed, "alerts": n_alerts},
                     result=report,
                 )
             else:
                 failed = lr.get("failed_step") or "?"
+                failed_label = _PIPELINE_STAGE_LABEL.get(failed, failed)
                 job_manager.update(job_id, status=JobStatus.ERROR,
                                    error=f"pipeline failed at {failed}",
-                                   message=f"خطا در مرحله: {failed}",
-                                   message_code="job_edge_error")
+                                   message=f"Failed at stage: {failed_label}",
+                                   message_code="job_edge_error_step",
+                                   message_params={"step": failed, "label": failed_label})
             return
 
         if state == "running":
             step = ps.get("step", "init")
             if step != last_step:
                 last_step = step
-                label = _PIPELINE_STAGE_FA.get(step, step)
+                label = _PIPELINE_STAGE_LABEL.get(step, step)
                 prog = _PIPELINE_STAGE_PROGRESS.get(step, 15.0)
                 job_manager.update(job_id, status=JobStatus.RUNNING, progress=prog,
-                                   message=f"مرحله: {label}",
+                                   message=f"Stage: {label}",
                                    message_code="job_edge_stage",
                                    message_params={"step": step, "label": label})
 
@@ -497,12 +506,12 @@ def _run_edge_refresh(job_id: str) -> None:
     ps = _pipeline_status_now()
     step = ps.get("step", "wf_scan")
     mins = ps.get("running_minutes", 0)
-    label = _PIPELINE_STAGE_FA.get(step, step)
+    label = _PIPELINE_STAGE_LABEL.get(step, step)
     job_manager.update(
         job_id, status=JobStatus.RUNNING,
         progress=_PIPELINE_STAGE_PROGRESS.get(step, 35.0),
-        message=f"مرحله: {label} ({mins} دقیقه) — پیشرفت را از نوار زیر دنبال کنید",
-        message_code="job_edge_stage",
+        message=f"Stage: {label} ({mins} min) — follow progress on the bar below",
+        message_code="job_edge_stage_mins",
         message_params={"step": step, "label": label, "minutes": mins},
     )
 

@@ -86,8 +86,27 @@ window.onLangChange = function () {
   if (state.edgesData) renderEdges(state.edgesData);
   if (state.cxData) renderCrossExchange(state.cxData);
   if (state.pfData) renderPortfolio(state.pfData);
-  if (state.currentSection === 'models') loadModels();
-  if (state.currentSection === 'quality') loadQuality();
+  // Sections whose renderer is fused with its fetch keep no re-renderable
+  // state, so their already-painted labels stay in the previous language
+  // until the data is pulled again. Reload just the visible one.
+  const reload = LANG_RELOAD[state.currentSection];
+  if (reload) reload();
+};
+
+/* Fetch-fused sections, keyed by section name. Called with no arguments so the
+   cheap cached-artifact path is used, not the force-recompute path that the
+   refresh button triggers. */
+const LANG_RELOAD = {
+  models: () => loadModels(),
+  quality: () => loadQuality(),
+  logs: () => loadLogs(),
+  fleet: () => loadFleetRisk(),
+  capacity: () => loadCapacity(),
+  stress: () => loadStress(),
+  trials: () => loadTrials(),
+  attribution: () => loadAttribution(),
+  pipeline: () => loadPipeline(),
+  altdata: () => loadAltdata(),
 };
 
 // ═══════════════════════════════════════════════════════════════ NAVIGATION
@@ -1066,14 +1085,23 @@ function buildEdgeCharts(data) {
 }
 // ── Pipeline progress bar helpers ────────────────────────────────────────────
 const EPB_STAGES = ['data_refresh', 'wf_scan', 'pair_rotation'];
-const EPB_STAGE_FA = { data_refresh: '↓ دانلود دیتا', wf_scan: '🔬 اسکن walk-forward', pair_rotation: '🔄 چرخش جفت‌ارز' };
 let _epbPollTimer = null;
+
+/* "Stage: X (n min)" — used by both the already-running guard and the
+   SSE-closed fallback. Stage codes are localized via the i18n layer. */
+function epbStageLine(ps) {
+  return t('job_edge_stage_mins', {
+    label: stageLabel(ps.step) || ps.step || '…',
+    minutes: ps.running_minutes || 0,
+  });
+}
 
 function epbShow(step, mins) {
   document.getElementById('edges-pipeline-bar').style.display = 'block';
   EPB_STAGES.forEach(s => {
     const el = document.getElementById('epb-' + s);
     if (!el) return;
+    el.textContent = stageLabel(s);
     const idx = EPB_STAGES.indexOf(s), cur = EPB_STAGES.indexOf(step || '');
     if (idx < cur) {
       el.style.background = 'rgba(34,197,94,.15)'; el.style.color = 'var(--green)';
@@ -1084,7 +1112,7 @@ function epbShow(step, mins) {
     }
   });
   const det = document.getElementById('epb-detail');
-  if (det) det.textContent = mins != null ? `مدت اجرا: ${mins} دقیقه${mins > 60 ? ' — اسکن کامل ۲-۵ ساعت طول می‌کشد' : ''}` : '';
+  if (det) det.textContent = mins != null ? t(mins > 60 ? 'epb_runtime_long' : 'epb_runtime', { minutes: mins }) : '';
 }
 
 function epbHide() {
@@ -1104,7 +1132,7 @@ function epbStartPolling() {
       } else if (ps.state === 'idle') {
         epbHide();
         document.getElementById('edges-rescan-btn').disabled = false;
-        document.getElementById('edges-status').textContent = ps.last_run?.ok ? t('edges_scan_done_short') || 'اسکن کامل شد' : t('edges_scan_failed_short') || 'اسکن ناموفق';
+        document.getElementById('edges-status').textContent = t(ps.last_run?.ok ? 'edges_scan_done_short' : 'edges_scan_failed_short');
         loadEdges();
       }
     } catch (_) { /* ignore transient fetch errors */ }
@@ -1123,7 +1151,7 @@ async function rescanEdges() {
     if (ps.state === 'running' && !ps.stale) {
       epbShow(ps.step, ps.running_minutes);
       epbStartPolling();
-      st.textContent = `مرحله: ${EPB_STAGE_FA[ps.step] || ps.step || '...'} (${ps.running_minutes || 0} دقیقه)`;
+      st.textContent = epbStageLine(ps);
       return;
     }
   } catch (_) { /* fall through to start */ }
@@ -1148,7 +1176,7 @@ async function rescanEdges() {
       fetch('/api/edges/pipeline-status').then(r2 => r2.json()).then(ps => {
         if (ps.state === 'running') {
           epbShow(ps.step, ps.running_minutes);
-          st.textContent = `مرحله: ${EPB_STAGE_FA[ps.step] || ps.step || '...'} (${ps.running_minutes || 0} دقیقه)`;
+          st.textContent = epbStageLine(ps);
         } else {
           btn.disabled = false;
         }
@@ -1513,7 +1541,7 @@ function loadExperiments() {
 
     let trendHtml = '';
     if (chartMetricKey && runs.length >= 3) {
-      trendHtml = `<div style="margin-bottom:10px;font-size:11px;opacity:.5">تغییرات <b>${chartMetricKey}</b> در ${runs.length} اجرا</div>
+      trendHtml = `<div style="margin-bottom:10px;font-size:11px;opacity:.5">${t('mdl_exp_trend', { metric: esc(chartMetricKey), n: runs.length })}</div>
         <div id="exp-trend-chart" style="height:140px;margin-bottom:12px"></div>`;
     }
 
@@ -1881,10 +1909,10 @@ async function loadTrials() {
   const mc = (label, val, cls) => `<div class="metric-card"><div class="lbl">${label}</div><div class="val ${cls || ''}" style="font-size:20px">${val}</div></div>`;
   const passShare = s.n_unique ? (100 * s.n_ever_passed / s.n_unique).toFixed(1) + '%' : '—';
   metrics.innerHTML =
-    mc(t('trials_m_unique'), (s.n_unique || 0).toLocaleString()) +
-    mc(t('trials_m_runs'), (s.n_runs_total || 0).toLocaleString()) +
-    mc(t('trials_m_tonight'), d.n_scanned_tonight != null ? d.n_scanned_tonight.toLocaleString() : '—') +
-    mc(t('trials_m_passed'), (s.n_ever_passed || 0).toLocaleString() + ` <span style="font-size:12px;color:var(--text3)">(${passShare})</span>`) +
+    mc(t('trials_m_unique'), (s.n_unique || 0).toLocaleString('en-US')) +
+    mc(t('trials_m_runs'), (s.n_runs_total || 0).toLocaleString('en-US')) +
+    mc(t('trials_m_tonight'), d.n_scanned_tonight != null ? d.n_scanned_tonight.toLocaleString('en-US') : '—') +
+    mc(t('trials_m_passed'), (s.n_ever_passed || 0).toLocaleString('en-US') + ` <span style="font-size:12px;color:var(--text3)">(${passShare})</span>`) +
     mc(t('trials_m_srvar'), s.sr_variance != null ? Number(s.sr_variance).toExponential(2) : '—');
   if (!s.n_unique) {
     metrics.innerHTML += `<div class="metric-card" style="grid-column:1/-1"><div class="lbl">ℹ</div><div style="font-size:12px;color:var(--text2);margin-top:4px">${t('trials_empty')}</div></div>`;

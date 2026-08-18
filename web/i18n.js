@@ -186,6 +186,8 @@ const I18N = {
     edges_sub: 'خروجیِ اسکنِ خارج‌از‌نمونه — بات‌های قاعده‌محور (بریج) فقط همین‌ها را اجرا می‌کنند',
     edges_rescan: 'اجرای اسکن دوباره',
     edges_scanning: 'شروع اسکن…',
+    edges_scan_done_short: 'اسکن کامل شد',
+    edges_scan_failed_short: 'اسکن ناموفق',
     edges_no_report: 'هنوز گزارشی تولید نشده. «اجرای اسکن دوباره» را بزنید.',
     edges_live_tf: 'تایم‌فریمِ زنده',
     edges_scanned: 'ترکیب‌های اسکن‌شده',
@@ -198,6 +200,14 @@ const I18N = {
     edges_scatter_note: 'هر نقطه یک کاندیدِ معتبر است. سبز = بازدهٔ مثبت، قرمز = بازدهٔ منفی.',
     edges_chart_hist: 'روندِ تعداد لبه‌های معتبر',
     edges_hist_note: '{n} اسکنِ ثبت‌شده',
+    /* pipeline progress bar — stage codes come from pipeline_status.json */
+    epb_stage_init: 'شروع',
+    epb_stage_data_refresh: '↓ دانلود دیتا',
+    epb_stage_wf_scan: '🔬 اسکن walk-forward',
+    epb_stage_pair_rotation: '🔄 چرخش جفت‌ارز',
+    epb_stage_qr_bridge_refresh: '🔗 رفرش بریج',
+    epb_runtime: 'مدت اجرا: {minutes} دقیقه',
+    epb_runtime_long: 'مدت اجرا: {minutes} دقیقه — اسکن کامل ۲-۵ ساعت طول می‌کشد',
     edges_alerts_title: 'هشدارهای تغییرِ تایم‌فریم',
     edges_no_alert: 'هیچ تایم‌فریمِ بهتری از «{tf}» پیدا نشد — تنظیمِ فعلیِ بات بهینه است.',
     edges_alert_better: '{symbol}: لبهٔ قوی‌تری روی {ctf} پیدا شد (شارپ {csharpe} با {cstrat}) نسبت به تایم‌فریمِ زندهٔ {ltf} (شارپ {lsharpe}). برای فعال‌سازی، بات باید با تایم‌فریم {ctf} ری‌استارت شود — این تغییر دستی/تأییدی است.',
@@ -423,6 +433,7 @@ const I18N = {
     verdict_predictable: 'قابل پیش‌بینی', verdict_weak: 'ضعیف', verdict_noise: 'نویز',
     mdl_exp_title: 'دفترچهٔ آزمایش‌ها (بازتولیدپذیری)', mdl_exp_empty: 'هنوز آزمایشی ثبت نشده',
     mdl_exp_col_name: 'نام', mdl_exp_col_metrics: 'متریک‌ها', mdl_exp_col_when: 'زمان', mdl_exp_col_seed: 'seed',
+    mdl_exp_trend: 'تغییرات <b>{metric}</b> در {n} اجرا',
 
     /* quality + forward-test */
     q_health: 'سلامت داده', q_datasets: 'دیتاست‌ها', q_clean: 'سالم', q_with_gaps: 'دارای شکاف', q_with_malformed: 'خراب',
@@ -470,7 +481,11 @@ const I18N = {
     job_opt_done: 'بهینه‌سازی کامل شد — {n} ترکیب، بهترین شارپ: {sharpe}',
     job_edge_start: 'اسکنِ walk-forward شروع شد…',
     job_edge_error: 'خطا در اسکن',
+    job_edge_error_step: 'خطا در مرحله: {label}',
     job_edge_done: 'اسکن کامل شد — {passed} لبهٔ معتبر، {alerts} هشدار',
+    job_edge_stage: 'مرحله: {label}',
+    job_edge_stage_mins: 'مرحله: {label} ({minutes} دقیقه) — پیشرفت را از نوار زیر دنبال کنید',
+    job_edge_already_running: 'پایپ‌لاین از {minutes} دقیقه پیش در حال اجراست — مرحله: {label}',
     job_error: 'خطا: {error}',
   },
 
@@ -650,6 +665,8 @@ const I18N = {
     edges_sub: 'Out-of-sample scan output — the rule-based bridge bots only trade these',
     edges_rescan: 'Re-run Scan',
     edges_scanning: 'Starting scan…',
+    edges_scan_done_short: 'Scan complete',
+    edges_scan_failed_short: 'Scan failed',
     edges_no_report: 'No report generated yet. Click "Re-run Scan".',
     edges_live_tf: 'Live timeframe',
     edges_scanned: 'Combos scanned',
@@ -662,6 +679,14 @@ const I18N = {
     edges_scatter_note: 'Each point is a valid candidate. Green = positive return, red = negative return.',
     edges_chart_hist: 'Trend of Valid Edge Count',
     edges_hist_note: '{n} scans recorded',
+    /* pipeline progress bar — stage codes come from pipeline_status.json */
+    epb_stage_init: 'Starting',
+    epb_stage_data_refresh: '↓ Data download',
+    epb_stage_wf_scan: '🔬 Walk-forward scan',
+    epb_stage_pair_rotation: '🔄 Pair rotation',
+    epb_stage_qr_bridge_refresh: '🔗 Bridge refresh',
+    epb_runtime: 'Runtime: {minutes} min',
+    epb_runtime_long: 'Runtime: {minutes} min — a full scan takes 2–5 hours',
     edges_alerts_title: 'Timeframe-change Alerts',
     edges_no_alert: 'No timeframe better than "{tf}" was found — the bot\'s current setting is optimal.',
     edges_alert_better: '{symbol}: a stronger edge was found on {ctf} (Sharpe {csharpe} with {cstrat}) vs the live timeframe {ltf} (Sharpe {lsharpe}). To activate, the bot must restart on timeframe {ctf} — this is a manual/approved change.',
@@ -887,6 +912,7 @@ const I18N = {
     verdict_predictable: 'predictable', verdict_weak: 'weak', verdict_noise: 'noise',
     mdl_exp_title: 'Experiment ledger (reproducibility)', mdl_exp_empty: 'No experiments logged yet',
     mdl_exp_col_name: 'Name', mdl_exp_col_metrics: 'Metrics', mdl_exp_col_when: 'When', mdl_exp_col_seed: 'seed',
+    mdl_exp_trend: '<b>{metric}</b> across {n} runs',
 
     /* quality + forward-test */
     q_health: 'Data health', q_datasets: 'Datasets', q_clean: 'Clean', q_with_gaps: 'With gaps', q_with_malformed: 'Malformed',
@@ -934,7 +960,11 @@ const I18N = {
     job_opt_done: 'Optimization complete — {n} combos, best Sharpe: {sharpe}',
     job_edge_start: 'Walk-forward scan started…',
     job_edge_error: 'Scan failed',
+    job_edge_error_step: 'Failed at stage: {label}',
     job_edge_done: 'Scan complete — {passed} valid edges, {alerts} alerts',
+    job_edge_stage: 'Stage: {label}',
+    job_edge_stage_mins: 'Stage: {label} ({minutes} min) — follow progress on the bar below',
+    job_edge_already_running: 'Pipeline has been running for {minutes} min — stage: {label}',
     job_error: 'Error: {error}',
   },
 };
@@ -1038,10 +1068,20 @@ function mlrlHint(fit) {
   return { hint: fit.hint || '', bot: fit.bot_hint || '' };  // legacy fallback
 }
 
-/* Resolve a job's message: prefer language-neutral code, fall back to text. */
+/* Resolve a pipeline stage code ('wf_scan', …) to a localized label. */
+function stageLabel(code) { return code ? t('epb_stage_' + code) : ''; }
+
+/* Resolve a job's message: prefer language-neutral code, fall back to text.
+   A `step` param is itself a stage *code*, so it is localized here and wins
+   over any pre-rendered `label` the backend sent along as a legacy fallback —
+   otherwise the backend's Persian stage name leaks into EN mode. */
 function jobMessage(job) {
   if (!job) return '';
-  if (job.message_code) return t(job.message_code, job.message_params || {});
+  if (job.message_code) {
+    const params = { ...(job.message_params || {}) };
+    if (params.step) params.label = stageLabel(params.step);
+    return t(job.message_code, params);
+  }
   return job.message || '';
 }
 
