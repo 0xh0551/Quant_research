@@ -459,11 +459,23 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
         g_risk, g_reason = alt_risk, (alt_reason or "altdata regime")
     elif alt_reason:
         g_reason = f"{g_reason or 'nominal'}; {alt_reason}"
+    # incident-learning embargo (2026-08-17): if the live market fingerprint matches a
+    # learned incident rule, publish global.embargo -> bots block organic entries and
+    # size activity-floor trades by floor_mult. Fail-open: any error -> no embargo.
+    embargo = None
+    try:
+        from src.intelligence.incident import update_embargo
+        embargo = update_embargo(_priority_bases(all_bases, 12))
+    except Exception as e:  # never let the detector break the hourly scan
+        print(f"[event_risk] embargo detector failed: {e}")
+    if embargo:
+        g_reason = f"{embargo['reason']}; {g_reason or 'nominal'}"
     payload = {
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
         "with_events": with_events,
         "n_symbols": len(result),
-        "global": {"risk": g_risk, "reason": g_reason or "nominal"},
+        "global": {"risk": g_risk, "reason": g_reason or "nominal",
+                   **({"embargo": embargo} if embargo else {})},
         "funding_bias": altdata_funding_bias(alt),
         "symbols": result,
     }
