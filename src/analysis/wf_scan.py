@@ -563,11 +563,16 @@ def build_report(
                 "candidate_sharpe": gb.oos_sharpe,
                 "candidate_short": gb.allow_short,
                 "gap": round(gap, 3),
+                # Fallback text only. The dashboard renders this alert from the
+                # `type` + the structured fields via its i18n layer
+                # (edges_alert_better); this string surfaces only for a consumer
+                # that does not translate — hence English, so nothing can leak
+                # into the dashboard's EN mode.
                 "message": (
-                    f"{sym}: لبهٔ قوی‌تری روی {gb.timeframe} پیدا شد "
-                    f"(Sharpe {gb.oos_sharpe:.2f} با {gb.strategy}) نسبت به تایم‌فریم جمعی "
-                    f"{live_timeframe} (Sharpe {live_sharpe:.2f}). "
-                    f"تایم‌فریم جمعی به‌صورت خودکار انتخاب می‌شود — این هشدار اطلاع‌رسانی است."
+                    f"{sym}: a stronger edge was found on {gb.timeframe} "
+                    f"(Sharpe {gb.oos_sharpe:.2f} with {gb.strategy}) vs the pooled "
+                    f"timeframe {live_timeframe} (Sharpe {live_sharpe:.2f}). "
+                    f"The pooled timeframe is selected automatically — this alert is informational."
                 ),
             })
 
