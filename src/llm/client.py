@@ -12,6 +12,9 @@ Wraps the three things every QR LLM use needs:
   * prompt caching  — a large stable `system` prefix is cached (reads ~0.1x)
   * structured output — `output_config.format` json_schema -> validated dict
   * Batch API       — 50% cheaper for non-latency-sensitive fan-out (post-mortems)
+  * a per-call ledger — every call appends one line to outputs/llm_calls.jsonl
+    (who called, model, tokens, cost), because a single monthly total cannot say
+    which feature is spending the budget.
 
 Model IDs are the current canonical strings; do not append date suffixes.
 """
@@ -21,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -103,6 +107,10 @@ def _outermost_object(text: str) -> str | None:
 #             22nd. Revisit the strategist cadence if the mute recurs.
 _ROOT = Path(__file__).resolve().parents[2]
 SPEND_FILE = _ROOT / "outputs" / "llm_spend.json"
+# Per-call ledger. SPEND_FILE answers "how much is left this month"; this answers
+# "which feature spent it", which is the only way to tune cadence/tier honestly.
+LEDGER_FILE = _ROOT / "outputs" / "llm_calls.jsonl"
+LEDGER_MAX_BYTES = 5_000_000  # rotate to .1 beyond this; the ledger must never grow unbounded
 MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "5.0"))
 WEB_SEARCH_USD = 0.01  # ~$10 / 1000 Anthropic web searches
 
@@ -113,6 +121,24 @@ _ENV_FILES = local_config.env_files()
 
 def _month_key() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m")
+
+
+def _call_site() -> str:
+    """Nearest frame outside this module, e.g. 'src.intelligence.postmortem:_synthesize'.
+
+    Attribution has to be automatic: a label every caller must remember to pass is a
+    label that goes stale, and the ledger is only worth keeping if it is complete.
+    """
+    try:
+        f = sys._getframe(1)
+        while f is not None:
+            mod = f.f_globals.get("__name__", "")
+            if not mod.startswith("src.llm"):
+                return f"{mod}:{f.f_code.co_name}"
+            f = f.f_back
+    except Exception:
+        pass
+    return "?"
 _KEY_NAMES = ["ANTHROPIC_API_KEY", "ANTHROPOC_API_LAB"]  # 2nd = legacy alias some site .env files use
 
 
@@ -194,6 +220,35 @@ class QuantLLM:
         except Exception:
             pass
 
+    @staticmethod
+    def _record_call(*, mode: str, model: str, tier: str, cost: float,
+                     usage: dict | None = None, site: str | None = None, **extra) -> None:
+        """Append one ledger line. Never raises — accounting must not break a call."""
+        u = usage or {}
+        row = {
+            "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "script": os.path.basename(sys.argv[0]) or "python",
+            "site": site or _call_site(),
+            "mode": mode,
+            "tier": tier,
+            "model": model,
+            "in": u.get("input", 0),
+            "out": u.get("output", 0),
+            "thinking": u.get("thinking", 0),
+            "cache_read": u.get("cache_read", 0),
+            "cache_write": u.get("cache_write", 0),
+            "cost_usd": round(float(cost or 0.0), 6),
+        }
+        row.update({k: v for k, v in extra.items() if v is not None})
+        try:
+            LEDGER_FILE.parent.mkdir(parents=True, exist_ok=True)
+            if LEDGER_FILE.exists() and LEDGER_FILE.stat().st_size > LEDGER_MAX_BYTES:
+                LEDGER_FILE.replace(LEDGER_FILE.with_suffix(".jsonl.1"))
+            with LEDGER_FILE.open("a") as fh:
+                fh.write(json.dumps(row, default=str) + "\n")
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------ #
     def complete(
         self,
@@ -249,6 +304,11 @@ class QuantLLM:
         pin, pout = self._price_for(model)
         est = (10000 * pin + budget * pout) / 1e6
         if not self.budget_ok(est):
+            # Log the refusal too: "the feature went quiet because the cap was hit" is
+            # exactly the kind of thing that otherwise gets mistaken for a bug.
+            self._record_call(mode="sync", model=model, tier=tier, cost=0.0,
+                              skipped="monthly_budget_exceeded", est_usd=round(est, 6),
+                              site=_call_site())
             return {"text": "", "data": None, "model": model, "cost_usd": 0.0,
                     "usage": {"input": 0, "output": 0, "cache_read": 0, "cache_write": 0},
                     "skipped": "monthly_budget_exceeded", "month_spend": self.month_spend(),
@@ -286,6 +346,9 @@ class QuantLLM:
         }
         out["cost_usd"] = self._cost(model, out["usage"])
         self._record_spend(out["cost_usd"])
+        self._record_call(mode="sync", model=resp.model, tier=tier, cost=out["cost_usd"],
+                          usage=out["usage"], max_tokens=budget,
+                          stop_reason=out["stop_reason"], site=_call_site())
         if json_schema:
             out["data"], out["parse_error"] = _parse_structured(text, out["stop_reason"])
         return out
@@ -297,6 +360,8 @@ class QuantLLM:
              "cache_write": getattr(usage, "cache_creation_input_tokens", 0) or 0}
         cost = self._cost(model, u) + n_searches * WEB_SEARCH_USD
         self._record_spend(cost)
+        self._record_call(mode="web_search", model=model, tier="?", cost=cost, usage=u,
+                          n_searches=n_searches, site=_call_site())
         return cost
 
     def count_tokens(self, prompt: str, *, tier: str = "smart", system: str | None = None) -> int:
@@ -361,7 +426,13 @@ class QuantLLM:
             if json_schema:
                 params["output_config"] = {"format": {"type": "json_schema", "schema": json_schema}}
             reqs.append(Request(custom_id=it["custom_id"], params=MessageCreateParamsNonStreaming(**params)))
-        return self._c().messages.batches.create(requests=reqs).id
+        batch_id = self._c().messages.batches.create(requests=reqs).id
+        # Submission is logged separately from results: the collector runs hours later in
+        # a different process, so without this row the cost lands on the collector's name.
+        self._record_call(mode="batch_submit", model=model, tier=tier, cost=0.0,
+                          batch_id=batch_id, n_items=len(items), est_usd=round(est, 6),
+                          max_tokens=max_tokens, site=_call_site())
+        return batch_id
 
     def batch_status(self, batch_id: str) -> str:
         return self._c().messages.batches.retrieve(batch_id).processing_status
@@ -378,7 +449,11 @@ class QuantLLM:
             u = {"input": msg.usage.input_tokens, "output": msg.usage.output_tokens,
                  "cache_read": getattr(msg.usage, "cache_read_input_tokens", 0) or 0,
                  "cache_write": getattr(msg.usage, "cache_creation_input_tokens", 0) or 0}
-            batch_cost += self._cost(msg.model, u) * 0.5  # Batch API is 50% off
+            item_cost = self._cost(msg.model, u) * 0.5  # Batch API is 50% off
+            batch_cost += item_cost
+            self._record_call(mode="batch", model=msg.model, tier="?", cost=item_cost,
+                              usage=u, batch_id=batch_id, custom_id=res.custom_id,
+                              site=_call_site())
             text = "".join(b.text for b in msg.content if getattr(b, "type", None) == "text")
             if as_json:
                 data, err = _parse_structured(text, getattr(msg, "stop_reason", None))
