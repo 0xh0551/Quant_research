@@ -79,6 +79,12 @@ MIN_NOTABLE = {"vol_ratio": 1.3, "rv_z": 1.0, "whipsaw_pct": 1.0, "btc_range_pct
                "alt_down_share": 0.3, "oi_change_abs_pct": 3.0, "vol_regime_flip": 2.0}
 RELAX_LADDER = (0.95, 0.9, 0.85, 0.8, 0.75)   # calibrate_rule tries tight -> loose
 MAX_FALSE_ALARM = 0.08                        # <= 8% of ordinary hours may match
+# قانون مالک 2026-08-19: جهشِ قیمت به‌خودی‌خود فرصت است نه خطر — امبارگو فقط وقتی
+# مجاز است که ناوگان واقعاً در حال خون‌ریزی باشد (اج‌ها کار نمی‌کنند). امضای بازار
+# شرطِ لازم است، نه کافی؛ شرطِ دوم: ضررِ بسته‌شده‌ی ناوگان در پنجره‌ی اخیر.
+ARM_WINDOW_H = 6             # bleeding lookback for arming
+ARM_LOSS_FRAC = 0.004        # trailing fleet closed-PnL <= -0.4% of equity ...
+ARM_MIN_BOTS = 2             # ... with >=2 bots negative in that window
 KEY_FEATURES = {
     "vol_ratio": +1,        # window volume / trailing-7d hourly mean (majors)
     "rv_z": +1,             # realised vol z-score vs 7d rolling windows
@@ -137,7 +143,8 @@ def fleet_trades(since: datetime, until: datetime | None = None) -> pd.DataFrame
             con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
             df = pd.read_sql_query(
                 "SELECT pair, is_short, open_date, close_date, close_profit_abs AS pnl, "
-                "exit_reason, leverage, stake_amount AS stake, enter_tag "
+                "exit_reason, leverage, stake_amount AS stake, enter_tag, "
+                "open_rate, max_rate, min_rate "
                 "FROM trades WHERE is_open=0 AND close_date IS NOT NULL AND close_date >= ?",
                 con, params=(s,))
             con.close()
@@ -157,6 +164,15 @@ def fleet_trades(since: datetime, until: datetime | None = None) -> pd.DataFrame
     t["pnl"] = pd.to_numeric(t["pnl"], errors="coerce").fillna(0.0)
     t["is_short"] = t["is_short"].astype(bool)
     t["base"] = t["pair"].astype(str).str.split("/").str[0].str.upper()
+    # MFE در فضای قیمت (برای شاهدِ whipsaw: بازنده‌هایی که اول در سود بودند)
+    try:
+        o = pd.to_numeric(t["open_rate"], errors="coerce")
+        mx = pd.to_numeric(t["max_rate"], errors="coerce")
+        mn = pd.to_numeric(t["min_rate"], errors="coerce")
+        t["mfe"] = np.where(t["is_short"], 1 - mn / o, mx / o - 1)
+        t["mfe"] = pd.to_numeric(t["mfe"], errors="coerce").clip(lower=0).fillna(0.0)
+    except Exception:
+        t["mfe"] = 0.0
     if until is not None:
         u = pd.Timestamp(until)
         u = u.tz_convert(UTC) if u.tzinfo else u.tz_localize(UTC)
@@ -232,12 +248,18 @@ def bot_impact(trades: pd.DataFrame, t0: pd.Timestamp, t1: pd.Timestamp) -> dict
     short_pnl = float(w.loc[w["is_short"], "pnl"].sum())
     worst = w.nsmallest(5, "pnl")
     lev = pd.to_numeric(w["leverage"], errors="coerce").fillna(1.0)
+    losers = w[w["pnl"] < 0]
+    in_profit_first = losers[losers.get("mfe", 0) >= 0.005] if "mfe" in w.columns else losers.iloc[0:0]
     return {
         "n_trades": int(len(w)),
         "fleet_pnl": round(float(w["pnl"].sum()), 2),
         "long_pnl": round(long_pnl, 2),
         "short_pnl": round(short_pnl, 2),
         "both_sides_lost": bool(long_pnl < 0 and short_pnl < 0),
+        # شاهدِ whipsaw از آنالیتیکس (2026-08-19): چند درصدِ بازنده‌ها اول ≥0.5% در سود بودند؟
+        "losers_in_profit_first_share": round(float(len(in_profit_first) / len(losers)), 3) if len(losers) else None,
+        "losers_in_profit_first_usd": round(float(in_profit_first["pnl"].sum()), 2) if len(losers) else 0.0,
+        "losers_median_mfe_pct": round(float(losers["mfe"].median() * 100), 3) if len(losers) and "mfe" in w.columns else None,
         "per_bot": w.groupby("bot")["pnl"].sum().round(2).to_dict(),
         "per_base": w.groupby("base")["pnl"].sum().round(2).sort_values().head(8).to_dict(),
         "exit_reasons": w.groupby("exit_reason")["pnl"].sum().round(2).to_dict(),
@@ -249,6 +271,28 @@ def bot_impact(trades: pd.DataFrame, t0: pd.Timestamp, t1: pd.Timestamp) -> dict
                    "closed": r.close_date.isoformat()} for r in worst.itertuples()],
         "bases": sorted(w["base"].unique().tolist()),
     }
+
+
+def fleet_bleeding(trades: pd.DataFrame | None = None, at: pd.Timestamp | None = None,
+                   *, window_h: int = ARM_WINDOW_H, equity: float | None = None) -> tuple[bool, dict]:
+    """Is the fleet actually LOSING right now? (closed PnL over the trailing window.)
+
+    Owner rule (2026-08-19): a price jump alone is opportunity, not danger — the
+    embargo may only arm when the fingerprint matches AND this returns True
+    (edges demonstrably not working). Uses closed trades only (honest, realised)."""
+    at = pd.Timestamp(at) if at is not None else pd.Timestamp.now(tz=UTC)
+    if at.tzinfo is None:
+        at = at.tz_localize(UTC)
+    t0 = at - pd.Timedelta(hours=window_h)
+    if trades is None:
+        trades = fleet_trades(t0.to_pydatetime() - timedelta(hours=1), at.to_pydatetime())
+    w = trades[(trades["close_date"] >= t0) & (trades["close_date"] < at)]
+    eq = float(equity or fleet_equity())
+    pnl = float(w["pnl"].sum())
+    n_neg = int((w.groupby("bot")["pnl"].sum() < 0).sum()) if len(w) else 0
+    bleeding = (pnl <= -ARM_LOSS_FRAC * eq) and (n_neg >= ARM_MIN_BOTS)
+    return bleeding, {"window_h": window_h, "pnl": round(pnl, 2), "n_trades": int(len(w)),
+                      "bots_negative": n_neg, "threshold": round(-ARM_LOSS_FRAC * eq, 2)}
 
 
 # --------------------------------------------------------------------------- #
@@ -582,17 +626,20 @@ def counterfactual(trades: pd.DataFrame, rule: dict, t0: pd.Timestamp, t1: pd.Ti
     honestly (positive organic PnL blocked counts against).
     """
     t0 = pd.Timestamp(t0); t1 = pd.Timestamp(t1)
-    fired_at, hits_at = None, []
+    fired_at, hits_at, bleed_at = None, [], {}
     for h in range(-scan_back_h, int((t1 - t0).total_seconds() // 3600) + 1):
         end = t0 + pd.Timedelta(hours=h)
+        bleeding, bstats = fleet_bleeding(trades, end)
+        if not bleeding:      # قانون مالک: بدون خون‌ریزیِ واقعی، امضا هرچه باشد امبارگو نه
+            continue
         sig = market_signature(end - pd.Timedelta(hours=LIVE_WINDOW_H), end, bases, with_flows=False)
         n, hits = rule_hits(rule, sig)
         if n >= int(rule.get("min_hits", RULE_MIN_HITS)):
-            fired_at, hits_at = end, hits
+            fired_at, hits_at, bleed_at = end, hits, bstats
             break
     if fired_at is None:
-        return {"fired": False, "note": "rule would not have fired before/within the window "
-                                       "(effect only visible after the losses) — no saving"}
+        return {"fired": False, "note": "fingerprint+bleeding never coincided before/within the "
+                                       "window — no embargo, no saving"}
     e_end = fired_at + pd.Timedelta(hours=float(rule.get("ttl_h", TTL_MIN_H)))
     opened = trades[(trades["open_date"] >= fired_at) & (trades["open_date"] < e_end)]
     organic = opened[opened["enter_tag"] != "activity_floor"]
@@ -603,7 +650,7 @@ def counterfactual(trades: pd.DataFrame, rule: dict, t0: pd.Timestamp, t1: pd.Ti
     lead_h = round((t0 - fired_at).total_seconds() / 3600, 1)
     return {
         "fired": True, "fired_at": fired_at.isoformat(), "embargo_until": e_end.isoformat(),
-        "lead_hours_before_losses": lead_h, "hits": hits_at,
+        "lead_hours_before_losses": lead_h, "hits": hits_at, "bleeding_at_fire": bleed_at,
         "organic_trades_blocked": int(len(organic)),
         "organic_blocked_pnl": round(float(organic["pnl"].sum()), 2),
         "organic_blocked_losers": round(float(organic.loc[organic["pnl"] < 0, "pnl"].sum()), 2),
@@ -615,12 +662,12 @@ def counterfactual(trades: pd.DataFrame, rule: dict, t0: pd.Timestamp, t1: pd.Ti
 
 
 def background_match_rate(rule: dict, bases: list[str], end: pd.Timestamp, *, days: int = 14,
-                          exclude: tuple | None = None) -> dict:
-    """How often would this rule fire on ORDINARY hours? Scans hourly rolling windows
-    over the trailing `days` (excluding the incident span). This is the false-alarm
-    honesty check every learned rule must publish."""
+                          exclude: tuple | None = None, trades: pd.DataFrame | None = None) -> dict:
+    """How often would the FULL trigger (fingerprint match AND fleet bleeding) fire on
+    ORDINARY hours? Scans hourly over the trailing `days` (excluding the incident span).
+    Also reports the fingerprint-only rate so the two gates stay separately visible."""
     end = pd.Timestamp(end).floor("h")
-    n_hit, n_tot, hit_hours = 0, 0, []
+    n_hit, n_sig, n_tot, hit_hours = 0, 0, 0, []
     for h in range(days * 24):
         e = end - pd.Timedelta(hours=h)
         if exclude and exclude[0] <= e <= exclude[1]:
@@ -630,11 +677,16 @@ def background_match_rate(rule: dict, bases: list[str], end: pd.Timestamp, *, da
             continue
         n_tot += 1
         n, _ = rule_hits(rule, sig)
-        if n >= int(rule.get("min_hits", RULE_MIN_HITS)):
-            n_hit += 1
-            hit_hours.append(e.isoformat())
+        if n < int(rule.get("min_hits", RULE_MIN_HITS)):
+            continue
+        n_sig += 1
+        if trades is not None and not fleet_bleeding(trades, e)[0]:
+            continue
+        n_hit += 1
+        hit_hours.append(e.isoformat())
     return {"days": days, "hours_scanned": n_tot, "hours_matched": n_hit,
             "rate": round(n_hit / n_tot, 4) if n_tot else None,
+            "fingerprint_only_rate": round(n_sig / n_tot, 4) if n_tot else None,
             "sample_hits": hit_hours[:6]}
 
 
@@ -653,7 +705,7 @@ def calibrate_rule(sig: dict, severity: float, hours: float, trades: pd.DataFram
         if not rule["thresholds"]:
             break
         cf = counterfactual(trades, rule, t0, t1, bases)
-        bg = background_match_rate(rule, bases, t0, exclude=exclude)
+        bg = background_match_rate(rule, bases, t0, exclude=exclude, trades=trades)
         tried.append((rule, cf, bg))
     if not tried:
         rule = learn_rule(sig, severity, hours)
@@ -876,9 +928,30 @@ def _save_state(st: dict) -> None:
 
 def update_embargo(bases: list[str] | None = None, *, now: datetime | None = None) -> dict | None:
     """Hourly: refresh the live fingerprint, match, and return the `global.embargo`
-    payload for event_risk.json (or None). Persists state so an active embargo keeps
-    its TTL even if the fingerprint fades the next hour; extends TTL on re-match."""
+    payload for event_risk.json (or None). ARMS ONLY WHEN THE FLEET IS BLEEDING
+    (owner rule 2026-08-19): fingerprint match without realised fleet losses is an
+    opportunity, not a danger. Persists state so an active embargo keeps its TTL even
+    if the fingerprint fades the next hour; extends TTL on re-match (again only while
+    bleeding)."""
     now = now or datetime.now(UTC)
+    # کلید دستی مالک: outputs/embargo_override.json = {"suspend_until": "<iso>"} —
+    # تا آن لحظه امبارگوی فعال لغو و match جدید بی‌اثر است (برای وقتی حکم ماشین اشتباه است)
+    try:
+        ov = json.loads((OUT / "embargo_override.json").read_text())
+        su = datetime.fromisoformat(str(ov.get("suspend_until")))
+        if su.tzinfo is None:
+            su = su.replace(tzinfo=UTC)
+        if now < su:
+            st = _load_state()
+            if st.get("active"):
+                _log_embargo({**st["active"], "event": "suspended_by_owner", "at": now.isoformat()})
+                st["active"] = None
+                _save_state(st)
+            return None
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        log.warning("embargo_override unreadable (%s) — ignored", exc)
     mem = load_memory()
     if not (mem.get("incidents")):
         return None
@@ -902,6 +975,17 @@ def update_embargo(bases: list[str] | None = None, *, now: datetime | None = Non
     st["last_checked"] = now.isoformat()
     m = match_live(sig, mem) if sig else None
     if m:
+        # قانون مالک 2026-08-19: امضا کافی نیست — فقط با خون‌ریزیِ واقعیِ ناوگان مسلح شو.
+        try:
+            bleeding, bstats = fleet_bleeding(None, pd.Timestamp(now))
+        except Exception as exc:
+            log.warning("fleet_bleeding failed (%s) — treating as not bleeding", exc)
+            bleeding, bstats = False, {}
+        st["last_bleeding"] = bstats
+        if not bleeding:
+            m = None
+    if m:
+        m["bleeding"] = bstats
         until = now + timedelta(hours=float(m["ttl_h"]))
         if active:
             # extend, keep the stronger setting
@@ -914,7 +998,7 @@ def update_embargo(bases: list[str] | None = None, *, now: datetime | None = Non
             active = {"since": now.isoformat(), "until": until.isoformat(), "last_match": now.isoformat(),
                       "matched": m["incident_id"], "cause_class": m.get("cause_class"),
                       "strength": m["strength"], "floor_mult": m["floor_mult"], "ttl_h": m["ttl_h"],
-                      "hits": m["hits"], "extensions": 0,
+                      "hits": m["hits"], "extensions": 0, "bleeding_at_start": m.get("bleeding"),
                       "signature_at_start": st["last_signature"]}
             _log_embargo({**active, "event": "start"})
         st["active"] = active
