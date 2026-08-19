@@ -1,0 +1,558 @@
+<title>شناسهٔ کوانت</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --ground:#f4f6fa; --panel:#ffffff; --panel2:#eef1f7; --line:#dde3ee;
+  --ink:#131a2c; --ink2:#4c5872; --ink3:#7d88a1;
+  --teal:#0f9e8c; --teal-soft:rgba(45,212,191,.14); --indigo:#5b63d3;
+  --chip:#ffffff; --console:#0b0e16;
+}
+:root:not([data-theme="light"]){ }
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --ground:#080b12; --panel:#0f1420; --panel2:#151b2b; --line:#212a3e;
+    --ink:#e7ecf3; --ink2:#97a3b6; --ink3:#63708a;
+    --teal:#2dd4bf; --teal-soft:rgba(45,212,191,.12); --indigo:#818cf8;
+    --chip:#f4f6fa; --console:#05070c;
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#080b12; --panel:#0f1420; --panel2:#151b2b; --line:#212a3e;
+  --ink:#e7ecf3; --ink2:#97a3b6; --ink3:#63708a;
+  --teal:#2dd4bf; --teal-soft:rgba(45,212,191,.12); --indigo:#818cf8;
+  --chip:#f4f6fa; --console:#05070c;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--ground); color:var(--ink);
+  font-family:'Vazirmatn',Tahoma,sans-serif; direction:rtl; line-height:1.85;
+  font-size:15px;
+}
+.wrap{max-width:1080px; margin:0 auto; padding:56px 22px 90px}
+.eyebrow{
+  font-family:'IBM Plex Mono',monospace; direction:ltr; text-align:right;
+  font-size:11.5px; letter-spacing:.14em; color:var(--teal); margin:0 0 14px;
+}
+h1{font-size:34px; font-weight:800; margin:0 0 12px; text-wrap:balance; letter-spacing:0}
+.lede{color:var(--ink2); max-width:62ch; margin:0 0 34px; font-size:16px}
+h2{font-size:20px; font-weight:700; margin:0 0 6px}
+.sec{margin-top:56px}
+.sec > p{color:var(--ink2); max-width:64ch; margin:0 0 22px}
+.rule{
+  display:grid; gap:12px; grid-template-columns:1fr;
+  background:var(--panel); border:1px solid var(--line); border-radius:14px;
+  padding:20px 22px; margin:0 0 26px;
+}
+.rule b{color:var(--ink)}
+.rule p{margin:0; color:var(--ink2)}
+.rule .k{
+  font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal);
+  direction:ltr; text-align:right;
+}
+.lin{display:grid; grid-template-columns:repeat(3,1fr); gap:16px}
+.lin figure{margin:0}
+.lin figcaption{display:flex; flex-direction:column; padding:10px 4px 0}
+.lin figcaption b{font-size:14px}
+.lin figcaption span{color:var(--ink3); font-size:12.5px; line-height:1.7}
+.lin .target .stage{box-shadow:0 0 0 2px var(--teal)}
+.stage{
+  background:var(--chip); border:1px solid var(--line); border-radius:14px;
+  padding:20px 24px; display:flex; align-items:center; justify-content:center;
+}
+.stage .mark{width:100%; height:auto; max-height:150px; display:block}
+.grid{display:grid; grid-template-columns:repeat(2,1fr); gap:18px}
+.card{
+  background:var(--panel); border:1px solid var(--line); border-radius:16px;
+  padding:18px 18px 20px; display:flex; flex-direction:column; gap:14px;
+}
+.card-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+.titles{display:flex; align-items:baseline; gap:10px}
+.card h3{margin:0; font-size:18px; font-weight:700}
+.slug,.en{font-family:'IBM Plex Mono',monospace; font-size:11.5px; direction:ltr}
+.slug{color:var(--ink3)}
+.en{color:var(--teal); letter-spacing:.06em}
+.card .stage{padding:16px 18px}
+.card .stage .mark{max-height:118px}
+.proofs{display:flex; gap:10px; align-items:stretch}
+.chip{
+  border:1px solid var(--line); border-radius:12px; padding:10px;
+  display:flex; align-items:center; justify-content:center;
+}
+.chip.light{background:var(--chip)}
+.chip.dark,.stage.dark{background:var(--console); border-color:#1b2337}
+.chip .icon{width:52px; height:52px; display:block}
+.chip.fav{padding:12px}
+.chip.fav .icon{width:32px; height:32px}
+.chip.grow{flex:1}
+.chip.grow .mark{width:100%; height:auto; max-height:58px; display:block}
+.why{margin:0; color:var(--ink2); font-size:14px}
+.geo{
+  margin:0; color:var(--ink3); font-size:12px; line-height:1.9;
+  border-top:1px dashed var(--line); padding-top:10px;
+  font-family:'IBM Plex Mono','Vazirmatn',monospace;
+}
+.pal{display:grid; grid-template-columns:repeat(4,1fr); gap:14px}
+.sw{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:var(--panel)}
+.sw .fill{height:74px}
+.sw .meta{padding:10px 12px; display:flex; flex-direction:column}
+.sw .meta b{font-size:13px}
+.sw .meta code{
+  font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink3);
+  direction:ltr; text-align:right;
+}
+.files{
+  background:var(--panel2); border:1px solid var(--line); border-radius:14px;
+  padding:16px 18px; font-family:'IBM Plex Mono',monospace; font-size:12.5px;
+  direction:ltr; text-align:left; color:var(--ink2); overflow-x:auto;
+}
+.files b{color:var(--ink)}
+.ask{
+  margin-top:34px; border-inline-start:3px solid var(--teal);
+  background:var(--teal-soft); border-radius:0 12px 12px 0; padding:16px 18px;
+}
+.ask p{margin:0; color:var(--ink)}
+.ask ol{margin:10px 0 0; padding-inline-start:20px; color:var(--ink2)}
+footer{margin-top:60px; color:var(--ink3); font-size:12.5px; border-top:1px solid var(--line); padding-top:16px}
+@media (max-width:860px){
+  .grid,.lin,.pal{grid-template-columns:1fr}
+  h1{font-size:27px}
+}
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">QUANT RESEARCH / IDENTITY SKETCHES / v0</p>
+  <h1>هفت اسکچ برای نشانِ کوانت</h1>
+  <p class="lede">همهٔ اسکچ‌ها روی یک اسکلتِ مشترک با نریمانی و نوچس ساخته شده‌اند: همان دوازده نقطه، همان مختصات، همان شعاع. چیزی که عوض می‌شود فقط فیگوری‌ست که از دلِ شبکه بیرون کشیده می‌شود و جفت‌رنگِ محصول.</p>
+
+  <div class="rule">
+    <p class="k">grid: 4 × 3 &nbsp;·&nbsp; r = 43.6 &nbsp;·&nbsp; x = 192.15 / 396.39 / 605.10 / 804.96</p>
+    <p><b>قاعدهٔ خانواده:</b> نریمانی شبکه را خام نگه می‌دارد و یک نقطه را طلایی می‌کند. نوچس چهار نقطهٔ داخلی را در یک پنجرهٔ گردشده حل می‌کند و صورت می‌سازد. پس سهمِ کوانت این است: <b>همان شبکه را نگه دار، فیگورِ خودت را از آن دربیاور، و یک نقطه/عنصر را به رنگِ سیگنالِ خودت روشن کن.</b></p>
+  </div>
+  
+  <div class="lin">
+    <figure><div class="stage dark"><svg class="mark" id="Layer_2" data-name="Layer 2" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><defs><style>.cls-1{fill:#fbbf24;}.cls-2{fill:#94a3b3;}.cls-3{fill:#f9fafb;}</style></defs><circle class="cls-1" cx="192.15" cy="300.75" r="43.6"/><circle class="cls-2" cx="192.15" cy="701.64" r="43.6"/><circle class="cls-2" cx="192.15" cy="505.12" r="43.6"/><circle class="cls-3" cx="396.39" cy="300.75" r="43.6"/><circle class="cls-3" cx="396.39" cy="707.9" r="43.6"/><circle class="cls-3" cx="396.39" cy="505.12" r="43.6"/><circle class="cls-3" cx="605.1" cy="300.75" r="43.6"/><circle class="cls-3" cx="605.1" cy="707.9" r="43.6"/><circle class="cls-3" cx="605.1" cy="505.12" r="43.6"/><circle class="cls-2" cx="804.96" cy="293.92" r="43.6"/><circle class="cls-2" cx="804.96" cy="701.06" r="43.6"/><circle class="cls-2" cx="804.96" cy="498.28" r="43.6"/></svg></div>
+      <figcaption><b>نریمانی</b><span>شبکهٔ ۱۲نقطه‌ای، یک نقطهٔ طلایی — روی زمینهٔ تیره</span></figcaption></figure>
+    <figure><div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" width="740" height="540" role="img" aria-label="noches"><g fill="#1B3A8F" opacity="0.42">
+    <circle cx="192.15" cy="300.75" r="43.6"/><circle cx="192.15" cy="505.12" r="43.6"/><circle cx="192.15" cy="701.64" r="43.6"/>
+    <circle cx="804.96" cy="293.92" r="43.6"/><circle cx="804.96" cy="498.28" r="43.6"/><circle cx="804.96" cy="701.06" r="43.6"/>
+  </g><rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74" fill="#1B3A8F"/><g fill="#1B3A8F"><circle cx="396.39" cy="707.9" r="43.6"/><circle cx="605.1" cy="707.9" r="43.6"/></g><g fill="#FFAE85">
+    <circle cx="447" cy="372" r="37"/><circle cx="555" cy="372" r="37"/>
+    <path d="M424 464 Q497 512 578 436" fill="none" stroke="#FFAE85" stroke-width="26" stroke-linecap="round"/>
+  </g></svg></div>
+      <figcaption><b>نوچس</b><span>چهار نقطهٔ داخلی در یک پنجره حل می‌شوند</span></figcaption></figure>
+    <figure class="target"><div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74"
+        fill="none" stroke="#1B2C52" stroke-width="62"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <line x1="556" y1="452" x2="700" y2="596" stroke="#2DD4BF" stroke-width="62" stroke-linecap="round"/>
+</svg></div>
+      <figcaption><b>کوانت</b><span>همان شبکه، فیگورِ تازه، جفت‌رنگِ خودش</span></figcaption></figure>
+  </div>
+
+  <section class="sec">
+    <h2>اسکچ‌ها</h2>
+    <p>به‌ترتیبِ پیشنهاد. هر کارت: نشانِ کامل، آیکن، فاوآیکن ۳۲ پیکسل، و همان نشان روی زمینهٔ کنسول.</p>
+    <div class="grid">
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>مونوگرام Q</h3>
+        <span class="slug">qr-qmono</span>
+      </div>
+      <span class="en">Q</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74"
+        fill="none" stroke="#1B2C52" stroke-width="62"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <line x1="556" y1="452" x2="700" y2="596" stroke="#2DD4BF" stroke-width="62" stroke-linecap="round"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="306 210 430 430" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74"
+        fill="none" stroke="#1B2C52" stroke-width="62"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <line x1="556" y1="452" x2="700" y2="596" stroke="#2DD4BF" stroke-width="62" stroke-linecap="round"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="306 210 430 430" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74"
+        fill="none" stroke="#1B2C52" stroke-width="62"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <line x1="556" y1="452" x2="700" y2="596" stroke="#2DD4BF" stroke-width="62" stroke-linecap="round"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="293.92" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="498.28" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="701.06" r="43.6" fill="#4A63A8"/></g>
+  <rect x="352.79" y="257.15" width="295.92" height="291.57" rx="74"
+        fill="none" stroke="#4A63A8" stroke-width="62"/>
+  <g fill="#4A63A8"><circle cx="396.39" cy="707.9" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="707.9" r="43.6" fill="#4A63A8"/></g>
+  <line x1="556" y1="452" x2="700" y2="596" stroke="#5EE6D0" stroke-width="62" stroke-linecap="round"/>
+</svg></div>
+    </div>
+    <p class="why">همان پنجرهٔ نوچس، این‌بار توخالی و با یک دُم. نوچس از پنجره بیرون را نگاه می‌کند، کوانت داخلش را می‌کاود. نزدیک‌ترین خویشاوند و بهترین رفتار در اندازهٔ فاوآیکن.</p>
+    <p class="geo">مستطیل عیناً مختصات نوچس: 352.79/257.15/295.92/291.57 با rx=74، ضخامت قلم ۶۲</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>دُم توزیع</h3>
+        <span class="slug">qr-tail</span>
+      </div>
+      <span class="en">Tail</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/>
+    <circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/></g>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701 L852 745 L148 745 Z" fill="#1B2C52" opacity=".12"/>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701" fill="none" stroke="#1B2C52" stroke-width="26" stroke-linecap="round"/>
+  <line x1="722" y1="262" x2="722" y2="756" stroke="#2DD4BF" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="4 34" opacity=".85"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="701.06" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/>
+    <circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/></g>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701 L852 745 L148 745 Z" fill="#1B2C52" opacity=".12"/>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701" fill="none" stroke="#1B2C52" stroke-width="26" stroke-linecap="round"/>
+  <line x1="722" y1="262" x2="722" y2="756" stroke="#2DD4BF" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="4 34" opacity=".85"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="701.06" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/>
+    <circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/></g>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701 L852 745 L148 745 Z" fill="#1B2C52" opacity=".12"/>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701" fill="none" stroke="#1B2C52" stroke-width="26" stroke-linecap="round"/>
+  <line x1="722" y1="262" x2="722" y2="756" stroke="#2DD4BF" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="4 34" opacity=".85"/>
+  <g fill="#1B2C52"><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="701.06" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="293.92" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="498.28" r="43.6" fill="#4A63A8"/>
+    <circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8"/></g>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701 L852 745 L148 745 Z" fill="#4A63A8" opacity=".12"/>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701" fill="none" stroke="#4A63A8" stroke-width="26" stroke-linecap="round"/>
+  <line x1="722" y1="262" x2="722" y2="756" stroke="#5EE6D0" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="4 34" opacity=".85"/>
+  <g fill="#4A63A8"><circle cx="396.39" cy="707.9" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="707.9" r="43.6" fill="#4A63A8"/></g>
+  <circle cx="804.96" cy="701.06" r="43.6" fill="#5EE6D0"/>
+</svg></div>
+    </div>
+    <p class="why">منحنی توزیع روی خطِ پایه؛ نقطهٔ پایین‌راستِ شبکه دقیقاً روی دُمِ منحنی می‌نشیند و رنگ سیگنال می‌گیرد. حرفِ پلتفرم همین است: لبه در دُم است نه در میانه.</p>
+    <p class="geo">خط پایه y=701.06 = ارتفاع نقطهٔ (804.96, 701.06)؛ خط‌چینِ آستانه روی x=722</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>قیف</h3>
+        <span class="slug">qr-funnel</span>
+      </div>
+      <span class="en">Funnel</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52" opacity=".30"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/></g>
+  <g fill="#1B2C52" opacity=".58"><circle cx="312.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="500.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="688.0" cy="505.12" r="40" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round" opacity=".30">
+    <line x1="192.15" y1="300.75" x2="452" y2="666"/>
+    <line x1="804.96" y1="293.92" x2="548" y2="666"/>
+  </g>
+  <circle cx="500" cy="707.90" r="58" fill="#2DD4BF"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52" opacity=".30"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/></g>
+  <g fill="#1B2C52" opacity=".58"><circle cx="312.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="500.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="688.0" cy="505.12" r="40" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round" opacity=".30">
+    <line x1="192.15" y1="300.75" x2="452" y2="666"/>
+    <line x1="804.96" y1="293.92" x2="548" y2="666"/>
+  </g>
+  <circle cx="500" cy="707.90" r="58" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52" opacity=".30"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/></g>
+  <g fill="#1B2C52" opacity=".58"><circle cx="312.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="500.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="688.0" cy="505.12" r="40" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round" opacity=".30">
+    <line x1="192.15" y1="300.75" x2="452" y2="666"/>
+    <line x1="804.96" y1="293.92" x2="548" y2="666"/>
+  </g>
+  <circle cx="500" cy="707.90" r="58" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#4A63A8" opacity=".30"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="396.39" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="293.92" r="43.6" fill="#4A63A8"/></g>
+  <g fill="#4A63A8" opacity=".58"><circle cx="312.0" cy="505.12" r="40" fill="#4A63A8"/><circle cx="500.0" cy="505.12" r="40" fill="#4A63A8"/><circle cx="688.0" cy="505.12" r="40" fill="#4A63A8"/></g>
+  <g stroke="#4A63A8" stroke-width="20" stroke-linecap="round" opacity=".30">
+    <line x1="192.15" y1="300.75" x2="452" y2="666"/>
+    <line x1="804.96" y1="293.92" x2="548" y2="666"/>
+  </g>
+  <circle cx="500" cy="707.90" r="58" fill="#5EE6D0"/>
+</svg></div>
+    </div>
+    <p class="why">چهار نقطه در بالا، سه در میانه، یکی در پایین: هزاران کاندید، غربال آماری، یک لبه. تنها اسکچی که خودِ خطِ پژوهش را روایت می‌کند.</p>
+    <p class="geo">ردیف بالا مختصات اصلی؛ ردیف میانی به x=312/500/688 جمع می‌شود؛ خروجی r=58</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>پنجرهٔ روبه‌جلو</h3>
+        <span class="slug">qr-scan</span>
+      </div>
+      <span class="en">Walk-forward</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".45"/></g>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="#2DD4BF" opacity=".16"/>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="none" stroke="#2DD4BF" stroke-width="12"/>
+  <g fill="#2DD4BF"><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="498.28" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="701.06" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".45"/></g>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="#2DD4BF" opacity=".16"/>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="none" stroke="#2DD4BF" stroke-width="12"/>
+  <g fill="#2DD4BF"><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="498.28" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="701.06" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52" opacity=".22"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52" opacity=".45"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".45"/></g>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="#2DD4BF" opacity=".16"/>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="none" stroke="#2DD4BF" stroke-width="12"/>
+  <g fill="#2DD4BF"><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="498.28" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="701.06" r="36.6" fill="none" stroke="#1B2C52" stroke-width="14" opacity=".45"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#4A63A8"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8" opacity=".22"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8" opacity=".22"/><circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8" opacity=".22"/><circle cx="396.39" cy="300.75" r="43.6" fill="#4A63A8" opacity=".45"/><circle cx="396.39" cy="505.12" r="43.6" fill="#4A63A8" opacity=".45"/><circle cx="396.39" cy="707.9" r="43.6" fill="#4A63A8" opacity=".45"/></g>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="#5EE6D0" opacity=".16"/>
+  <rect x="529.6" y="238" width="151" height="532" rx="75.5" fill="none" stroke="#5EE6D0" stroke-width="12"/>
+  <g fill="#5EE6D0"><circle cx="605.1" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="707.9" r="43.6" fill="#4A63A8"/></g>
+  <circle cx="804.96" cy="293.92" r="36.6" fill="none" stroke="#4A63A8" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="498.28" r="36.6" fill="none" stroke="#4A63A8" stroke-width="14" opacity=".45"/><circle cx="804.96" cy="701.06" r="36.6" fill="none" stroke="#4A63A8" stroke-width="14" opacity=".45"/>
+</svg></div>
+    </div>
+    <p class="why">پنجرهٔ اعتبارسنجی روی شبکه می‌لغزد: گذشته محو، پنجرهٔ فعال روشن، آینده فقط حلقهٔ توخالی. روایتِ walk-forward بدون یک کلمه توضیح.</p>
+    <p class="geo">کپسول x=529.6 عرض ۱۵۱ روی ستون سوم؛ ستون چهارم فقط خط‌دور</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>کندل</h3>
+        <span class="slug">qr-candle</span>
+      </div>
+      <span class="en">Candle</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round">
+    <line x1="396.39" y1="430" x2="396.39" y2="780"/>
+  </g>
+  <rect x="352.79" y="505.12" width="87.2" height="202.78" rx="43.6" fill="#1B2C52"/>
+  <g stroke="#2DD4BF" stroke-width="20" stroke-linecap="round">
+    <line x1="605.10" y1="248" x2="605.10" y2="780"/>
+  </g>
+  <rect x="561.50" y="300.75" width="87.2" height="407.15" rx="43.6" fill="#2DD4BF"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round">
+    <line x1="396.39" y1="430" x2="396.39" y2="780"/>
+  </g>
+  <rect x="352.79" y="505.12" width="87.2" height="202.78" rx="43.6" fill="#1B2C52"/>
+  <g stroke="#2DD4BF" stroke-width="20" stroke-linecap="round">
+    <line x1="605.10" y1="248" x2="605.10" y2="780"/>
+  </g>
+  <rect x="561.50" y="300.75" width="87.2" height="407.15" rx="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round">
+    <line x1="396.39" y1="430" x2="396.39" y2="780"/>
+  </g>
+  <rect x="352.79" y="505.12" width="87.2" height="202.78" rx="43.6" fill="#1B2C52"/>
+  <g stroke="#2DD4BF" stroke-width="20" stroke-linecap="round">
+    <line x1="605.10" y1="248" x2="605.10" y2="780"/>
+  </g>
+  <rect x="561.50" y="300.75" width="87.2" height="407.15" rx="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="293.92" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="498.28" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="701.06" r="43.6" fill="#4A63A8"/></g>
+  <g stroke="#4A63A8" stroke-width="20" stroke-linecap="round">
+    <line x1="396.39" y1="430" x2="396.39" y2="780"/>
+  </g>
+  <rect x="352.79" y="505.12" width="87.2" height="202.78" rx="43.6" fill="#4A63A8"/>
+  <g stroke="#5EE6D0" stroke-width="20" stroke-linecap="round">
+    <line x1="605.10" y1="248" x2="605.10" y2="780"/>
+  </g>
+  <rect x="561.50" y="300.75" width="87.2" height="407.15" rx="43.6" fill="#5EE6D0"/>
+</svg></div>
+    </div>
+    <p class="why">دو ستون داخلی شبکه به دو کندل کشیده می‌شوند؛ نقطه‌های ردیف پایین دقیقاً سرِ گردِ کندل‌ها می‌شوند و ناپدید نمی‌شوند — همان نقاط‌اند، فقط کشیده.</p>
+    <p class="geo">ستون‌ها روی x=396.39 و 605.10، انتهای بدنه روی y=707.90 (همان مختصات ردیف پایین نریمانی)</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>مسیر</h3>
+        <span class="slug">qr-path</span>
+      </div>
+      <span class="en">Path</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52" opacity=".20"/></g>
+  <path d="M192.15 701.64 L396.39 505.12 L605.1 505.12 " fill="none" stroke="#1B2C52" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M605.1 505.12 L804.96 293.92" fill="none"
+        stroke="#2DD4BF" stroke-width="26" stroke-linecap="round"/>
+  <g fill="#1B2C52"><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52" opacity=".20"/></g>
+  <path d="M192.15 701.64 L396.39 505.12 L605.1 505.12 " fill="none" stroke="#1B2C52" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M605.1 505.12 L804.96 293.92" fill="none"
+        stroke="#2DD4BF" stroke-width="26" stroke-linecap="round"/>
+  <g fill="#1B2C52"><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="192.15" cy="505.12" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="396.39" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="605.1" cy="707.9" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="498.28" r="43.6" fill="#1B2C52" opacity=".20"/><circle cx="804.96" cy="701.06" r="43.6" fill="#1B2C52" opacity=".20"/></g>
+  <path d="M192.15 701.64 L396.39 505.12 L605.1 505.12 " fill="none" stroke="#1B2C52" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M605.1 505.12 L804.96 293.92" fill="none"
+        stroke="#2DD4BF" stroke-width="26" stroke-linecap="round"/>
+  <g fill="#1B2C52"><circle cx="192.15" cy="701.64" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="505.12" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="505.12" r="43.6" fill="#1B2C52"/></g>
+  <circle cx="804.96" cy="293.92" r="43.6" fill="#2DD4BF"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g fill="#4A63A8"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="396.39" cy="300.75" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="396.39" cy="707.9" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="605.1" cy="300.75" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="605.1" cy="707.9" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="804.96" cy="498.28" r="43.6" fill="#4A63A8" opacity=".20"/><circle cx="804.96" cy="701.06" r="43.6" fill="#4A63A8" opacity=".20"/></g>
+  <path d="M192.15 701.64 L396.39 505.12 L605.1 505.12 " fill="none" stroke="#4A63A8" stroke-width="26"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M605.1 505.12 L804.96 293.92" fill="none"
+        stroke="#5EE6D0" stroke-width="26" stroke-linecap="round"/>
+  <g fill="#4A63A8"><circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8"/><circle cx="396.39" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="505.12" r="43.6" fill="#4A63A8"/></g>
+  <circle cx="804.96" cy="293.92" r="43.6" fill="#5EE6D0"/>
+</svg></div>
+    </div>
+    <p class="why">خطی که نقاط شبکه را به‌ترتیب صعودی می‌دوزد؛ آخرین قدم رنگ سیگنال می‌گیرد. هم‌خانواده‌ترین رفتار با «لبخندِ» نوچس، چون آن هم یک مسیرِ کشیده روی همین شبکه است.</p>
+    <p class="geo">گره‌ها: (192,701) → (396,505) → (605,505) → (804,294)</p>
+  </article>
+  <article class="card">
+    <header class="card-head">
+      <div class="titles">
+        <h3>ماتریس</h3>
+        <span class="slug">qr-matrix</span>
+      </div>
+      <span class="en">Matrix</span>
+    </header>
+    <div class="stage light"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <rect x="148.55" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="658.04" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="352.79" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="352.79" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".50"/>
+  <rect x="352.79" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="561.50" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".34"/>
+  <rect x="533.10" y="433.12" width="144" height="144" rx="44" fill="#2DD4BF" opacity=".16"/>
+  <rect x="553.10" y="453.12" width="104" height="104" rx="32" fill="#2DD4BF"/>
+  <rect x="561.50" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".42"/>
+  <rect x="761.36" y="250.32" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="761.36" y="454.68" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".24"/>
+  <rect x="761.36" y="657.46" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+</svg></div>
+    <div class="proofs">
+      <div class="chip light" title="آیکن"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <rect x="148.55" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="658.04" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="352.79" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="352.79" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".50"/>
+  <rect x="352.79" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="561.50" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".34"/>
+  <rect x="533.10" y="433.12" width="144" height="144" rx="44" fill="#2DD4BF" opacity=".16"/>
+  <rect x="553.10" y="453.12" width="104" height="104" rx="32" fill="#2DD4BF"/>
+  <rect x="561.50" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".42"/>
+  <rect x="761.36" y="250.32" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="761.36" y="454.68" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".24"/>
+  <rect x="761.36" y="657.46" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+</svg></div>
+      <div class="chip light fav" title="فاوآیکن ۳۲px"><svg class="icon" xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <rect x="148.55" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="148.55" y="658.04" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="352.79" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="352.79" y="461.52" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".50"/>
+  <rect x="352.79" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".28"/>
+  <rect x="561.50" y="257.15" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".34"/>
+  <rect x="533.10" y="433.12" width="144" height="144" rx="44" fill="#2DD4BF" opacity=".16"/>
+  <rect x="553.10" y="453.12" width="104" height="104" rx="32" fill="#2DD4BF"/>
+  <rect x="561.50" y="664.30" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".42"/>
+  <rect x="761.36" y="250.32" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+  <rect x="761.36" y="454.68" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".24"/>
+  <rect x="761.36" y="657.46" width="87.2" height="87.2" rx="26" fill="#1B2C52" opacity=".16"/>
+</svg></div>
+      <div class="chip dark grow" title="روی زمینهٔ کنسول"><svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <rect x="148.55" y="257.15" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".16"/>
+  <rect x="148.55" y="461.52" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".16"/>
+  <rect x="148.55" y="658.04" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".16"/>
+  <rect x="352.79" y="257.15" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".28"/>
+  <rect x="352.79" y="461.52" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".50"/>
+  <rect x="352.79" y="664.30" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".28"/>
+  <rect x="561.50" y="257.15" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".34"/>
+  <rect x="533.10" y="433.12" width="144" height="144" rx="44" fill="#5EE6D0" opacity=".16"/>
+  <rect x="553.10" y="453.12" width="104" height="104" rx="32" fill="#5EE6D0"/>
+  <rect x="561.50" y="664.30" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".42"/>
+  <rect x="761.36" y="250.32" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".16"/>
+  <rect x="761.36" y="454.68" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".24"/>
+  <rect x="761.36" y="657.46" width="87.2" height="87.2" rx="26" fill="#4A63A8" opacity=".16"/>
+</svg></div>
+    </div>
+    <p class="why">همان شبکه، اما سلولی: نقشهٔ حرارتیِ اسکن با یک سلولِ روشن. تنها تغییرِ خانوادگی، شکلِ پیکسل است — دایره به مربعِ گردشده.</p>
+    <p class="geo">همان ۱۲ مرکز، مربع ۸۷٫۲ با rx=۲۶؛ سلولِ لبه ۱۰۴ با هالهٔ ۱۴۴</p>
+  </article>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>جفت‌رنگ</h2>
+    <p>پایه از بومِ خودِ داشبورد («Midnight Aurora») گرفته شده و رنگ سیگنال همان تیلِ اصلیِ پلتفرم است — کنار آبیِ اشباعِ نوچس و طلاییِ نریمانی می‌نشیند بی‌آنکه با هیچ‌کدام اشتباه شود.</p>
+    <div class="pal">
+      <div class="sw"><div class="fill" style="background:#1B2C52"></div><div class="meta"><b>پایه</b><code>#1B2C52</code></div></div>
+      <div class="sw"><div class="fill" style="background:#2DD4BF"></div><div class="meta"><b>سیگنال</b><code>#2DD4BF</code></div></div>
+      <div class="sw"><div class="fill" style="background:#4A63A8"></div><div class="meta"><b>پایه — زمینهٔ تیره</b><code>#4A63A8</code></div></div>
+      <div class="sw"><div class="fill" style="background:#5EE6D0"></div><div class="meta"><b>سیگنال — زمینهٔ تیره</b><code>#5EE6D0</code></div></div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>فایل‌ها</h2>
+    <p>هر اسکچ چهار فایل دارد؛ همه برداری، بدون فونت و بدون وابستگی.</p>
+    <div class="files">
+<b>Quant_research/brand/logo-sketches/</b><br>
+&nbsp;&nbsp;qr-&lt;name&gt;-mark.svg &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;نشان کامل — viewBox "130 230 740 540"<br>
+&nbsp;&nbsp;qr-&lt;name&gt;-icon.svg &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;برش مربع برای آیکن و فاوآیکن<br>
+&nbsp;&nbsp;qr-&lt;name&gt;-*-dark.svg &nbsp;&nbsp;&nbsp;نسخهٔ زمینهٔ تیره<br>
+&nbsp;&nbsp;_concepts.json &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;فهرست مفاهیم
+    </div>
+  </section>
+
+  <div class="ask">
+    <p><b>قدم بعد، وقتی یکی را انتخاب کردی:</b></p>
+    <ol>
+      <li>قفلِ جفت‌رنگ (یا جایگزینی‌اش با ترکیبی که ترجیح می‌دهی)</li>
+      <li>ساختِ فایل‌های نهایی در <code>brand/</code> مثل نوچس: mark / icon / themed + PNG ۱۰۲۴</li>
+      <li>نشاندنش در هدر داشبورد کوانت و فاوآیکن</li>
+    </ol>
+  </div>
+
+  <footer>اسکچ‌ها روی مختصاتِ عینِ لوگوی نریمانی و پنجرهٔ عینِ نوچس ساخته شده‌اند؛ هیچ لوگوی موجودی تغییر نکرده است.</footer>
+</div>

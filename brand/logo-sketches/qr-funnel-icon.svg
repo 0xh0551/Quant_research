@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" role="img" aria-label="Quant Research ">
+  <g fill="#1B2C52" opacity=".30"><circle cx="192.15" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="396.39" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="605.1" cy="300.75" r="43.6" fill="#1B2C52"/><circle cx="804.96" cy="293.92" r="43.6" fill="#1B2C52"/></g>
+  <g fill="#1B2C52" opacity=".58"><circle cx="312.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="500.0" cy="505.12" r="40" fill="#1B2C52"/><circle cx="688.0" cy="505.12" r="40" fill="#1B2C52"/></g>
+  <g stroke="#1B2C52" stroke-width="20" stroke-linecap="round" opacity=".30">
+    <line x1="192.15" y1="300.75" x2="452" y2="666"/>
+    <line x1="804.96" y1="293.92" x2="548" y2="666"/>
+  </g>
+  <circle cx="500" cy="707.90" r="58" fill="#2DD4BF"/>
+</svg>
