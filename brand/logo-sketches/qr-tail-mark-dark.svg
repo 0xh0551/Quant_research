@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="130 230 740 540" role="img" aria-label="Quant Research ">
+  <g opacity=".42"><circle cx="192.15" cy="300.75" r="43.6" fill="#4A63A8"/><circle cx="192.15" cy="505.12" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="293.92" r="43.6" fill="#4A63A8"/><circle cx="804.96" cy="498.28" r="43.6" fill="#4A63A8"/>
+    <circle cx="192.15" cy="701.64" r="43.6" fill="#4A63A8"/></g>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701 L852 745 L148 745 Z" fill="#4A63A8" opacity=".12"/>
+  <path d="M148 701 C 330 701, 372 322, 500 318 C 628 314, 670 701, 852 701" fill="none" stroke="#4A63A8" stroke-width="26" stroke-linecap="round"/>
+  <line x1="722" y1="262" x2="722" y2="756" stroke="#5EE6D0" stroke-width="12"
+        stroke-linecap="round" stroke-dasharray="4 34" opacity=".85"/>
+  <g fill="#4A63A8"><circle cx="396.39" cy="707.9" r="43.6" fill="#4A63A8"/><circle cx="605.1" cy="707.9" r="43.6" fill="#4A63A8"/></g>
+  <circle cx="804.96" cy="701.06" r="43.6" fill="#5EE6D0"/>
+</svg>
