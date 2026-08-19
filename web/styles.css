@@ -56,6 +56,7 @@ a{color:var(--cyan);text-decoration:none}
   background:var(--grad-aurora);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
 .sidebar-logo p{font-size:11px;color:var(--text3)}
+.brand-mark{width:21px;height:21px;flex:none;display:block}
 .nav-item{
   display:flex;align-items:center;gap:11px;padding:11px 20px;cursor:pointer;
   transition:background .2s,color .2s;color:var(--text2);font-size:13px;font-weight:500;

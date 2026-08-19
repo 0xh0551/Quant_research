@@ -1,3 +1,10 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/quant-mark-dark-1024.png">
+    <img src="brand/quant-mark-1024.png" alt="Quant Research" width="230">
+  </picture>
+</p>
+
 # Quant Research Platform
 
 ![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
