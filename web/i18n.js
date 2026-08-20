@@ -13,7 +13,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'پلتفرم ریسرچ کوانت',
-    version_label: 'نسخهٔ ۱.۶',
+    version_label: 'نسخهٔ ۱.۶.۱',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
@@ -561,7 +561,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'Quant Research Platform',
-    version_label: 'v1.6',
+    version_label: 'v1.6.1',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
