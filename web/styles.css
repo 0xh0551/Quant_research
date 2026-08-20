@@ -321,7 +321,7 @@ th,td{text-align:start}
   #content.home-mode{padding:10px 12px}
   .home-filter{margin-bottom:8px}
   .tile{padding:8px 11px 7px;gap:6px}
-  .mcol .v{display:none}
+  .c-stack .legend,.c-grid .gc i,.c-wf .keys{display:none}
 }
 
 /* ── tile ────────────────────────────────────────────────────────────── */
@@ -393,36 +393,205 @@ html[dir=rtl] .tile{
 .tone-pos{color:var(--green)}.tone-neg{color:var(--red)}
 .tone-warn{color:var(--yellow)}.tone-acc{color:var(--acc)}.tone-mute{color:var(--text2)}
 
-/* ── the one chart: a column strip that fills whatever height is left ── */
-.mcols{flex:1;min-height:0;display:flex;gap:6px;align-items:stretch}
-.mcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;justify-content:flex-end}
-.mcol .t{flex:1;min-height:0;display:flex;align-items:flex-end}
-.mcol .bar{
-  width:100%;background:var(--acc);opacity:.8;border-radius:4px 4px 2px 2px;
-  min-height:3px;transition:height .55s var(--ease),opacity .18s;
-}
-.mcol:hover .bar{opacity:1}
-.mcol .bar.neg{background:var(--red)}
-.mcol .bar.pos{background:var(--green)}
-.mcol .v{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;
-  text-align:center;unicode-bidi:isolate;white-space:nowrap;overflow:hidden;flex:none}
-.mcol .k{font-size:9.5px;color:var(--text3);text-align:center;flex:none;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ── chart vocabulary ────────────────────────────────────────────────────
+ * One form per module. Every one of these owns the tile's leftover flex
+ * height, so the same body reads at a 130px row on a small laptop and a
+ * 210px row on a large one. `--acc` is the tile's own accent.
+ * ---------------------------------------------------------------------- */
+.c-fill{flex:1;min-height:0;display:flex;position:relative}
 
-/* time series fill the same slot */
-.spark-wrap{flex:1;min-height:0;position:relative;display:flex}
-.spark-wrap svg{width:100%;height:100%;display:block}
+/* coverage grid — venue × timeframe density */
+.c-grid{display:grid;gap:2px;align-content:center}
+.c-grid .gh,.c-grid .gr{font-size:9px;color:var(--text3);display:flex;align-items:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-grid .gh{justify-content:center}
+.c-grid .gr{padding-inline-end:5px;max-width:62px}
+.c-grid .gc{
+  background:var(--acc);border-radius:3px;min-height:11px;display:flex;
+  align-items:center;justify-content:center;transition:opacity .18s;
+}
+.c-grid .gc:hover{opacity:1!important}
+.c-grid .gc i{font-style:normal;font-size:8.5px;font-weight:700;color:#06141d;
+  mix-blend-mode:luminosity;opacity:.75}
+
+/* stacked composition — one bar that is the whole */
+.c-stack{flex-direction:column;justify-content:center;gap:9px}
+.c-stack .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;gap:1px}
+.c-stack .bar span{background:var(--acc);transition:opacity .18s}
+.c-stack .bar span:hover{opacity:1!important}
+.c-stack .legend{display:flex;flex-wrap:wrap;gap:3px 10px}
+.c-stack .legend span{font-size:9.5px;color:var(--text3);display:flex;align-items:center;gap:4px}
+.c-stack .legend i{width:6px;height:6px;border-radius:2px;background:var(--acc);flex:none}
+.c-stack .legend b{color:var(--text2);font-variant-numeric:tabular-nums;unicode-bidi:isolate}
+
+/* ring — one share, read as an angle */
+.c-ring{align-items:center;justify-content:center}
+.c-ring svg{height:100%;max-height:100%;aspect-ratio:1}
+
+/* span — how much history there is */
+.c-span{flex-direction:column;justify-content:center;gap:7px}
+.c-span .track{height:10px;border-radius:5px;background:rgba(255,255,255,.05);position:relative}
+.c-span .fill{position:absolute;inset:0;border-radius:5px;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--acc) 25%,transparent),var(--acc))}
+html[dir=rtl] .c-span .fill{background:linear-gradient(-90deg,color-mix(in srgb,var(--acc) 25%,transparent),var(--acc))}
+.c-span .mk{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--text);opacity:.8;border-radius:1px}
+.c-span .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text3);
+  unicode-bidi:isolate}
+
+/* bullets — small multiples of a 0..1 reading */
+.c-bullets{flex-direction:column;justify-content:center;gap:8px}
+.c-bullets .bl{display:flex;align-items:center;gap:7px}
+.c-bullets .k{font-size:9.5px;color:var(--text3);width:58px;flex:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-bullets .track{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.06);position:relative}
+.c-bullets .fill{position:absolute;inset-block:0;inset-inline-start:0;border-radius:3px;background:var(--acc);opacity:.55}
+.c-bullets .track i{position:absolute;top:-3px;width:3px;height:11px;border-radius:2px;
+  background:var(--acc);transform:translateX(-1px)}
+.c-bullets .v{font-size:9.5px;color:var(--text2);width:20px;text-align:end;flex:none;
+  font-variant-numeric:tabular-nums}
+
+/* chips — a named palette */
+.c-chips{flex-wrap:wrap;gap:4px;align-content:center}
+.c-chips .chip{
+  font-size:10px;font-weight:600;padding:2px 7px;border-radius:6px;white-space:nowrap;
+  color:var(--t);background:rgba(255,255,255,.05);
+  background:color-mix(in srgb,var(--t) 15%,transparent);
+}
+
+/* rank decay — sorted thin columns */
+.c-decay{align-items:flex-end;gap:2px}
+.c-decay span{flex:1;background:var(--acc);border-radius:2px 2px 1px 1px;min-height:3px;
+  transition:opacity .18s}
+.c-decay span:hover{opacity:1!important}
+
+/* funnel — a survival cascade */
+.c-funnel{flex-direction:column;justify-content:center;gap:5px}
+.c-funnel .fs{display:flex;align-items:center;gap:7px;position:relative}
+.c-funnel .band{height:13px;border-radius:3px;background:var(--acc);flex:none;transition:opacity .18s}
+.c-funnel .fs:hover .band{opacity:1!important}
+.c-funnel .lb{font-size:9.5px;color:var(--text3);white-space:nowrap}
+.c-funnel .vv{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;
+  margin-inline-start:auto;unicode-bidi:isolate}
+
+/* lollipop — value as a position on a shared track */
+.c-lolli{flex-direction:column;justify-content:center;gap:6px}
+.c-lolli .lp{display:flex;align-items:center;gap:7px}
+.c-lolli .k{font-size:9.5px;color:var(--text3);width:64px;flex:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-lolli .line{flex:1;height:9px;position:relative}
+.c-lolli .line u{position:absolute;top:4px;height:1px;inset-inline-start:0;
+  background:var(--acc);opacity:.35}
+.c-lolli .line i{position:absolute;top:1.5px;width:7px;height:7px;border-radius:50%;
+  background:var(--acc);transform:translateX(-3.5px)}
+html[dir=rtl] .c-lolli .line i{transform:translateX(3.5px)}
+.c-lolli .v{font-size:9.5px;color:var(--text2);width:34px;text-align:end;flex:none;
+  font-variant-numeric:tabular-nums;unicode-bidi:isolate}
+
+/* log strip — dots on a decade axis */
+.c-strip{flex-direction:column;justify-content:center;gap:8px}
+.c-strip .axis{height:26px;position:relative;border-radius:6px;
+  background:linear-gradient(180deg,transparent 45%,rgba(255,255,255,.07) 45%,rgba(255,255,255,.07) 55%,transparent 55%)}
+.c-strip .dec{position:absolute;top:8px;bottom:8px;width:1px;background:var(--border2)}
+.c-strip .pt{position:absolute;top:9px;width:8px;height:8px;border-radius:50%;
+  background:var(--acc);opacity:.72;transform:translateX(-4px);transition:opacity .15s,transform .15s}
+html[dir=rtl] .c-strip .pt{transform:translateX(4px)}
+.c-strip .pt:hover{opacity:1;transform:translateX(-4px) scale(1.35)}
+.c-strip .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text3);
+  unicode-bidi:isolate}
+
+/* dumbbell — two legs and the gap between them */
+.c-dumb{flex-direction:column;justify-content:center;gap:7px}
+.c-dumb .db{display:flex;align-items:center;gap:7px}
+.c-dumb .k{font-size:9.5px;color:var(--text3);width:44px;flex:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-dumb .rail{flex:1;height:10px;position:relative;
+  background:linear-gradient(180deg,transparent 45%,rgba(255,255,255,.06) 45%,rgba(255,255,255,.06) 55%,transparent 55%)}
+.c-dumb .rail u{position:absolute;top:4px;height:2px;background:var(--acc);opacity:.4;border-radius:1px}
+.c-dumb .rail i{position:absolute;top:1px;width:8px;height:8px;border-radius:50%;transform:translateX(-4px)}
+html[dir=rtl] .c-dumb .rail i{transform:translateX(4px)}
+.c-dumb .rail i.a{background:var(--text3)}
+.c-dumb .rail i.b{background:var(--acc)}
+.c-dumb .v{font-size:9.5px;color:var(--text2);width:34px;text-align:end;flex:none;
+  font-variant-numeric:tabular-nums;unicode-bidi:isolate}
+
+/* arc — a value against its ceiling */
+.c-arc{align-items:center;justify-content:center}
+.c-arc svg{height:100%;max-height:100%;width:100%}
+
+/* treemap — weights as areas */
+.c-tree{border-radius:7px;overflow:hidden;gap:2px}
+.c-tree .tmg{display:flex;gap:2px;min-width:0;min-height:0}
+.c-tree .tm{
+  background:var(--acc);border-radius:4px;min-width:0;min-height:0;overflow:hidden;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  transition:opacity .18s;
+}
+.c-tree .tm:hover{opacity:1!important}
+.c-tree .tm b{font-size:9.5px;font-weight:700;color:#06141d;max-width:100%;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-inline:2px}
+.c-tree .tm i{font-style:normal;font-size:8.5px;color:#06141d;opacity:.65}
+
+/* loss axis — every scenario on one signed track */
+.c-loss{flex-direction:column;justify-content:center;gap:8px}
+.c-loss .rail{height:26px;position:relative;border-radius:6px;
+  background:linear-gradient(180deg,transparent 42%,rgba(255,255,255,.06) 42%,rgba(255,255,255,.06) 58%,transparent 58%)}
+.c-loss .zero{position:absolute;inset-inline-start:50%;top:2px;bottom:2px;width:1px;background:var(--border2)}
+.c-loss .tk{position:absolute;top:5px;width:3px;height:16px;border-radius:2px;
+  transform:translateX(-1.5px);opacity:.75;transition:opacity .15s,height .15s}
+html[dir=rtl] .c-loss .tk{transform:translateX(1.5px)}
+.c-loss .tk.neg{background:var(--red)}
+.c-loss .tk.pos{background:var(--green)}
+.c-loss .tk.w{height:22px;top:2px;opacity:1}
+.c-loss .tk:hover{opacity:1}
+.c-loss .ends{display:flex;justify-content:space-between;font-size:9.5px;color:var(--text3);
+  unicode-bidi:isolate}
+
+/* waterfall — a bridge between two quantities */
+.c-wf{flex-direction:column;gap:5px}
+.c-wf .plot{flex:1;min-height:0;position:relative;display:flex;gap:4px;padding-inline:2px}
+.c-wf .base{position:absolute;inset-inline:0;height:1px;background:var(--border2)}
+.c-wf .wb{position:relative;flex:1;border-radius:2px;transition:opacity .18s;opacity:.85}
+.c-wf .wb:hover{opacity:1}
+.c-wf .wb.pos{background:var(--green)}
+.c-wf .wb.neg{background:var(--red)}
+.c-wf .wb.net{background:var(--acc)}
+.c-wf .keys{display:flex;gap:4px;padding-inline:2px}
+.c-wf .keys span{flex:1;font-size:8.5px;color:var(--text3);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.c-wf .keys .n{color:var(--acc)}
+
+/* area — a genuine time series */
+.c-area svg{width:100%;height:100%;display:block}
 .spark-read{
   position:absolute;top:0;inset-inline-end:0;font-size:10.5px;color:var(--text2);
   font-variant-numeric:tabular-nums;pointer-events:none;unicode-bidi:isolate;
   background:var(--bg3);padding-inline:3px;border-radius:3px;
 }
 
-/* a labelled ratio, for the tiles whose story is "x out of y" */
-.meter{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:5px}
-.meter-top{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--text3)}
-.meter-track{height:8px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden}
-.meter-fill{height:100%;border-radius:4px;transition:width .6s var(--ease)}
+/* budget pips — one per scheduled job */
+.c-pips{align-items:center;gap:4px;flex-wrap:wrap;align-content:center}
+.c-pips .pip{
+  flex:1;min-width:9px;max-width:26px;height:30px;border-radius:4px;position:relative;
+  background:rgba(255,255,255,.06);overflow:hidden;display:flex;align-items:flex-end;
+}
+.c-pips .pip i{width:100%;background:var(--green);opacity:.8;transition:height .5s var(--ease)}
+.c-pips .pip.warn i{background:var(--yellow)}
+.c-pips .pip.bad i{background:var(--red);height:100%!important}
+.c-pips .pip:hover i{opacity:1}
+
+/* slot grid — one cell per allocated unit, grouped by owner */
+.c-slots{align-items:center;justify-content:space-around;gap:8px}
+.c-slots .sg{display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.c-slots .cells{display:flex;flex-wrap:wrap;gap:3px;justify-content:center;max-width:76px}
+.c-slots .cells span{width:9px;height:9px;border-radius:2.5px;opacity:.85}
+.c-slots .k{font-size:9px;color:var(--text3);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;max-width:76px}
+
+/* hour profile — activity over the last day */
+.c-hours{align-items:flex-end;gap:1.5px}
+.c-hours span{flex:1;background:var(--acc);opacity:.7;border-radius:1.5px;min-height:2px;
+  transition:opacity .15s}
+.c-hours span:hover{opacity:1}
 
 /* ── skeleton while the first payload lands ──────────────────────────── */
 .tile.skeleton{cursor:default}
@@ -545,6 +714,4 @@ html[dir=rtl] #app.rail-collapsed .rail-foot svg{transform:none}
 #cmdk .none{padding:22px;text-align:center;color:var(--text3);font-size:12.5px}
 
 /* Persian never gets tracked-out capitals — it breaks the joins. */
-html[lang=fa] .kpi .l,html[lang=fa] .rail-group,html[lang=fa] .mcol .k{
-  letter-spacing:0;text-transform:none;
-}
+html[lang=fa] .kpi .l,html[lang=fa] .rail-group,html[lang=fa] 

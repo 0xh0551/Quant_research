@@ -58,6 +58,11 @@ const HOME_ACCENT = {
   pipeline: '#38bdf8', models: '#7dd3fc', logs: '#94a3b8',
 };
 
+/* Strategy-family tints. `STRATEGY_TAGS` comes from i18n.js, which loads first;
+   app.js's own colour map does not, and sibling classic scripts share one
+   global lexical scope, so this cannot borrow it or redeclare its name. */
+const HOME_FAMILY_TONE = { Trend: '#2dd4bf', MR: '#818cf8', ML: '#34d399' };
+
 const homeState = { data: null, filter: 'all', timer: null, loading: false, error: null };
 
 // ═════════════════════════════════════════════════════════════ FORMATTERS
@@ -66,11 +71,19 @@ const homeState = { data: null, filter: 'all', timer: null, loading: false, erro
 const hEsc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c =>
   ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
-const hNum = (v, d = 0) => (v == null || v !== v ? '—' :
-  Number(v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+/* Coerce first, then test: a string that is not a number must read as "—",
+   not as "NaN%". */
+const hFinite = v => { const n = Number(v); return v == null || v === '' || n !== n ? null : n; };
 
-function hCompact(v) {
-  if (v == null || v !== v) return '—';
+const hNum = (v, d = 0) => {
+  const n = hFinite(v);
+  return n == null ? '—'
+    : n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+};
+
+function hCompact(x) {
+  const v = hFinite(x);
+  if (v == null) return '—';
   const a = Math.abs(v);
   if (a >= 1e9) return (v / 1e9).toFixed(a >= 1e10 ? 0 : 1) + 'B';
   if (a >= 1e6) return (v / 1e6).toFixed(a >= 1e7 ? 0 : 1) + 'M';
@@ -79,10 +92,15 @@ function hCompact(v) {
 }
 
 /* Sign goes outside the symbol: `-$14.3`, never `$-14.3`. */
-const hUsd = v => (v == null || v !== v ? '—'
-  : (v < 0 ? '-$' : '$') + hCompact(Math.abs(v)));
-const hPct = (v, d = 1) => (v == null || v !== v ? '—' : Number(v).toFixed(d) + '%');
-const hSign = (v, d = 1) => (v == null || v !== v ? '—' : (v > 0 ? '+' : '') + Number(v).toFixed(d));
+const hUsd = x => {
+  const v = hFinite(x);
+  return v == null ? '—' : (v < 0 ? '-$' : '$') + hCompact(Math.abs(v));
+};
+const hPct = (v, d = 1) => { const n = hFinite(v); return n == null ? '—' : n.toFixed(d) + '%'; };
+const hSign = (v, d = 1) => {
+  const n = hFinite(v);
+  return n == null ? '—' : (n > 0 ? '+' : '') + n.toFixed(d);
+};
 const hTone = v => (v == null ? '' : v > 0 ? 'tone-pos' : v < 0 ? 'tone-neg' : 'tone-mute');
 
 /* Relative age, rounded to the unit a human would say it in. */
@@ -102,42 +120,295 @@ function hFresh(hours, warnH, badH) {
   return 'ok';
 }
 
-// ═════════════════════════════════════════════════════════════ THE ONE CHART
-/* A tile gets three numbers and exactly one chart, and that chart has to look
-   right whether the row is 130px tall on a small laptop or 210px on a large
-   one. All three variants below stretch: they own the leftover flex space
-   instead of assuming a fixed height. */
+// ═════════════════════════════════════════════════════════════ CHART VOCABULARY
+/* One form per module. A dashboard where nineteen panels all draw the same
+   four-bar chart teaches nothing — the shape of the graphic should say what
+   kind of quantity it is before a single number is read. Each of these owns
+   the leftover flex height, so they look right at any row size.
 
-/* Column strip — the default. Categories across, value above, label below. */
-function svgCols(items, opts) {
-  const o = Object.assign({ max: 4, fmt: hCompact, keyFmt: k => k, signed: false }, opts || {});
-  const rows = (items || []).filter(r => r && r.v != null && r.v === r.v).slice(0, o.max);
-  if (!rows.length) return `<div class="mcols"></div>`;
-  const peak = Math.max(...rows.map(r => Math.abs(r.v))) || 1;
-  return `<div class="mcols">${rows.map(r => {
-    const h = Math.max(3, (Math.abs(r.v) / peak) * 100);
-    const cls = o.signed ? (r.v >= 0 ? ' pos' : ' neg') : '';
-    return `<div class="mcol" title="${hEsc(o.keyFmt(r.k))}: ${hEsc(String(o.fmt(r.v)))}">
-      <span class="v">${hEsc(String(o.fmt(r.v)))}</span>
-      <span class="t"><span class="bar${cls}" style="height:${h.toFixed(1)}%"></span></span>
-      <span class="k">${hEsc(o.keyFmt(r.k))}</span>
-    </div>`;
-  }).join('')}</div>`;
+   coverage grid · stacked composition · ring · span · bullets · chips ·
+   rank decay · funnel · lollipop · log strip · dumbbell · arc · treemap ·
+   loss axis · waterfall · area · budget pips · slot grid · hour profile     */
+
+/* Coverage grid — a category × category count matrix, ink by density. */
+function cGrid(m) {
+  const rows = (m || {}).venues || [], cols = (m || {}).timeframes || [], cells = (m || {}).cells || [];
+  if (!rows.length || !cols.length) return `<div class="c-fill"></div>`;
+  const peak = Math.max(...cells.flat(), 1);
+  return `<div class="c-fill c-grid" style="grid-template-columns:auto repeat(${cols.length},1fr)">
+    <span></span>${cols.map(c => `<span class="gh">${hEsc(c)}</span>`).join('')}
+    ${rows.map((r, i) => `<span class="gr">${hEsc(r)}</span>` + cols.map((c, j) => {
+      const v = (cells[i] || [])[j] || 0;
+      return `<span class="gc" title="${hEsc(r)} · ${hEsc(c)}: ${hNum(v)}"
+        style="opacity:${v ? (0.16 + 0.84 * Math.sqrt(v / peak)).toFixed(2) : 0.05}">${
+        v ? `<i>${hCompact(v)}</i>` : ''}</span>`;
+    }).join('')).join('')}
+  </div>`;
 }
 
-/* Area sparkline with a hover readout, for the tiles whose story is a trend. */
-function svgSpark(vals, opts) {
-  const o = Object.assign({ unit: '', digits: 1 }, opts || {});
+/* Stacked composition — one bar that is the whole, split by share. */
+function cStack(items, opts) {
+  const o = Object.assign({ fmt: hCompact }, opts || {});
+  const rows = (items || []).filter(r => r && r.v > 0);
+  const total = rows.reduce((s, r) => s + r.v, 0);
+  if (!total) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-stack">
+    <div class="bar">${rows.map((r, i) => `
+      <span style="flex:${r.v};opacity:${(1 - i * 0.17).toFixed(2)}"
+            title="${hEsc(r.k)}: ${hEsc(String(o.fmt(r.v)))}"></span>`).join('')}</div>
+    <div class="legend">${rows.map((r, i) => `
+      <span><i style="opacity:${(1 - i * 0.17).toFixed(2)}"></i>${hEsc(r.k)}
+        <b>${hEsc(String(o.fmt(r.v)))}</b></span>`).join('')}</div>
+  </div>`;
+}
+
+/* Ring — one share of a whole, read as an angle. */
+function cRing(pct, opts) {
+  const o = Object.assign({ sub: '' }, opts || {});
+  if (pct == null || pct !== pct) return `<div class="c-fill"></div>`;
+  const R = 15.915494, C = 2 * Math.PI * R;
+  return `<div class="c-fill c-ring">
+    <svg viewBox="0 0 42 42">
+      <circle cx="21" cy="21" r="${R}" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="4"/>
+      <circle cx="21" cy="21" r="${R}" fill="none" stroke="var(--acc)" stroke-width="4"
+        stroke-linecap="round" stroke-dasharray="${(pct / 100 * C).toFixed(2)} ${C}"
+        stroke-dashoffset="25" transform="rotate(-90 21 21)"/>
+      <text x="21" y="21" text-anchor="middle" dominant-baseline="central"
+        fill="var(--text)" font-size="9" font-weight="800">${Math.round(pct)}%</text>
+      <text x="21" y="27.5" text-anchor="middle" dominant-baseline="central"
+        fill="var(--text3)" font-size="3.6">${hEsc(o.sub)}</text>
+    </svg></div>`;
+}
+
+/* Span — how much history there is, as a bar between two dates. */
+function cSpan(from, to, opts) {
+  const o = Object.assign({ mark: null, markLabel: '' }, opts || {});
+  if (!from || !to) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-span">
+    <div class="track">
+      <span class="fill"></span>
+      ${o.mark != null ? `<span class="mk" style="inset-inline-start:${
+        Math.min(97, Math.max(1, o.mark * 100)).toFixed(1)}%" title="${hEsc(o.markLabel)}"></span>` : ''}
+    </div>
+    <div class="ends"><span>${hEsc(from)}</span><span>${hEsc(to)}</span></div>
+  </div>`;
+}
+
+/* Bullets — small multiples of a 0..1 reading, for a regime panel. */
+function cBullets(items) {
+  const rows = (items || []).filter(r => r && r.v != null && r.v === r.v);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-bullets">${rows.map(r => `
+    <div class="bl">
+      <span class="k">${hEsc(t('home_b_' + r.k))}</span>
+      <span class="track"><span class="fill" style="width:${(r.v * 100).toFixed(0)}%"></span>
+        <i style="inset-inline-start:${(r.v * 100).toFixed(0)}%"></i></span>
+      <span class="v">${(r.v * 100).toFixed(0)}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* Chips — a named palette, where the names are the information. */
+function cChips(items, opts) {
+  const o = Object.assign({ label: k => k, tone: () => 'var(--acc)' }, opts || {});
+  const rows = items || [];
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-chips">${rows.map(k => `
+    <span class="chip" style="--t:${o.tone(k)}">${hEsc(o.label(k))}</span>`).join('')}</div>`;
+}
+
+/* Rank decay — a sorted series as thin columns; the fall-off is the point. */
+function cDecay(vals, opts) {
+  const o = Object.assign({ digits: 1 }, opts || {});
+  const rows = (vals || []).filter(v => v != null && v === v);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const peak = Math.max(...rows.map(Math.abs)) || 1;
+  return `<div class="c-fill c-decay">${rows.map((v, i) => `
+    <span title="#${i + 1}: ${v.toFixed(o.digits)}"
+      style="height:${Math.max(4, (Math.abs(v) / peak) * 100).toFixed(1)}%;
+             opacity:${(1 - i / (rows.length * 1.5)).toFixed(2)}"></span>`).join('')}</div>`;
+}
+
+/* Funnel — a survival cascade, each stage a share of the one above. */
+function cFunnel(stages) {
+  const rows = (stages || []).filter(r => r && r.v != null);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const peak = Math.max(...rows.map(r => r.v)) || 1;
+  return `<div class="c-fill c-funnel">${rows.map((r, i) => `
+    <div class="fs" title="${hEsc(t('home_f_' + r.k))}: ${hNum(r.v)}">
+      <span class="band" style="width:${Math.max(6, Math.sqrt(r.v / peak) * 100).toFixed(1)}%;
+        opacity:${(1 - i * 0.16).toFixed(2)}"></span>
+      <span class="lb">${hEsc(t('home_f_' + r.k))}</span>
+      <span class="vv">${hCompact(r.v)}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* Lollipop — a ranked small set where the value is a position, not an area. */
+function cLollipop(items, opts) {
+  const o = Object.assign({ fmt: v => hPct(v, 0), label: k => k }, opts || {});
+  const rows = (items || []).filter(r => r && r.v != null);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const peak = Math.max(...rows.map(r => r.v)) || 1;
+  return `<div class="c-fill c-lolli">${rows.map(r => `
+    <div class="lp" title="${hEsc(o.label(r.k))}: ${hEsc(String(o.fmt(r.v)))}">
+      <span class="k">${hEsc(o.label(r.k))}</span>
+      <span class="line"><i style="inset-inline-start:${(r.v / peak * 100).toFixed(1)}%"></i>
+        <u style="width:${(r.v / peak * 100).toFixed(1)}%"></u></span>
+      <span class="v">${hEsc(String(o.fmt(r.v)))}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* Log strip — every item as a dot on a decade axis; clustering is the signal. */
+function cLogStrip(points, opts) {
+  const o = Object.assign({ fmt: hUsd }, opts || {});
+  const rows = (points || []).filter(p => p && p.v > 0);
+  if (rows.length < 2) return `<div class="c-fill"></div>`;
+  const ls = rows.map(p => Math.log10(p.v));
+  const lo = Math.floor(Math.min(...ls)), hi = Math.ceil(Math.max(...ls));
+  const span = (hi - lo) || 1;
+  const ticks = [];
+  for (let d = lo; d <= hi; d++) ticks.push(d);
+  return `<div class="c-fill c-strip">
+    <div class="axis">
+      ${ticks.map(d => `<span class="dec" style="inset-inline-start:${
+        ((d - lo) / span * 100).toFixed(1)}%"></span>`).join('')}
+      ${rows.map(p => `<span class="pt" title="${hEsc(p.k || '')}: ${hEsc(String(o.fmt(p.v)))}"
+        style="inset-inline-start:${((Math.log10(p.v) - lo) / span * 100).toFixed(1)}%"></span>`).join('')}
+    </div>
+    <div class="ends"><span>${hEsc(String(o.fmt(Math.pow(10, lo))))}</span>
+      <span>${hEsc(String(o.fmt(Math.pow(10, hi))))}</span></div>
+  </div>`;
+}
+
+/* Dumbbell — two legs of a spread and the gap between them. */
+function cDumbbell(items, opts) {
+  const o = Object.assign({ fmt: v => hPct(v, 0) }, opts || {});
+  const rows = (items || []).filter(r => r && r.a != null && r.b != null);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const all = rows.flatMap(r => [r.a, r.b]);
+  const lo = Math.min(...all), hi = Math.max(...all), span = (hi - lo) || 1;
+  const at = v => (((v - lo) / span) * 92 + 4).toFixed(1);
+  return `<div class="c-fill c-dumb">${rows.map(r => `
+    <div class="db" title="${hEsc(r.k)}: ${hEsc(String(o.fmt(r.a)))} → ${hEsc(String(o.fmt(r.b)))}">
+      <span class="k">${hEsc(r.k)}</span>
+      <span class="rail">
+        <u style="inset-inline-start:${Math.min(at(r.a), at(r.b))}%;
+                  width:${Math.abs(at(r.a) - at(r.b)).toFixed(1)}%"></u>
+        <i class="a" style="inset-inline-start:${at(r.a)}%"></i>
+        <i class="b" style="inset-inline-start:${at(r.b)}%"></i>
+      </span>
+      <span class="v">${hEsc(String(o.fmt(r.gap)))}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* Arc — one value read against the ceiling it must not cross. */
+function cArc(value, max, opts) {
+  const o = Object.assign({ label: '', sub: '', tone: 'var(--acc)' }, opts || {});
+  if (value == null || !max) return `<div class="c-fill"></div>`;
+  const f = Math.min(1, Math.max(0, value / max));
+  const R = 26, CX = 32, CY = 30;
+  const pt = a => [CX + R * Math.cos(a), CY + R * Math.sin(a)];
+  const a0 = Math.PI * 0.82, a1 = Math.PI * 2.18;          // open-bottom arc
+  const [sx, sy] = pt(a0), [ex, ey] = pt(a1);
+  const [vx, vy] = pt(a0 + (a1 - a0) * f);
+  const big = (a1 - a0) * f > Math.PI ? 1 : 0;
+  return `<div class="c-fill c-arc">
+    <svg viewBox="0 0 64 52">
+      <path d="M${sx.toFixed(1)},${sy.toFixed(1)} A${R},${R} 0 1,1 ${ex.toFixed(1)},${ey.toFixed(1)}"
+            fill="none" stroke="rgba(255,255,255,.07)" stroke-width="5" stroke-linecap="round"/>
+      <path d="M${sx.toFixed(1)},${sy.toFixed(1)} A${R},${R} 0 ${big},1 ${vx.toFixed(1)},${vy.toFixed(1)}"
+            fill="none" stroke="${o.tone}" stroke-width="5" stroke-linecap="round"/>
+      <text x="32" y="30" text-anchor="middle" dominant-baseline="central"
+            fill="var(--text)" font-size="13" font-weight="800">${hEsc(o.label)}</text>
+      <text x="32" y="40" text-anchor="middle" dominant-baseline="central"
+            fill="var(--text3)" font-size="5">${hEsc(o.sub)}</text>
+    </svg></div>`;
+}
+
+/* Treemap — weights as areas, by recursive slice-and-dice. */
+function cTreemap(items) {
+  const rows = (items || []).filter(r => r && r.pct > 0).slice(0, 7);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const build = (list, horiz) => {
+    if (list.length === 1) {
+      const r = list[0];
+      return `<div class="tm" style="flex:${r.pct};opacity:${(0.35 + 0.6 * (r.pct / rows[0].pct)).toFixed(2)}"
+        title="${hEsc(r.k)}: ${r.pct}%"><b>${hEsc(r.k)}</b><i>${Math.round(r.pct)}</i></div>`;
+    }
+    // split so the two halves carry as close to equal weight as possible
+    const total = list.reduce((s, r) => s + r.pct, 0);
+    let acc = 0, cut = 1;
+    for (let i = 0; i < list.length - 1; i++) {
+      acc += list[i].pct;
+      if (acc >= total / 2) { cut = i + 1; break; }
+      cut = i + 2;
+    }
+    const a = list.slice(0, cut), b = list.slice(cut);
+    const w = x => x.reduce((s, r) => s + r.pct, 0);
+    return `<div class="tmg" style="flex:${total};flex-direction:${horiz ? 'row' : 'column'}">
+      <div class="tmg" style="flex:${w(a)};flex-direction:${horiz ? 'column' : 'row'}">${build(a, !horiz)}</div>
+      <div class="tmg" style="flex:${w(b)};flex-direction:${horiz ? 'column' : 'row'}">${build(b, !horiz)}</div>
+    </div>`;
+  };
+  return `<div class="c-fill c-tree">${build(rows, true)}</div>`;
+}
+
+/* Loss axis — every scenario placed on one signed % track. */
+function cLossAxis(ticks, opts) {
+  const o = Object.assign({ worst: null }, opts || {});
+  const rows = (ticks || []).filter(r => r && r.v != null);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const lim = Math.max(0.1, ...rows.map(r => Math.abs(r.v)));
+  const at = v => (50 + (v / lim) * 46).toFixed(1);
+  return `<div class="c-fill c-loss">
+    <div class="rail">
+      <span class="zero"></span>
+      ${rows.map(r => `<span class="tk ${r.v < 0 ? 'neg' : 'pos'}${r.k === o.worst ? ' w' : ''}"
+        style="inset-inline-start:${at(r.v)}%" title="${hEsc(r.k)}: ${hSign(r.v, 2)}%"></span>`).join('')}
+    </div>
+    <div class="ends"><span>${hSign(-lim, 1)}%</span><span>0</span><span>${hSign(lim, 1)}%</span></div>
+  </div>`;
+}
+
+/* Waterfall — a bridge from the first quantity to the last. */
+function cWaterfall(steps, opts) {
+  const o = Object.assign({ net: null, fmt: v => hSign(v, 0) }, opts || {});
+  const rows = (steps || []).filter(r => r && r.v != null && r.v === r.v);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  let run = 0;
+  const bars = rows.map(r => { const from = run; run += r.v; return { ...r, from, to: run }; });
+  const lo = Math.min(0, ...bars.map(b => Math.min(b.from, b.to)));
+  const hi = Math.max(0, ...bars.map(b => Math.max(b.from, b.to)));
+  const span = (hi - lo) || 1;
+  const y = v => (100 - ((v - lo) / span) * 100);
+  return `<div class="c-fill c-wf">
+    <div class="plot">
+      <span class="base" style="top:${y(0).toFixed(1)}%"></span>
+      ${bars.map(b => `<span class="wb ${b.v >= 0 ? 'pos' : 'neg'}"
+        title="${hEsc(t('home_a_' + b.k))}: ${hEsc(String(o.fmt(b.v)))}"
+        style="top:${y(Math.max(b.from, b.to)).toFixed(1)}%;
+               height:${Math.max(1.5, Math.abs(y(b.to) - y(b.from))).toFixed(1)}%"></span>`).join('')}
+      ${o.net != null ? `<span class="wb net" title="${hEsc(t('home_k_net'))}: ${hUsd(o.net)}"
+        style="top:${Math.min(y(0), y(o.net)).toFixed(1)}%;
+               height:${Math.max(1.5, Math.abs(y(o.net) - y(0))).toFixed(1)}%"></span>` : ''}
+    </div>
+    <div class="keys">${bars.map(b => `<span>${hEsc(t('home_a_' + b.k))}</span>`).join('')}
+      ${o.net != null ? `<span class="n">${hEsc(t('home_k_net'))}</span>` : ''}</div>
+  </div>`;
+}
+
+/* Area — a genuine time series, with a hover readout. */
+function cArea(vals, opts) {
+  const o = Object.assign({ digits: 1, unit: '' }, opts || {});
   const clean = (vals || []).filter(v => v != null && v === v);
-  if (clean.length < 2) return `<div class="mcols"></div>`;
+  if (clean.length < 2) return `<div class="c-fill"></div>`;
   const W = 100, H = 40;
   const lo = Math.min(...clean), hi = Math.max(...clean), span = hi - lo || 1;
   const x = i => (i / (clean.length - 1)) * W;
   const y = v => H - 3 - ((v - lo) / span) * (H - 9);
   const line = clean.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(2)},${y(v).toFixed(2)}`).join('');
-  const id = 'sp' + Math.random().toString(36).slice(2, 8);
+  const id = 'a' + Math.random().toString(36).slice(2, 8);
   const last = clean[clean.length - 1];
-  return `<div class="spark-wrap" data-vals="${clean.join(',')}" data-digits="${o.digits}"
+  return `<div class="c-fill c-area" data-vals="${clean.join(',')}" data-digits="${o.digits}"
       data-unit="${hEsc(o.unit)}" onmousemove="homeSparkMove(event,this)" onmouseleave="homeSparkOut(this)">
     <span class="spark-read">${last.toFixed(o.digits)}${hEsc(o.unit)}</span>
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
@@ -150,8 +421,7 @@ function svgSpark(vals, opts) {
             vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
       <circle class="sp-dot" cx="${x(clean.length - 1)}" cy="${y(last)}" r="2"
               fill="var(--acc)" vector-effect="non-scaling-stroke"/>
-    </svg>
-  </div>`;
+    </svg></div>`;
 }
 
 function homeSparkMove(ev, el) {
@@ -159,8 +429,8 @@ function homeSparkMove(ev, el) {
   const r = el.getBoundingClientRect();
   // SVG user space is always left-to-right — CSS `direction` does not mirror it,
   // so the pointer maps straight onto the index in both FA and EN.
-  const f = (ev.clientX - r.left) / r.width;
-  const i = Math.min(vals.length - 1, Math.max(0, Math.round(f * (vals.length - 1))));
+  const i = Math.min(vals.length - 1, Math.max(0,
+    Math.round(((ev.clientX - r.left) / r.width) * (vals.length - 1))));
   el.querySelector('.spark-read').textContent =
     vals[i].toFixed(+el.dataset.digits) + el.dataset.unit;
   const dot = el.querySelector('.sp-dot');
@@ -175,15 +445,40 @@ function homeSparkOut(el) {
   if (dot) dot.setAttribute('cx', 100);
 }
 
-/* A labelled ratio, for the tiles whose story is "x out of y". */
-function meter(value, max, opts) {
-  const o = Object.assign({ left: '', right: '', tone: 'var(--acc)' }, opts || {});
-  const pct = max ? +Math.min(100, Math.max(0, (value / max) * 100)).toFixed(1) : 0;
-  return `<div class="meter">
-    <div class="meter-top"><span>${hEsc(o.left)}</span><span>${hEsc(o.right)}</span></div>
-    <div class="meter-track">
-      <div class="meter-fill" style="width:${pct}%;background:${o.tone}"></div>
-    </div></div>`;
+/* Budget pips — one pip per scheduled job, filled by how much of its own
+   freshness budget is spent. */
+function cBudgetPips(jobs) {
+  const rows = (jobs || []).filter(j => j && j.k);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-pips">${rows.map(j => {
+    const u = Math.min(1, j.used == null ? 0 : j.used);
+    const tone = j.status === 'missing' ? 'bad' : j.status === 'late' ? 'warn' : 'ok';
+    return `<span class="pip ${tone}" title="${hEsc(j.k)} — ${hEsc(t('pipe_s_' + (j.status || 'ok')))}">
+      <i style="height:${(u * 100).toFixed(0)}%"></i></span>`;
+  }).join('')}</div>`;
+}
+
+/* Slot grid — one cell per allocated unit, grouped and tinted by owner. */
+function cSlots(groups, opts) {
+  const o = Object.assign({ tone: () => 'var(--acc)' }, opts || {});
+  const rows = (groups || []).filter(g => g && g.v > 0);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  return `<div class="c-fill c-slots">${rows.map(g => `
+    <div class="sg" title="${hEsc(g.k)}: ${hNum(g.v)}">
+      <div class="cells">${Array.from({ length: Math.min(12, g.v) }, () =>
+        `<span style="background:${o.tone(g)}"></span>`).join('')}</div>
+      <span class="k">${hEsc(g.k)}</span>
+    </div>`).join('')}</div>`;
+}
+
+/* Hour profile — activity per hour over the last day. */
+function cHours(vals) {
+  const rows = (vals || []).filter(v => v != null);
+  if (!rows.length) return `<div class="c-fill"></div>`;
+  const peak = Math.max(...rows) || 1;
+  return `<div class="c-fill c-hours">${rows.map((v, i) => `
+    <span title="${t('home_h_ago', { n: rows.length - i })}: ${hNum(v)}"
+      style="height:${Math.max(3, (v / peak) * 100).toFixed(1)}%"></span>`).join('')}</div>`;
 }
 
 function kpis(items) {
@@ -195,108 +490,118 @@ function kpis(items) {
 }
 
 // ═════════════════════════════════════════════════════════════ TILE BODIES
-/* Three numbers and one chart, every tile the same shape. Anything more stops
-   being readable at the row height a nineteen-tile screenful allows — the rest
-   of each section's data is one click away. Every renderer must survive an
-   empty payload: on a fresh install none of the artifacts exist yet. */
+/* Three numbers and the one graphic that fits what this module measures.
+   Every renderer must survive an empty payload: on a fresh install none of the
+   artifacts exist yet. */
 const HOME_RENDER = {
 
+  /* Coverage of the store: which venue carries which timeframes. */
   inventory(d) {
     return {
-      flag: { dot: hFresh(d.newest_age_h, 12, 48) },
+      flag: {},
       body: kpis([
         { l: t('home_k_datasets'), v: hNum(d.n_datasets), hero: true },
         { l: t('home_k_symbols'), v: hNum(d.n_symbols) },
         { l: t('home_k_size'), v: hNum(d.total_gb, 1), u: 'GB' },
-      ]) + svgCols(d.by_timeframe, { max: 4, fmt: hCompact }),
+      ]) + cGrid(d.matrix),
     };
   },
 
+  /* Freshness of the store, as a composition of age buckets. */
   download(d) {
     return {
       flag: { dot: hFresh(d.newest_age_h, 12, 48) },
       body: kpis([
-        { l: t('home_k_refreshed'), v: hNum(d.refreshed_24h), hero: true, tone: 'tone-acc' },
+        { l: t('home_k_newest'), v: hAgo(d.newest_age_h), hero: true, tone: 'tone-acc' },
         { l: t('home_k_venues'), v: hNum(d.n_venues) },
-        { l: t('home_k_week'), v: hCompact(d.refreshed_7d) },
-      ]) + svgCols(d.by_exchange, { max: 4 }),
+        { l: t('home_k_datasets'), v: hCompact(d.n_datasets) },
+      ]) + cStack(d.recency),
     };
   },
 
+  /* How much of the store is long enough to walk forward on. */
   quality(d) {
     const pct = d.scannable_pct;
     return {
       flag: { dot: pct == null ? 'muted' : pct >= 60 ? 'ok' : pct >= 40 ? 'warn' : 'bad' },
       body: kpis([
-        { l: t('home_k_scannable'), v: hPct(pct, 0), hero: true, tone: 'tone-acc' },
-        { l: t('home_k_median_bars'), v: hCompact(d.median_bars) },
-        { l: t('home_k_stale3d'), v: hNum(d.stale_gt_3d), tone: d.stale_gt_3d > 0 ? 'tone-warn' : '' },
-      ]) + svgCols(d.bars_hist, { max: 4 }),
+        { l: t('home_k_median_bars'), v: hCompact(d.median_bars), hero: true },
+        { l: t('home_k_stale3d'), v: hNum(d.stale_gt_3d), tone: d.stale_gt_3d ? 'tone-warn' : '' },
+      ]) + cRing(pct, { sub: t('home_k_scannable') }),
     };
   },
 
+  /* How far back a backtest can reach. */
   research(d) {
+    const span = d.median_span_days, max = d.max_span_days;
     return {
       flag: { chip: t('home_chip_tool') },
       body: kpis([
-        { l: t('home_k_ready_ds'), v: hNum(d.n_datasets), hero: true },
+        { l: t('home_k_median_span'), v: hNum(span == null ? null : span / 365, 1), u: t('home_u_yr'), hero: true },
         { l: t('home_k_symbols'), v: hNum(d.n_symbols) },
         { l: t('home_k_runs'), v: hNum(d.n_runs) },
-      ]) + svgCols(d.by_timeframe, { max: 4, fmt: hCompact }),
+      ]) + cSpan(d.first, d.last, {
+        mark: (span && max) ? span / max : null, markLabel: t('home_k_median_span'),
+      }),
     };
   },
 
+  /* The three regime readings the strategy picker is conditioned on. */
   insights(d) {
-    const risk = d.event_risk;
+    const risk = ((d.gauges || [])[0] || {}).v;
     return {
       flag: { chip: t('home_chip_tool'),
               dot: risk == null ? '' : risk > 0.5 ? 'bad' : risk > 0.3 ? 'warn' : 'ok' },
       body: kpis([
-        { l: t('home_k_event_risk'), v: hNum(risk, 2), hero: true,
-          tone: risk > 0.5 ? 'tone-neg' : risk > 0.3 ? 'tone-warn' : 'tone-pos' },
-        { l: t('home_k_dvol_btc'), v: hNum(d.dvol_btc, 1) },
+        { l: t('home_k_dvol_btc'), v: hNum(d.dvol_btc, 1), hero: true, tone: 'tone-acc' },
         { l: t('home_k_ls'), v: hNum(d.ls_ratio_btc, 2),
           tone: d.ls_ratio_btc > 1 ? 'tone-pos' : 'tone-neg' },
-      ]) + svgCols(d.top_strategies, { max: 4, keyFmt: k => (STRATEGY_LABELS[k] || k) }),
+        { l: t('home_k_watched'), v: hNum(d.n_event_symbols) },
+      ]) + cBullets(d.gauges),
     };
   },
 
+  /* The palette the optimiser can be pointed at. */
   lab(d) {
     return {
       flag: { chip: t('home_chip_tool') },
       body: kpis([
         { l: t('home_k_strategies'), v: hNum(d.n_strategies), hero: true },
         { l: t('home_k_params'), v: hNum(d.n_params) },
-        { l: t('home_k_ready_ds'), v: hCompact(d.n_datasets) },
-      ]) + svgCols(d.by_timeframe, { max: 4, fmt: hCompact }),
+      ]) + cChips(d.strategies, {
+        label: k => (STRATEGY_LABELS[k] || k),
+        tone: k => (HOME_FAMILY_TONE[String(STRATEGY_TAGS[k] || '').split(' ')[0]] || 'var(--acc)'),
+      }),
     };
   },
 
+  /* How fast OOS quality falls away from the best edge. */
   report(d) {
-    const b = d.best || {};
     return {
       flag: { dot: hFresh(d.age_h, 30, 72) },
       body: kpis([
-        { l: t('home_k_best_sharpe'), v: hSign(b.oos_sharpe, 1), hero: true, tone: hTone(b.oos_sharpe) },
-        { l: t('home_k_oos_ret'), v: b.oos_mean_return == null ? '—' : hPct(b.oos_mean_return * 100, 0),
-          tone: hTone(b.oos_mean_return) },
+        { l: t('home_k_best_sharpe'), v: hSign(d.best_sharpe, 1), hero: true, tone: hTone(d.best_sharpe) },
+        { l: t('home_k_oos_ret'), v: d.best_return == null ? '—' : hPct(d.best_return * 100, 0),
+          tone: hTone(d.best_return) },
         { l: t('home_k_ranked'), v: hNum(d.n_top) },
-      ]) + svgSpark(d.sharpes, { digits: 1 }),
+      ]) + cDecay(d.sharpes, { digits: 1 }),
     };
   },
 
+  /* The scan funnel, candidate to deployable. */
   edges(d) {
+    const deployable = ((d.funnel || []).find(f => f.k === 'deployable') || {}).v;
     return {
       flag: { dot: hFresh(d.age_h, 30, 72), chip: d.live_timeframe || '' },
       body: kpis([
-        { l: t('home_k_deployable'), v: hNum(d.n_deployable), hero: true, tone: 'tone-acc' },
-        { l: t('home_k_passed'), v: hCompact(d.n_passed) },
+        { l: t('home_k_deployable'), v: hNum(deployable), hero: true, tone: 'tone-acc' },
         { l: t('home_k_pbo'), v: hPct((d.median_pbo || 0) * 100, 0),
           tone: d.median_pbo > 0.5 ? 'tone-neg' : d.median_pbo > 0.35 ? 'tone-warn' : 'tone-pos' },
-      ]) + svgCols(d.by_timeframe_robust, { max: 4 }),
+      ]) + cFunnel(d.funnel),
     };
   },
 
+  /* Which strategy families clear the bar, once every trial is counted. */
   trials(d) {
     return {
       flag: { dot: hFresh(d.age_h, 30, 72) },
@@ -305,23 +610,23 @@ const HOME_RENDER = {
         { l: t('home_k_pass_rate'), v: hPct(d.pass_rate, 1), tone: 'tone-acc' },
         { l: t('home_k_deflated'), v: hNum(d.n_deflated_pass),
           tone: d.n_deflated_pass ? 'tone-pos' : 'tone-warn' },
-      ]) + svgCols(d.strategies, { max: 4, fmt: v => hPct(v, 0),
-                                   keyFmt: k => (STRATEGY_LABELS[k] || k) }),
+      ]) + cLollipop(d.strategies, { label: k => (STRATEGY_LABELS[k] || k) }),
     };
   },
 
+  /* Where the live edges sit on a decade axis of tradable size. */
   capacity(d) {
     return {
       flag: { dot: hFresh(d.age_h, 30, 72) },
       body: kpis([
         { l: t('home_k_median_cap'), v: hUsd(d.median_capacity), hero: true },
-        { l: t('home_k_total_cap'), v: hUsd(d.total_capacity) },
+        { l: t('home_k_tightest'), v: hUsd(d.min_capacity), tone: 'tone-warn' },
         { l: t('home_k_books'), v: hNum(d.n_books) },
-      ]) + svgCols((d.rows || []).map(r => ({ k: r.symbol, v: r.capacity })),
-                   { max: 4, fmt: hUsd, keyFmt: k => String(k || '').replace(/USDT$/, '') }),
+      ]) + cLogStrip(d.points),
     };
   },
 
+  /* Both legs of the best funding spreads, and the gap that is the trade. */
   crossex(d) {
     return {
       flag: { chip: 'α', dot: hFresh(d.carry_age_h, 8, 26) },
@@ -329,27 +634,29 @@ const HOME_RENDER = {
         { l: t('home_k_best_carry'), v: hPct(d.best_spread, 0), hero: true, tone: 'tone-acc' },
         { l: t('home_k_multivenue'), v: hNum(d.multi_venue_symbols) },
         { l: t('home_k_venues'), v: hNum(d.n_venues) },
-      ]) + svgCols((d.carry || []).map(c => ({ k: c.base, v: c.spread })),
-                   { max: 4, fmt: v => hPct(v, 0) }),
+      ]) + cDumbbell((d.carry || []).map(c => ({ k: c.base, a: c.long, b: c.short, gap: c.spread }))),
     };
   },
 
+  /* Leverage read against the ceiling it must not cross. */
   fleet(d) {
-    const levPct = d.max_gross_leverage ? (d.gross_leverage / d.max_gross_leverage) * 100 : 0;
+    const f = d.max_gross_leverage ? (d.gross_leverage / d.max_gross_leverage) : 0;
     return {
       flag: { dot: d.n_alerts > 0 ? 'bad' : hFresh(d.age_h, 6, 24) },
       body: kpis([
         { l: t('home_k_equity'), v: hUsd(d.equity_usd), hero: true },
-        { l: t('home_k_gross_lev'), v: hNum(d.gross_leverage, 2), u: '×',
-          tone: levPct > 80 ? 'tone-neg' : levPct > 50 ? 'tone-warn' : 'tone-pos' },
         { l: t('home_k_net_delta'), v: hSign(d.net_beta_delta_pct, 1), u: '%',
           tone: hTone(d.net_beta_delta_pct) },
-      ]) + svgCols((d.bots || []).filter(b => b.trades_30d)
-                     .map(b => ({ k: b.bot, v: b.net_30d })),
-                   { max: 5, fmt: v => hUsd(v), signed: true }),
+        { l: t('home_k_positions'), v: hNum(d.n_positions) },
+      ]) + cArc(d.gross_leverage, d.max_gross_leverage, {
+        label: hNum(d.gross_leverage, 2) + '×',
+        sub: t('home_fleet_cap', { n: hNum(d.max_gross_leverage, 1) }),
+        tone: f > 0.8 ? 'var(--red)' : f > 0.5 ? 'var(--yellow)' : 'var(--acc)',
+      }),
     };
   },
 
+  /* The open book as areas — concentration you can see without reading. */
   portfolio(d) {
     return {
       flag: { dot: hFresh(d.age_h, 6, 24) },
@@ -357,43 +664,38 @@ const HOME_RENDER = {
         { l: t('home_k_book'), v: hUsd(d.gross_usd), hero: true },
         { l: t('home_k_hhi'), v: hNum(d.hhi, 2), tone: d.hhi > 0.3 ? 'tone-warn' : 'tone-pos' },
         { l: t('home_k_assets_n'), v: hNum(d.n_assets) },
-      ]) + svgCols((d.top || []).map(a => ({ k: a.base, v: a.pct })),
-                   { max: 5, fmt: v => hPct(v, 0) }),
+      ]) + cTreemap((d.top || []).map(a => ({ k: a.base, pct: a.pct }))),
     };
   },
 
+  /* Every scenario's hit, placed on one signed equity axis. */
   stress(d) {
-    const w = d.worst || {};
     return {
       flag: { dot: d.n_liquidations > 0 ? 'bad' : hFresh(d.age_h, 30, 72) },
       body: kpis([
-        { l: t('home_k_worst_loss'), v: hUsd(w.loss), hero: true, tone: hTone(w.loss) },
-        { l: t('home_k_of_equity'), v: hSign(w.loss_pct, 1), u: '%', tone: hTone(w.loss_pct) },
+        { l: t('home_k_worst_loss'), v: hSign(d.worst_pct, 2), u: '%', hero: true,
+          tone: hTone(d.worst_pct) },
+        { l: t('home_k_scenarios'), v: hNum(d.n_scenarios) },
         { l: t('home_k_liquidations'), v: hNum(d.n_liquidations),
           tone: d.n_liquidations ? 'tone-neg' : 'tone-pos' },
-      ]) + svgCols((d.rows || []).map(r => ({ k: r.key, v: Math.abs(r.loss || 0) })),
-                   { max: 4, fmt: v => '-' + hUsd(v),
-                     keyFmt: k => String(k || '').split('_')[0] }),
+      ]) + cLossAxis(d.ticks, { worst: d.worst_key }),
     };
   },
 
+  /* The bridge from intended alpha to what actually landed. */
   attribution(d) {
     return {
       flag: { dot: hFresh(d.age_h, 30, 72) },
       body: kpis([
         { l: t('home_k_net'), v: hUsd(d.net), hero: true, tone: hTone(d.net) },
-        { l: t('home_k_intended'), v: hUsd(d.intended), tone: hTone(d.intended) },
-        { l: t('home_k_mfe'), v: hPct((d.mfe_capture_avg || 0) * 100, 0),
-          tone: hTone(d.mfe_capture_avg) },
-      ]) + svgCols([
-        { k: t('home_a_intended'), v: d.intended },
-        { k: t('home_a_fees'), v: d.fees == null ? null : -Math.abs(d.fees) },
-        { k: t('home_a_exit'), v: d.exit_slip },
-        { k: t('home_a_funding'), v: d.funding },
-      ], { fmt: v => hSign(v, 0), signed: true }),
+        { l: t('home_k_intended'), v: hUsd(((d.steps || [])[0] || {}).v),
+          tone: hTone(((d.steps || [])[0] || {}).v) },
+        { l: t('home_k_window'), v: hNum(d.window_days), u: t('home_u_d') },
+      ]) + cWaterfall(d.steps, { net: d.net, fmt: v => hSign(v, 0) }),
     };
   },
 
+  /* Implied vol, as the track behind today's reading. */
   altdata(d) {
     return {
       flag: { dot: hFresh(d.age_h, 8, 24) },
@@ -401,10 +703,11 @@ const HOME_RENDER = {
         { l: t('home_k_dvol_btc'), v: hNum(d.dvol_btc, 1), hero: true, tone: 'tone-acc' },
         { l: t('home_k_dvol_eth'), v: hNum(d.dvol_eth, 1) },
         { l: t('home_k_liq24'), v: hUsd(d.liquidations_24h_usd) },
-      ]) + svgSpark(d.dvol_series, { digits: 1 }),
+      ]) + cArea(d.dvol_series, { digits: 1 }),
     };
   },
 
+  /* One pip per job, filled by how much of its freshness budget is spent. */
   pipeline(d) {
     const running = d.run_state === 'running';
     return {
@@ -417,16 +720,11 @@ const HOME_RENDER = {
           hero: true, tone: d.late || d.missing ? 'tone-warn' : 'tone-pos' },
         { l: t('home_k_late'), v: hNum(d.late), tone: d.late ? 'tone-warn' : '' },
         { l: t('home_k_missing'), v: hNum(d.missing), tone: d.missing ? 'tone-neg' : '' },
-      ]) + meter(d.ok, d.n_jobs, {
-        left: running ? t('home_pipe_running_short', {
-                step: stageLabel(d.run_step) || (d.run_step || '') })
-                      : t('home_pipe_fresh'),
-        right: hAgo(d.age_h),
-        tone: d.late || d.missing ? 'var(--yellow)' : 'var(--green)',
-      }),
+      ]) + cBudgetPips(d.jobs),
     };
   },
 
+  /* How the live pair budget is split across the bots. */
   models(d) {
     return {
       flag: { dot: hFresh(d.age_h, 26, 72) },
@@ -434,11 +732,13 @@ const HOME_RENDER = {
         { l: t('home_k_live_pairs'), v: hNum(d.n_pairs), hero: true },
         { l: t('home_k_bots'), v: hNum(d.n_bots) },
         { l: t('home_k_dropped'), v: hNum(d.n_dropped), tone: d.n_dropped ? 'tone-warn' : '' },
-      ]) + svgCols((d.bots || []).map(b => ({ k: b.bot, v: b.net_30d })),
-                   { max: 4, fmt: hUsd, signed: true }),
+      ]) + cSlots(d.split, {
+        tone: g => (g.net == null ? 'var(--acc)' : g.net >= 0 ? 'var(--green)' : 'var(--red)'),
+      }),
     };
   },
 
+  /* Hourly chatter — a silent service and a screaming one both show here. */
   logs(d) {
     const bad = d.n_errors > 0;
     return {
@@ -447,7 +747,7 @@ const HOME_RENDER = {
         { l: t('home_k_errors'), v: hNum(d.n_errors), hero: true, tone: bad ? 'tone-neg' : 'tone-pos' },
         { l: t('home_k_warnings'), v: hNum(d.n_warnings), tone: d.n_warnings ? 'tone-warn' : '' },
         { l: t('home_k_lines'), v: hCompact(d.n_lines) },
-      ]) + svgCols(d.levels, { max: 5 }),
+      ]) + cHours(d.hourly),
     };
   },
 };
@@ -576,19 +876,19 @@ function railStat(key, T) {
   const d = T[key] || {};
   switch (key) {
     case 'inventory': return hCompact(d.n_datasets);
-    case 'download': return hCompact(d.refreshed_24h);
-    case 'quality': return d.scannable_pct == null ? '' : Math.round(d.scannable_pct) + '%';
+    case 'download': return hAgo(d.newest_age_h);
+    case 'quality': return hPct(d.scannable_pct, 0);
     case 'research': return d.n_runs ? hCompact(d.n_runs) : '';
-    case 'report': return hSign((d.best || {}).oos_sharpe, 1);
-    case 'insights': return hNum(d.event_risk, 2);
+    case 'report': return hSign(d.best_sharpe, 1);
+    case 'insights': return hNum(((d.gauges || [])[0] || {}).v, 2);
     case 'lab': return hNum(d.n_strategies);
-    case 'edges': return hNum(d.n_deployable);
-    case 'trials': return d.pass_rate == null ? '' : d.pass_rate + '%';
+    case 'edges': return hNum(((d.funnel || []).find(f => f.k === 'deployable') || {}).v);
+    case 'trials': return hPct(d.pass_rate, 1);
     case 'capacity': return hUsd(d.median_capacity);
-    case 'crossex': return d.best_spread == null ? '' : Math.round(d.best_spread) + '%';
+    case 'crossex': return hPct(d.best_spread, 0);
     case 'fleet': return hNum(d.gross_leverage, 2) + '×';
     case 'portfolio': return hUsd(d.gross_usd);
-    case 'stress': return hUsd((d.worst || {}).loss);
+    case 'stress': return hSign(d.worst_pct, 1) + '%';
     case 'attribution': return hUsd(d.net);
     case 'altdata': return hNum(d.dvol_btc, 1);
     case 'models': return hNum(d.n_pairs);

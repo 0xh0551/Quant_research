@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.7.0] — 2026-08-20
+
+### One chart form per module, and no series drawn twice
+
+The wall had collapsed into a single idea: sixteen of nineteen tiles drew the
+same four-bar column chart, and inventory, research and lab drew it off the
+*same series* — the store's timeframe mix, three times. A panel that repeats a
+fact is worse than an empty one.
+
+- **Each module now charts what only it measures.** Inventory shows a venue ×
+  timeframe coverage grid; download the age distribution of the store; quality
+  the scannable share; research how far back a backtest can reach; insights the
+  three regime readings; lab its strategy palette; report the OOS decay curve;
+  edges the scan funnel; trials pass rate by strategy family; capacity every
+  edge on a decade axis; cross-exchange both legs of each funding spread;
+  fleet leverage against its ceiling; portfolio the book as areas; stress every
+  scenario on one signed equity axis; attribution the alpha-to-net bridge;
+  alt-data the DVOL track; pipeline a pip per job filled by its freshness
+  budget; models the pair budget as slots per bot; logs hourly chatter.
+- **Nineteen distinct chart forms** replace the one column chart: coverage grid,
+  stacked composition, ring, span, bullets, chips, rank decay, funnel, lollipop,
+  log strip, dumbbell, arc, treemap, loss axis, waterfall, area, budget pips,
+  slot grid and hour profile. All own the tile's leftover height, so they read
+  at any row size.
+- **Both failures are now tests.** `tests/test_home_tiles.py` asserts one chart
+  form per tile and no form used twice, that no series derived from the shared
+  parquet sweep backs more than one tile's graphic, that no tile shows more than
+  three headline numbers, and that home.js never reads an app.js global — a
+  load-order bug that had bitten twice (`esc`, then `STRATEGY_TAG_COLORS`). Each
+  guard was mutation-checked.
+- Fixed: number formatters returned `NaN%` for non-numeric input instead of an
+  em dash, and the sidebar's per-section figures had gone blank against the
+  reshaped payload.
+
 ## [1.6.1] — 2026-08-20
 
 ### A favicon that looks designed, and a payload with nothing spare in it
