@@ -271,90 +271,98 @@ th,td{text-align:start}
 }
 
 /* ============================================================================
- * HOME SCREEN — one dense wall of live widget tiles
+ * HOME SCREEN — one screenful of tiles, no scrolling
  * ----------------------------------------------------------------------------
- * Every section of the platform is a tile, and every tile is a widget: its own
- * KPI strip, a micro-chart, and a short table of the rows behind the numbers.
- * One continuous `grid-auto-flow: dense` grid rather than a grid per group —
- * separate grids each wrap on their own and leave ragged half-empty rows.
- * Group membership is carried by the accent colour and the filter chips.
+ * All nineteen sections have to be visible at once on a laptop, so the grid
+ * *fills* the viewport rather than flowing down it: fixed column and row counts
+ * with `1fr` rows, and each tile carries only what stays readable at the
+ * smallest of those rows — three numbers and one chart that stretches to
+ * whatever height it is given. The detail lives one click away, in the section.
  * ========================================================================== */
 
-.home-wrap{max-width:1720px;margin:0 auto}
-.home-hero{
-  display:flex;align-items:center;justify-content:space-between;gap:16px;
-  flex-wrap:wrap;margin-bottom:12px;
-}
-.home-hero-stats{display:flex;gap:7px;flex-wrap:wrap}
-.hstat{
-  background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;
-  padding:7px 13px;
-}
-.hstat .l{font-size:11px;color:var(--text3);white-space:nowrap}
-.hstat .v{font-size:18px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums;
-  unicode-bidi:isolate}
+#sec-home.active{display:flex;flex-direction:column;height:100%;min-height:0}
+#content.home-mode{padding:12px 14px;overflow:hidden}
+.home-wrap{flex:1;display:flex;flex-direction:column;min-height:0;max-width:2000px;
+  margin:0 auto;width:100%}
 
-/* group filter chips — the only thing left of the old group headings */
-.home-filter{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+/* group filter chips — also the legend for the accent colours */
+.home-filter{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
 .fchip{
-  display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:9px;
+  display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:9px;
   border:1px solid var(--border);background:rgba(255,255,255,.025);color:var(--text3);
   font-size:12.5px;font-weight:600;cursor:pointer;font-family:var(--font);transition:all .18s;
 }
 .fchip:hover{color:var(--text2);border-color:var(--border2)}
 .fchip .swatch{width:7px;height:7px;border-radius:2px;background:currentColor;flex:none}
 .fchip.on{color:var(--text);border-color:var(--border2);background:rgba(255,255,255,.07)}
-.fchip .n{font-size:11px;opacity:.65;font-variant-numeric:tabular-nums}
+.fchip .n{font-size:11px;opacity:.6;font-variant-numeric:tabular-nums}
 
 .home-grid{
-  display:grid;grid-template-columns:repeat(auto-fill,minmax(272px,1fr));
-  gap:12px;grid-auto-flow:dense;
-  grid-auto-rows:340px;align-items:stretch;
+  flex:1;min-height:0;display:grid;gap:10px;
+  grid-template-columns:repeat(5,minmax(0,1fr));
+  grid-template-rows:repeat(4,minmax(0,1fr));
 }
-@media(max-width:760px){.home-grid{grid-auto-rows:auto}}
-.tile.lg{grid-column:span 2}
-@media(max-width:760px){.tile.lg{grid-column:span 1}}
+@media(max-width:1240px){
+  .home-grid{grid-template-columns:repeat(4,minmax(0,1fr));grid-template-rows:repeat(5,minmax(0,1fr))}
+}
+/* Below this the tiles would be unreadable at any row height — let it scroll. */
+@media(max-width:900px){
+  #content.home-mode{overflow-y:auto}
+  #sec-home.active{height:auto}
+  .home-grid{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));
+             grid-template-rows:none;grid-auto-rows:150px}
+}
 .tile.hidden{display:none}
 
-/* ── tile shell ──────────────────────────────────────────────────────── */
+/* On a short laptop the nineteen rows have to come from somewhere. Trim the
+   chart's value labels and the tile padding rather than the type — the bar
+   heights and the hover title still carry the numbers. */
+@media(max-height:800px){
+  #content.home-mode{padding:10px 12px}
+  .home-filter{margin-bottom:8px}
+  .tile{padding:8px 11px 7px;gap:6px}
+  .mcol .v{display:none}
+}
+
+/* ── tile ────────────────────────────────────────────────────────────── */
 .tile{
   --acc:var(--cyan);
-  position:relative;isolation:isolate;overflow:hidden;
+  position:relative;isolation:isolate;overflow:hidden;min-height:0;
   background:var(--bg3);
   background:
-    radial-gradient(340px 140px at 100% 0, color-mix(in srgb,var(--acc) 8%, transparent), transparent 70%),
-    linear-gradient(165deg,rgba(255,255,255,.03),rgba(255,255,255,.005)),
+    radial-gradient(300px 120px at 100% 0, color-mix(in srgb,var(--acc) 9%, transparent), transparent 72%),
+    linear-gradient(165deg,rgba(255,255,255,.032),rgba(255,255,255,.005)),
     var(--bg3);
-  border:1px solid var(--border);border-radius:16px;padding:13px 14px 11px;
-  display:flex;flex-direction:column;gap:9px;cursor:pointer;height:100%;
+  border:1px solid var(--border);border-radius:15px;padding:10px 12px 9px;
+  display:flex;flex-direction:column;gap:7px;cursor:pointer;
   transition:transform .18s var(--ease),border-color .18s,box-shadow .18s;
 }
 html[dir=rtl] .tile{
   background:
-    radial-gradient(340px 140px at 0 0, color-mix(in srgb,var(--acc) 8%, transparent), transparent 70%),
-    linear-gradient(195deg,rgba(255,255,255,.03),rgba(255,255,255,.005)),
+    radial-gradient(300px 120px at 0 0, color-mix(in srgb,var(--acc) 9%, transparent), transparent 72%),
+    linear-gradient(195deg,rgba(255,255,255,.032),rgba(255,255,255,.005)),
     var(--bg3);
 }
 .tile:hover,.tile:focus-visible{
   transform:translateY(-2px);outline:none;
   border-color:var(--border2);
-  border-color:color-mix(in srgb,var(--acc) 45%, var(--border));
+  border-color:color-mix(in srgb,var(--acc) 48%, var(--border));
   box-shadow:0 10px 26px rgba(0,0,0,.42);
 }
 .tile:focus-visible{box-shadow:0 0 0 2px color-mix(in srgb,var(--acc) 40%, transparent)}
 @media(prefers-reduced-motion:reduce){.tile,.tile:hover{transform:none;transition:none}}
 
-.tile-head{display:flex;align-items:center;gap:8px}
+.tile-head{display:flex;align-items:center;gap:8px;flex:none}
 .tile-glyph{
-  width:32px;height:32px;border-radius:10px;flex:none;display:grid;place-items:center;
+  width:26px;height:26px;border-radius:8px;flex:none;display:grid;place-items:center;
   background:var(--bg4);
-  background:linear-gradient(150deg,color-mix(in srgb,var(--acc) 32%,transparent),color-mix(in srgb,var(--acc) 10%,transparent));
+  background:linear-gradient(150deg,color-mix(in srgb,var(--acc) 34%,transparent),color-mix(in srgb,var(--acc) 10%,transparent));
   border:1px solid var(--border2);
-  border:1px solid color-mix(in srgb,var(--acc) 28%,transparent);
+  border:1px solid color-mix(in srgb,var(--acc) 30%,transparent);
 }
-.tile-glyph svg{width:16px;height:16px;color:var(--acc)}
+.tile-glyph svg{width:14px;height:14px;color:var(--acc)}
 .tile-id{min-width:0;flex:1}
-.tile-id .n{font-size:14px;font-weight:700;color:var(--text);line-height:1.25;
+.tile-id .n{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.2;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tile-flag{display:flex;align-items:center;gap:5px;flex:none}
 .tile-status{width:6px;height:6px;border-radius:50%;background:var(--text3);flex:none}
@@ -364,88 +372,57 @@ html[dir=rtl] .tile{
 .tile-status.live{background:var(--cyan);box-shadow:0 0 6px rgba(45,212,191,.7);animation:tpulse 2.2s var(--ease) infinite}
 @keyframes tpulse{0%,100%{opacity:1}50%{opacity:.35}}
 .tile-chip{
-  font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:6px;white-space:nowrap;
+  font-size:10px;font-weight:700;padding:1px 6px;border-radius:5px;white-space:nowrap;
   background:rgba(255,255,255,.07);
-  background:color-mix(in srgb,var(--acc) 16%,transparent);color:var(--acc);
+  background:color-mix(in srgb,var(--acc) 17%,transparent);color:var(--acc);
 }
-.tile-age{font-size:11px;color:var(--text3);white-space:nowrap;unicode-bidi:isolate}
 
-.tile-body{flex:1;display:flex;flex-direction:column;gap:9px;min-height:0;overflow:hidden}
-
-/* ── KPI strip ───────────────────────────────────────────────────────── */
-.kpis{display:grid;gap:9px 12px}
-.kpis.c2{grid-template-columns:repeat(2,1fr)}
-.kpis.c3{grid-template-columns:repeat(3,1fr)}
-.kpis.c4{grid-template-columns:repeat(4,1fr)}
+/* ── the three numbers ───────────────────────────────────────────────── */
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;flex:none}
+.kpis.c2{grid-template-columns:repeat(2,minmax(0,1fr))}
 .kpi{min-width:0}
-.kpi .l{font-size:11px;color:var(--text3);line-height:1.3;
+.kpi .l{font-size:10.5px;color:var(--text3);line-height:1.25;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .kpi .v{
-  font-size:20px;font-weight:800;line-height:1.15;margin-top:2px;
-  font-variant-numeric:tabular-nums;letter-spacing:-.3px;unicode-bidi:isolate;
+  font-size:19px;font-weight:800;line-height:1.1;margin-top:2px;
+  font-variant-numeric:tabular-nums;letter-spacing:-.4px;unicode-bidi:isolate;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-.kpi.hero .v{font-size:26px}
-.kpi .u{font-size:12px;font-weight:600;color:var(--text3);margin-inline-start:2px}
+.kpi.hero .v{font-size:24px}
+.kpi .u{font-size:12px;font-weight:600;color:var(--text3);margin-inline-start:1px}
 .tone-pos{color:var(--green)}.tone-neg{color:var(--red)}
 .tone-warn{color:var(--yellow)}.tone-acc{color:var(--acc)}.tone-mute{color:var(--text2)}
 
-/* ── micro charts ────────────────────────────────────────────────────── */
-.mchart{width:100%;display:block}
-.spark-wrap{position:relative}
+/* ── the one chart: a column strip that fills whatever height is left ── */
+.mcols{flex:1;min-height:0;display:flex;gap:6px;align-items:stretch}
+.mcol{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;justify-content:flex-end}
+.mcol .t{flex:1;min-height:0;display:flex;align-items:flex-end}
+.mcol .bar{
+  width:100%;background:var(--acc);opacity:.8;border-radius:4px 4px 2px 2px;
+  min-height:3px;transition:height .55s var(--ease),opacity .18s;
+}
+.mcol:hover .bar{opacity:1}
+.mcol .bar.neg{background:var(--red)}
+.mcol .bar.pos{background:var(--green)}
+.mcol .v{font-size:10px;color:var(--text2);font-variant-numeric:tabular-nums;
+  text-align:center;unicode-bidi:isolate;white-space:nowrap;overflow:hidden;flex:none}
+.mcol .k{font-size:9.5px;color:var(--text3);text-align:center;flex:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* time series fill the same slot */
+.spark-wrap{flex:1;min-height:0;position:relative;display:flex}
+.spark-wrap svg{width:100%;height:100%;display:block}
 .spark-read{
-  position:absolute;top:-1px;inset-inline-end:0;font-size:11px;color:var(--text2);
+  position:absolute;top:0;inset-inline-end:0;font-size:10.5px;color:var(--text2);
   font-variant-numeric:tabular-nums;pointer-events:none;unicode-bidi:isolate;
   background:var(--bg3);padding-inline:3px;border-radius:3px;
 }
 
-.mbars{display:flex;flex-direction:column;gap:6px}
-.mbar{display:flex;align-items:center;gap:7px}
-.mbar .k{font-size:11.5px;color:var(--text3);width:62px;flex:none;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mbar .track{flex:1;height:7px;background:rgba(255,255,255,.05);border-radius:4px;overflow:hidden;position:relative}
-.mbar .fill{height:100%;border-radius:4px;background:var(--acc);opacity:.85;
-  transition:width .6s var(--ease);min-width:2px}
-.mbar:hover .fill{opacity:1}
-.mbar .v{font-size:11.5px;color:var(--text2);width:54px;text-align:end;flex:none;
-  font-variant-numeric:tabular-nums;unicode-bidi:isolate}
-
-.meter{display:flex;flex-direction:column;gap:4px}
-.meter-top{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--text3)}
-.meter-track{height:7px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden}
+/* a labelled ratio, for the tiles whose story is "x out of y" */
+.meter{flex:1;min-height:0;display:flex;flex-direction:column;justify-content:center;gap:5px}
+.meter-top{display:flex;justify-content:space-between;gap:8px;font-size:10.5px;color:var(--text3)}
+.meter-track{height:8px;border-radius:4px;background:rgba(255,255,255,.05);overflow:hidden}
 .meter-fill{height:100%;border-radius:4px;transition:width .6s var(--ease)}
-
-/* ── in-tile tables ──────────────────────────────────────────────────── */
-.tsub{
-  font-size:10.5px;color:var(--text3);display:flex;align-items:center;gap:6px;
-  margin-bottom:-3px;
-}
-.tsub::after{content:'';flex:1;height:1px;background:var(--border)}
-.trows{display:flex;flex-direction:column}
-.trow{
-  display:flex;align-items:center;gap:8px;padding:4px 5px;border-radius:6px;
-  font-size:12px;transition:background .15s;
-}
-.trow:hover{background:rgba(255,255,255,.04)}
-.trow .a{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--text2)}
-.trow .a b{color:var(--text);font-weight:600}
-.trow .b{color:var(--text3);font-size:11px;flex:none;unicode-bidi:isolate}
-.trow .c{font-variant-numeric:tabular-nums;font-weight:700;flex:none;unicode-bidi:isolate;
-  min-width:50px;text-align:end}
-
-/* ── in-tile segmented control (must not trigger the card's navigation) ─ */
-.tseg{display:inline-flex;background:rgba(255,255,255,.04);border:1px solid var(--border);
-  border-radius:7px;padding:2px;gap:2px}
-.tseg button{
-  border:none;background:transparent;color:var(--text3);font-family:var(--font);
-  font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;cursor:pointer;transition:all .18s;
-}
-.tseg button:hover{color:var(--text2)}
-.tseg button.on{background:rgba(255,255,255,.09);
-  background:color-mix(in srgb,var(--acc) 22%,transparent);color:var(--acc)}
-.tile-tools{display:flex;align-items:center;justify-content:space-between;gap:8px}
-.tile-note{font-size:11px;color:var(--text3);line-height:1.5;
-  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
 /* ── skeleton while the first payload lands ──────────────────────────── */
 .tile.skeleton{cursor:default}
@@ -453,42 +430,39 @@ html[dir=rtl] .tile{
   background-size:200% 100%;animation:skgleam 1.4s linear infinite;border-radius:5px}
 @keyframes skgleam{to{background-position:-200% 0}}
 
-/* ── sidebar: compact but *labelled* — an icon-only rail of nineteen
- *    sections is a guessing game. Collapses to icons on demand. ───────── */
+/* ── sidebar: compact, but every row is labelled ─────────────────────── */
 #rail{
-  width:186px;min-width:186px;background:linear-gradient(180deg,var(--bg2),var(--bg));
+  width:184px;min-width:184px;background:linear-gradient(180deg,var(--bg2),var(--bg));
   border-inline-end:1px solid var(--border);display:flex;flex-direction:column;z-index:6;
   transition:width .2s var(--ease),min-width .2s var(--ease);
 }
 #app.rail-collapsed #rail{width:52px;min-width:52px}
 .rail-brand{
-  display:flex;align-items:center;gap:8px;padding:12px 12px 10px;cursor:pointer;
+  display:flex;align-items:center;gap:8px;padding:11px 12px 10px;cursor:pointer;
   border-bottom:1px solid var(--border);
 }
-.rail-brand svg{width:22px;height:22px;flex:none}
+.rail-brand svg{width:21px;height:21px;flex:none}
 .rail-brand .txt{min-width:0}
 .rail-brand .txt b{
-  display:block;font-size:13px;font-weight:800;letter-spacing:.2px;
+  display:block;font-size:12.5px;font-weight:800;letter-spacing:.2px;
   background:var(--grad-aurora);-webkit-background-clip:text;background-clip:text;color:transparent;
 }
-.rail-brand .txt span{display:block;font-size:10.5px;color:var(--text3);margin-top:1px;
+.rail-brand .txt span{display:block;font-size:10px;color:var(--text3);margin-top:1px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#app.rail-collapsed .rail-brand{justify-content:center;padding:12px 0 10px}
+#app.rail-collapsed .rail-brand{justify-content:center;padding:11px 0 10px}
 #app.rail-collapsed .rail-brand .txt{display:none}
 
-.rail-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 6px 10px;scrollbar-width:none}
+.rail-scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:5px 6px 8px;scrollbar-width:none}
 .rail-scroll::-webkit-scrollbar{width:0}
 .rail-group{
-  font-size:10px;font-weight:700;color:var(--text3);padding:9px 8px 4px;
+  font-size:9.5px;font-weight:700;color:var(--text3);padding:7px 8px 3px;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
-#app.rail-collapsed .rail-group{
-  font-size:0;padding:0;height:1px;margin:7px 12px;background:var(--border);
-}
+#app.rail-collapsed .rail-group{font-size:0;padding:0;height:1px;margin:6px 12px;background:var(--border)}
 .rail-item{
-  position:relative;display:flex;align-items:center;gap:9px;padding:6px 9px;border-radius:8px;
+  position:relative;display:flex;align-items:center;gap:9px;padding:5px 9px;border-radius:8px;
   cursor:pointer;color:var(--text2);transition:background .16s,color .16s;
-  font-size:12.5px;line-height:1.35;
+  font-size:12.5px;line-height:1.3;
 }
 .rail-item svg{width:16px;height:16px;flex:none;opacity:.8}
 .rail-item .lbl{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;min-width:0}
@@ -499,7 +473,7 @@ html[dir=rtl] .tile{
 }
 .rail-item.active svg{opacity:1}
 .rail-item.active::before{
-  content:'';position:absolute;inset-inline-start:-6px;top:7px;bottom:7px;width:3px;
+  content:'';position:absolute;inset-inline-start:-6px;top:6px;bottom:6px;width:3px;
   border-radius:2px;background:var(--acc,#2dd4bf);
 }
 .rail-item .kpi-mini{
@@ -513,7 +487,6 @@ html[dir=rtl] .tile{
 #app.rail-collapsed .rail-item .lbl,
 #app.rail-collapsed .rail-item .kpi-mini{display:none}
 #app.rail-collapsed .rail-item .dot{position:absolute;top:3px;inset-inline-end:6px}
-/* the tooltip only earns its keep once the labels are hidden */
 .rail-item .tip{display:none}
 #app.rail-collapsed .rail-item .tip{
   display:block;position:absolute;inset-inline-start:46px;top:50%;
@@ -522,20 +495,20 @@ html[dir=rtl] .tile{
   opacity:0;pointer-events:none;transition:opacity .15s;z-index:40;box-shadow:var(--shadow);
 }
 #app.rail-collapsed .rail-item:hover .tip{opacity:1}
-.rail-toggle{
-  border-top:1px solid var(--border);padding:7px;display:flex;justify-content:center;
-}
-.rail-toggle button{
+.rail-foot{border-top:1px solid var(--border);padding:6px 7px;display:flex;
+  flex-direction:column;gap:2px;align-items:center}
+.rail-foot button{
   width:100%;border:none;background:transparent;color:var(--text3);cursor:pointer;
-  font-family:var(--font);font-size:11.5px;padding:6px;border-radius:7px;
+  font-family:var(--font);font-size:11px;padding:5px;border-radius:7px;
   display:flex;align-items:center;justify-content:center;gap:6px;transition:all .16s;
 }
-.rail-toggle button:hover{background:rgba(255,255,255,.05);color:var(--text2)}
-.rail-toggle svg{width:13px;height:13px}
-html[dir=rtl] .rail-toggle svg{transform:scaleX(-1)}
-#app.rail-collapsed .rail-toggle span{display:none}
-#app.rail-collapsed .rail-toggle svg{transform:scaleX(-1)}
-html[dir=rtl] #app.rail-collapsed .rail-toggle svg{transform:none}
+.rail-foot button:hover{background:rgba(255,255,255,.05);color:var(--text2)}
+.rail-foot svg{width:13px;height:13px}
+html[dir=rtl] .rail-foot svg{transform:scaleX(-1)}
+.rail-ver{font-size:9.5px;color:var(--text3);opacity:.7}
+#app.rail-collapsed .rail-foot span,#app.rail-collapsed .rail-ver{display:none}
+#app.rail-collapsed .rail-foot svg{transform:scaleX(-1)}
+html[dir=rtl] #app.rail-collapsed .rail-foot svg{transform:none}
 
 /* ── command palette ─────────────────────────────────────────────────── */
 .cmdk-btn{
@@ -572,5 +545,6 @@ html[dir=rtl] #app.rail-collapsed .rail-toggle svg{transform:none}
 #cmdk .none{padding:22px;text-align:center;color:var(--text3);font-size:12.5px}
 
 /* Persian never gets tracked-out capitals — it breaks the joins. */
-html[lang=fa] .kpi .l,html[lang=fa] .hstat .l,html[lang=fa] .rail-group,
-html[lang=fa] .tsub{letter-spacing:0;text-transform:none}
+html[lang=fa] .kpi .l,html[lang=fa] .rail-group,html[lang=fa] .mcol .k{
+  letter-spacing:0;text-transform:none;
+}

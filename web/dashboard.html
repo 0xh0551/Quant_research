@@ -10,6 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap"/>
 <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 <link rel="icon" href="static/favicon.svg" type="image/svg+xml"/>
+<link rel="apple-touch-icon" href="static/apple-touch-icon.png"/>
 <link rel="stylesheet" href="static/styles.css"/>
 </head>
 <body>
@@ -26,11 +27,12 @@
       </div>
     </div>
     <div class="rail-scroll" id="rail-scroll"><!-- built by home.js --></div>
-    <div class="rail-toggle">
+    <div class="rail-foot">
       <button onclick="toggleRail()" data-i18n-title="home_collapse">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
         <span data-i18n="home_collapse">جمع کردن منو</span>
       </button>
+      <span class="rail-ver" data-i18n="version_label">نسخهٔ ۱.۶</span>
     </div>
   </nav>
 
@@ -62,17 +64,11 @@
 
     <div id="content">
 
-      <!-- ═══ HOME — launcher of live widget tiles ═══ -->
+      <!-- ═══ HOME — every section as a tile, one screenful, no scrolling ═══ -->
       <div class="section active" id="sec-home">
         <div class="home-wrap">
-          <div class="home-hero">
-            <div class="home-filter" id="home-filter"></div>
-            <div class="home-hero-stats" id="home-hero-stats"></div>
-          </div>
-          <div id="home-grid-host"></div>
-          <p style="text-align:center;color:var(--text3);font-size:10px;padding:10px 0 2px">
-            Quant Research · <span data-i18n="version_label">نسخهٔ ۱.۵.۲</span>
-          </p>
+          <div class="home-filter" id="home-filter"></div>
+          <div class="home-grid" id="home-grid-host"></div>
         </div>
       </div>
 
