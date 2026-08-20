@@ -95,8 +95,12 @@ def run() -> dict:
     brief, cost, model, source = None, 0.0, None, None
     if llm.is_enabled():
         prompt = "FACTS (JSON):\n" + json.dumps(f, ensure_ascii=False)
+        # 600 answer tokens over a JSON fact sheet: this rewrites facts we already
+        # computed into prose, it does not decide anything. Sonnet would otherwise think
+        # adaptively (billed as output) before writing those few lines — several times
+        # the answer itself. Nothing here needs reasoning depth, so it is turned off.
         res = llm.complete(prompt, tier="smart", system=SYSTEM, json_schema=SCHEMA,
-                           max_tokens=600, cache_system=True)
+                           max_tokens=600, cache_system=True, thinking="disabled")
         if res.get("skipped"):
             source = "budget_skipped"
         elif res.get("data"):

@@ -258,7 +258,8 @@ class QuantLLM:
         system: str | None = None,
         json_schema: dict | None = None,
         max_tokens: int = 4096,
-        thinking: bool = False,
+        thinking: bool | str = False,
+        effort: str | None = None,
         cache_system: bool = True,
         thinking_headroom: int | None = None,
         retry_on_truncation: bool = True,
@@ -266,24 +267,36 @@ class QuantLLM:
         """One request. Returns {"text", "data"(if json_schema), "usage", "model", "cost_usd"}.
 
         `system` is sent as a cached block when `cache_system` (reads ~0.1x on
-        repeated calls with the same prefix). `json_schema` forces a validated
-        JSON object via output_config.format and populates `data`.
+        repeated calls with the same prefix) — but note the API only caches a prefix
+        of ~1024 tokens or more, so a short rubric is never actually cached, and the
+        default TTL is 5 minutes, so nothing survives between nightly runs.
+        `json_schema` forces a validated JSON object via output_config.format.
 
-        `max_tokens` is the budget for the *answer*. Thinking-capable models spend
-        output tokens on `thinking` blocks first (see THINKING_HEADROOM), so an
-        extra allowance is added on top automatically; pass `thinking_headroom=0`
-        to opt out. On a truncated structured answer the call is retried once with
-        a doubled budget (disable with `retry_on_truncation=False`).
+        `thinking` — these models think ADAPTIVELY WHEN THE PARAMETER IS OMITTED, and
+        those tokens are billed as output. So "off" has to be said out loud:
+          False (default) — leave it to the model (adaptive on Sonnet/Opus)
+          "disabled"      — no thinking; for answers that only restate grounded
+                            evidence in a fixed schema, where reasoning buys little
+          True            — ask for adaptive explicitly
+        `effort` (low|medium|high|xhigh|max, default high) tunes how deep the thinking
+        goes — the cheaper knob when reasoning is wanted but not at full depth.
+
+        `max_tokens` is the budget for the *answer*. Thinking spends output tokens
+        first (see THINKING_HEADROOM), so an allowance is added on top automatically —
+        skipped when thinking is disabled, since there is nothing to make room for.
+        On a truncated structured answer the call is retried once with a doubled
+        budget (disable with `retry_on_truncation=False`).
         """
         model = self.model_for(tier)
+        no_thinking = thinking == "disabled"
         headroom = thinking_headroom if thinking_headroom is not None else (
-            THINKING_HEADROOM if model in THINKING_MODELS else 0)
+            0 if no_thinking else (THINKING_HEADROOM if model in THINKING_MODELS else 0))
         budget = max_tokens + headroom
         attempt, out = 0, None
         while True:
             out = self._complete_once(model, prompt, system=system, json_schema=json_schema,
                                       budget=budget, thinking=thinking, tier=tier,
-                                      cache_system=cache_system)
+                                      cache_system=cache_system, effort=effort)
             truncated = out.get("stop_reason") == "max_tokens"
             if (out.get("skipped") or not json_schema or out.get("data") is not None
                     or not truncated or not retry_on_truncation or attempt >= 1):
@@ -297,7 +310,7 @@ class QuantLLM:
         return out
 
     def _complete_once(self, model, prompt, *, system, json_schema, budget,
-                       thinking, tier, cache_system) -> dict[str, Any]:
+                       thinking, tier, cache_system, effort=None) -> dict[str, Any]:
         # Pre-reserve this call's WORST-CASE cost so the monthly ceiling is a hard cap
         # (no final-call overshoot): conservatively assume up to 10k input tokens (covers
         # cache-write inflation) + the full output budget at this model's rate.
@@ -323,9 +336,17 @@ class QuantLLM:
             if cache_system:
                 block["cache_control"] = {"type": "ephemeral"}
             kwargs["system"] = [block]
+        output_config: dict[str, Any] = {}
         if json_schema:
-            kwargs["output_config"] = {"format": {"type": "json_schema", "schema": json_schema}}
-        if thinking and tier in ("smart", "reasoning"):
+            output_config["format"] = {"type": "json_schema", "schema": json_schema}
+        if effort:
+            output_config["effort"] = effort
+        if output_config:
+            kwargs["output_config"] = output_config
+        if thinking == "disabled":
+            if model in THINKING_MODELS:
+                kwargs["thinking"] = {"type": "disabled"}
+        elif thinking and tier in ("smart", "reasoning"):
             kwargs["thinking"] = {"type": "adaptive"}
 
         resp = self._c().messages.create(**kwargs)
@@ -348,7 +369,9 @@ class QuantLLM:
         self._record_spend(out["cost_usd"])
         self._record_call(mode="sync", model=resp.model, tier=tier, cost=out["cost_usd"],
                           usage=out["usage"], max_tokens=budget,
-                          stop_reason=out["stop_reason"], site=_call_site())
+                          stop_reason=out["stop_reason"], site=_call_site(),
+                          effort=effort, thinking_mode=("disabled" if thinking == "disabled"
+                                                        else ("adaptive" if thinking else None)))
         if json_schema:
             out["data"], out["parse_error"] = _parse_structured(text, out["stop_reason"])
         return out
@@ -384,6 +407,8 @@ class QuantLLM:
         system: str | None = None,
         json_schema: dict | None = None,
         max_tokens: int = 2048,
+        thinking: bool | str = False,
+        effort: str | None = None,
         cache_system: bool = True,
         thinking_headroom: int | None = None,
     ) -> str:
@@ -398,8 +423,9 @@ class QuantLLM:
         from anthropic.types.messages.batch_create_params import Request
 
         model = self.model_for(tier)
+        no_thinking = thinking == "disabled"
         headroom = thinking_headroom if thinking_headroom is not None else (
-            THINKING_HEADROOM if model in THINKING_MODELS else 0)
+            0 if no_thinking else (THINKING_HEADROOM if model in THINKING_MODELS else 0))
         max_tokens = max_tokens + headroom
         pin, pout = self._price_for(model)
         est = len(items) * (10000 * pin + max_tokens * pout) / 1e6 * 0.5  # Batch is 50% off
@@ -423,8 +449,17 @@ class QuantLLM:
             }
             if sysblock:
                 params["system"] = sysblock
+            oc: dict[str, Any] = {}
             if json_schema:
-                params["output_config"] = {"format": {"type": "json_schema", "schema": json_schema}}
+                oc["format"] = {"type": "json_schema", "schema": json_schema}
+            if effort:
+                oc["effort"] = effort
+            if oc:
+                params["output_config"] = oc
+            if no_thinking and model in THINKING_MODELS:
+                params["thinking"] = {"type": "disabled"}
+            elif thinking and tier in ("smart", "reasoning"):
+                params["thinking"] = {"type": "adaptive"}
             reqs.append(Request(custom_id=it["custom_id"], params=MessageCreateParamsNonStreaming(**params)))
         batch_id = self._c().messages.batches.create(requests=reqs).id
         # Submission is logged separately from results: the collector runs hours later in
