@@ -19,7 +19,7 @@ import time
 from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 ROOT = Path(__file__).parent.parent.parent
 DATA_DIR = ROOT / "data" / "processed"
@@ -89,14 +89,14 @@ def _scan_store() -> dict[str, Any]:
     """
     now = time.time()
     if _ds_cache["value"] is not None and now - _ds_cache["at"] < _DS_TTL:
-        return _ds_cache["value"]
+        return cast(dict[str, Any], _ds_cache["value"])
 
     venues: Counter[str] = Counter()
     timeframes: Counter[str] = Counter()
     matrix: Counter[tuple[str, str]] = Counter()
     symbols: set[str] = set()
     venues_by_symbol: dict[str, set[str]] = {}
-    recency = Counter()
+    recency: Counter[str] = Counter()
     total_bytes = 0
     n = 0
     newest = 0.0
@@ -329,9 +329,10 @@ def _tile_trials() -> dict[str, Any]:
         stats = ledger.family_stats("wf_scan") or {}
         n_unique = stats.get("n_unique") or 0
         passed = stats.get("n_ever_passed") or 0
-        rows = [{"k": r.get("strategy"), "v": round(100 * (_num(r.get("pass_rate")) or 0), 1)}
-                for r in (ledger.strategy_breakdown("wf_scan") or []) if r.get("strategy")]
-        rows.sort(key=lambda r: -r["v"])
+        rows: list[dict[str, Any]] = [
+            {"k": r.get("strategy"), "v": round(100 * (_num(r.get("pass_rate")) or 0), 1)}
+            for r in (ledger.strategy_breakdown("wf_scan") or []) if r.get("strategy")]
+        rows.sort(key=lambda r: -float(r["v"]))
         out.update({
             "n_unique": n_unique,
             "pass_rate": round(100 * passed / n_unique, 2) if n_unique else None,
@@ -583,7 +584,7 @@ def summary(force: bool = False) -> dict[str, Any]:
     with _cache_lock:
         cached = _cache["payload"]
         if cached is not None and not force and now - _cache["at"] < _TTL_SECONDS:
-            return cached
+            return cast(dict[str, Any], cached)
 
     tiles: dict[str, Any] = {}
     deadline = time.monotonic() + _BUILD_BUDGET_SECONDS

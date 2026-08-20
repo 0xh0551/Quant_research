@@ -17,8 +17,11 @@ primary model's side (and how big), which lifts precision and enables bet sizing
 
 from __future__ import annotations
 
+from typing import cast
+
 import numpy as np
 import pandas as pd
+from numpy.typing import NDArray
 
 
 def ewma_volatility(close: pd.Series, span: int = 50) -> pd.Series:
@@ -86,4 +89,4 @@ def meta_labels(primary_side: np.ndarray, realized_ret: np.ndarray) -> np.ndarra
     """
     side = np.asarray(primary_side, dtype=float)
     ret = np.asarray(realized_ret, dtype=float)
-    return ((side * ret) > 0).astype(int)
+    return cast(NDArray, ((side * ret) > 0).astype(int))

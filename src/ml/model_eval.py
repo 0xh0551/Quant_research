@@ -11,6 +11,7 @@ small random search otherwise).
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -112,7 +113,7 @@ def evaluate_dataset(
     )
 
 
-def optimize_hyperparams(df: pd.DataFrame, n_trials: int = 25, **eval_kwargs) -> CVResult:
+def optimize_hyperparams(df: pd.DataFrame, n_trials: int = 25, **eval_kwargs: Any) -> CVResult:
     """Tune GBM hyperparameters maximizing purged-CV AUC.
 
     Uses Optuna (Bayesian TPE) when installed; otherwise a deterministic random
@@ -129,7 +130,7 @@ def optimize_hyperparams(df: pd.DataFrame, n_trials: int = 25, **eval_kwargs) ->
         import optuna
         optuna.logging.set_verbosity(optuna.logging.WARNING)
 
-        def objective(trial):
+        def objective(trial: Any) -> float:
             params = {
                 "n_estimators": trial.suggest_categorical("n_estimators", space_random["n_estimators"]),
                 "max_depth": trial.suggest_categorical("max_depth", space_random["max_depth"]),
@@ -146,12 +147,12 @@ def optimize_hyperparams(df: pd.DataFrame, n_trials: int = 25, **eval_kwargs) ->
         return best
     except ImportError:
         rng = np.random.default_rng(42)
-        best: CVResult | None = None
+        fallback_best: CVResult | None = None
         for _ in range(min(n_trials, 12)):
-            params = {k: rng.choice(v).item() for k, v in space_random.items()}
+            params = {k: rng.choice(np.asarray(v)).item() for k, v in space_random.items()}
             res = evaluate_dataset(df, params=params, **eval_kwargs)
-            if best is None or res.mean_auc > best.mean_auc:
-                best = res
-        if best is not None:
-            best.note = "random_search(optuna_unavailable)"
-        return best or CVResult(0.5, 0.0, 0.0, 0, len(df))
+            if fallback_best is None or res.mean_auc > fallback_best.mean_auc:
+                fallback_best = res
+        if fallback_best is not None:
+            fallback_best.note = "random_search(optuna_unavailable)"
+        return fallback_best or CVResult(0.5, 0.0, 0.0, 0, len(df))

@@ -2,7 +2,9 @@
 """Probe what NATIVE Hyperliquid data is actually available (no proxy).
 Decides the money-flow strategy's foundation: OHLCV depth, Open Interest, funding,
 volume — all from HL's own API."""
-import ccxt, time, json
+import time
+
+import ccxt
 
 ex = ccxt.hyperliquid()
 
@@ -23,7 +25,7 @@ try:
     meta, ctxs = info[0], info[1]
     names = [u["name"] for u in meta["universe"]]
     rows = []
-    for nm, c in zip(names, ctxs):
+    for nm, c in zip(names, ctxs, strict=False):
         oi = float(c.get("openInterest", 0) or 0)
         mark = float(c.get("markPx", 0) or 0)
         vol = float(c.get("dayNtlVlm", 0) or 0)

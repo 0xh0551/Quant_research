@@ -67,7 +67,7 @@ def _pbo_reference(returns_matrix, n_splits=16):
     from scipy import stats as _stats
 
     M = np.asarray(returns_matrix, dtype=float)
-    T, N = M.shape
+    T, _N = M.shape
     s = n_splits - (n_splits % 2)
     block_idx = np.array_split(np.arange(T), s)
     blocks = list(range(s))

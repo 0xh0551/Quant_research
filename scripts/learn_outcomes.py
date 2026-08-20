@@ -47,7 +47,7 @@ def print_summary(res: dict) -> None:
                 f"{p['decayed_avg_profit']*100:>8.2f}% {p['latest_selected_score']:>6} "
                 f"{p['latest_trades']:>6} {(p['latest_win_rate'] or 0)*100:>4.0f}%"
             )
-    print(f"\n[written] outputs/{{pair_priors,score_calibration,retrain_priority}}.json")
+    print("\n[written] outputs/{pair_priors,score_calibration,retrain_priority}.json")
 
 
 def main() -> int:

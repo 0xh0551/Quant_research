@@ -20,8 +20,9 @@ trades / error → empty dict → multiplier 1.0 → selection unchanged).
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 
 def _base_of(pair: str) -> str:
@@ -37,7 +38,7 @@ def realized_performance(db_path: str | Path, since_days: float = 30.0) -> dict[
     db_path = Path(db_path)
     if not db_path.exists():
         return {}
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=since_days)).strftime("%Y-%m-%d %H:%M:%S")
+    cutoff = (datetime.now(UTC) - timedelta(days=since_days)).strftime("%Y-%m-%d %H:%M:%S")
     try:
         con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         rows = con.execute(
@@ -88,7 +89,7 @@ def feedback_multiplier(
 
 
 def apply_feedback(
-    table: dict[str, dict], perf: dict[str, dict], **kw,
+    table: dict[str, dict], perf: dict[str, dict], **kw: Any,
 ) -> dict[str, dict]:
     """Adjust each base's score in-place by its realized-performance multiplier.
 

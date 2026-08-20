@@ -34,14 +34,15 @@ and (via event_risk.build) the `global.embargo` block of event_risk.json.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import math
 import re
 import sqlite3
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
@@ -56,7 +57,7 @@ MEMORY = OUT / "incident_memory.json"
 EMBARGO_STATE = OUT / "embargo_state.json"
 EMBARGO_LOG = OUT / "embargo_log.jsonl"
 
-UTC = timezone.utc
+UTC = UTC
 MAJORS = ("BTC/USDT:USDT", "ETH/USDT:USDT", "SOL/USDT:USDT")
 LIVE_WINDOW_H = 6            # the recurrence detector looks at the last 6h
 DETECT_BUCKET_H = 4          # incident detection bucket
@@ -228,11 +229,11 @@ def detect_incidents(trades: pd.DataFrame, *, equity: float | None = None,
             "hours": float((t1 - t0).total_seconds() / 3600),
             "fleet_pnl": round(float(w["pnl"].sum()), 2),
             "severity": round(float(-w["pnl"].sum()) / eq, 5),
-            "n_trades": int(len(w)),
+            "n_trades": len(w),
             "n_bots_losing": int(sum(1 for v in per_bot.values() if v < 0)),
             "per_bot": per_bot,
             "threshold": round(thr, 2),
-            "baseline": {"mu": round(mu, 2), "sd": round(sd, 2), "buckets": int(len(pnl))},
+            "baseline": {"mu": round(mu, 2), "sd": round(sd, 2), "buckets": len(pnl)},
         })
     return out
 
@@ -248,7 +249,7 @@ def bot_impact(trades: pd.DataFrame, t0: pd.Timestamp, t1: pd.Timestamp) -> dict
     losers = w[w["pnl"] < 0]
     in_profit_first = losers[losers.get("mfe", 0) >= 0.005] if "mfe" in w.columns else losers.iloc[0:0]
     return {
-        "n_trades": int(len(w)),
+        "n_trades": len(w),
         "fleet_pnl": round(float(w["pnl"].sum()), 2),
         "long_pnl": round(long_pnl, 2),
         "short_pnl": round(short_pnl, 2),
@@ -288,7 +289,7 @@ def fleet_bleeding(trades: pd.DataFrame | None = None, at: pd.Timestamp | None =
     pnl = float(w["pnl"].sum())
     n_neg = int((w.groupby("bot")["pnl"].sum() < 0).sum()) if len(w) else 0
     bleeding = (pnl <= -ARM_LOSS_FRAC * eq) and (n_neg >= ARM_MIN_BOTS)
-    return bleeding, {"window_h": window_h, "pnl": round(pnl, 2), "n_trades": int(len(w)),
+    return bleeding, {"window_h": window_h, "pnl": round(pnl, 2), "n_trades": len(w),
                       "bots_negative": n_neg, "threshold": round(-ARM_LOSS_FRAC * eq, 2)}
 
 
@@ -303,7 +304,7 @@ _FUND_CACHE: dict[str, list] = {}
 _EX_CACHE: dict[str, Any] = {}
 
 
-def _ex(venue: str = "bybit"):
+def _ex(venue: str = "bybit") -> Any:
     """One ccxt instance per venue per process (load_markets is ~3s; 18 symbols x 3s
     was the whole cold-start cost)."""
     ex = _EX_CACHE.get(venue)
@@ -357,7 +358,7 @@ def _ohlcv_1h(symbol: str, since: pd.Timestamp, until: pd.Timestamp, venue: str 
     return cached[(cached["ts"] >= since) & (cached["ts"] <= until)].reset_index(drop=True)
 
 
-def _paged_history(fetch, symbol: str, since: pd.Timestamp, step_ms: int, key: str,
+def _paged_history(fetch: Any, symbol: str, since: pd.Timestamp, step_ms: int, key: str,
                    extra_args: tuple = ()) -> list[tuple[pd.Timestamp, float]]:
     """Walk a bybit history endpoint forward from `since` (each call caps at 200)."""
     pts: dict[pd.Timestamp, float] = {}
@@ -433,7 +434,7 @@ def _coingecko_flows(t0: pd.Timestamp, t1: pd.Timestamp) -> dict:
     out: dict[str, Any] = {}
     try:
         import requests
-        days = max(2, int(math.ceil((pd.Timestamp.now(tz=UTC) - t0).total_seconds() / 86400)) + 1)
+        days = max(2, math.ceil((pd.Timestamp.now(tz=UTC) - t0).total_seconds() / 86400) + 1)
         days = min(days, 30)
         paths = {}
         for cid in ("bitcoin", "ethereum", "tether", "usd-coin"):
@@ -511,7 +512,7 @@ def _window_features(df: pd.DataFrame, t0: pd.Timestamp, t1: pd.Timestamp) -> di
     return {"ret_pct": round(ret, 3), "range_pct": round(rng, 3), "maxdd_pct": round(dd, 3),
             "maxru_pct": round(ru, 3), "whipsaw_pct": round(whipsaw, 3),
             "vol_ratio": round(vol_ratio, 3), "pre24_vol_ratio": round(pre_ratio, 3),
-            "rv_z": round(rv_z, 2), "n_bars": int(len(w))}
+            "rv_z": round(rv_z, 2), "n_bars": len(w)}
 
 
 def market_signature(t0: pd.Timestamp, t1: pd.Timestamp, bases: list[str] | None = None,
@@ -528,7 +529,7 @@ def market_signature(t0: pd.Timestamp, t1: pd.Timestamp, bases: list[str] | None
     sig: dict[str, Any] = {"t0": t0.isoformat(), "t1": t1.isoformat(),
                            "hours": round((t1 - t0).total_seconds() / 3600, 2), "majors": majors}
     if majors:
-        def _avg(k):
+        def _avg(k: str) -> float:
             return round(float(np.mean([m[k] for m in majors.values()])), 3)
         btc = majors.get("BTC") or next(iter(majors.values()))
         sig.update({
@@ -622,7 +623,8 @@ def counterfactual(trades: pd.DataFrame, rule: dict, t0: pd.Timestamp, t1: pd.Ti
     floor_mult size -> their PnL is scaled by floor_mult). Foregone gains are reported
     honestly (positive organic PnL blocked counts against).
     """
-    t0 = pd.Timestamp(t0); t1 = pd.Timestamp(t1)
+    t0 = pd.Timestamp(t0)
+    t1 = pd.Timestamp(t1)
     fired_at, hits_at, bleed_at = None, [], {}
     for h in range(-scan_back_h, int((t1 - t0).total_seconds() // 3600) + 1):
         end = t0 + pd.Timedelta(hours=h)
@@ -648,11 +650,11 @@ def counterfactual(trades: pd.DataFrame, rule: dict, t0: pd.Timestamp, t1: pd.Ti
     return {
         "fired": True, "fired_at": fired_at.isoformat(), "embargo_until": e_end.isoformat(),
         "lead_hours_before_losses": lead_h, "hits": hits_at, "bleeding_at_fire": bleed_at,
-        "organic_trades_blocked": int(len(organic)),
+        "organic_trades_blocked": len(organic),
         "organic_blocked_pnl": round(float(organic["pnl"].sum()), 2),
         "organic_blocked_losers": round(float(organic.loc[organic["pnl"] < 0, "pnl"].sum()), 2),
         "organic_blocked_winners": round(float(organic.loc[organic["pnl"] > 0, "pnl"].sum()), 2),
-        "floor_trades": int(len(floor)), "floor_pnl": round(float(floor["pnl"].sum()), 2),
+        "floor_trades": len(floor), "floor_pnl": round(float(floor["pnl"].sum()), 2),
         "saved_usd": round(saved + floor_saved, 2),
         "per_bot_saved": (-organic.groupby("bot")["pnl"].sum()).round(2).to_dict(),
     }
@@ -819,10 +821,8 @@ def explain_incident(inc: dict, sig: dict, impact: dict, *, tier: str = "smart",
             elif bt == "server_tool_use":
                 n_search += 1
         prose = re.sub(r"</?cite[^>]*>", "", "\n".join(texts)).strip()
-        try:
+        with contextlib.suppress(Exception):
             llm.record_web_search(resp.usage, model, n_search)
-        except Exception:
-            pass
         if not prose:
             return None
         # step 2 — schema-validated extraction (cheap tier; the API enforces the shape)
@@ -852,7 +852,7 @@ def explain_incident(inc: dict, sig: dict, impact: dict, *, tier: str = "smart",
 # --------------------------------------------------------------------------- #
 def load_memory() -> dict:
     try:
-        return json.loads(MEMORY.read_text())
+        return cast(dict[Any, Any], json.loads(MEMORY.read_text()))
     except Exception:
         return {"incidents": [], "n_incidents": 0}
 
@@ -911,7 +911,7 @@ def match_live(sig: dict, mem: dict | None = None) -> dict | None:
 
 def _load_state() -> dict:
     try:
-        return json.loads(EMBARGO_STATE.read_text())
+        return cast(dict[Any, Any], json.loads(EMBARGO_STATE.read_text()))
     except Exception:
         return {}
 
@@ -1027,7 +1027,7 @@ def score_embargoes(trades: pd.DataFrame | None = None) -> list[dict]:
     (did the fingerprint keep/escalate) plus the realised PnL of what did trade."""
     if not EMBARGO_LOG.exists():
         return []
-    recs = [json.loads(l) for l in EMBARGO_LOG.read_text().splitlines() if l.strip()]
+    recs = [json.loads(ln) for ln in EMBARGO_LOG.read_text().splitlines() if ln.strip()]
     scored_since = {r.get("since") for r in recs if r.get("event") == "scored"}
     now = pd.Timestamp.now(tz=UTC)
     out = []
@@ -1056,7 +1056,7 @@ def score_embargoes(trades: pd.DataFrame | None = None) -> list[dict]:
                "realised": {k: sig.get(k) for k in ("btc_ret_pct", "btc_range_pct", "whipsaw_pct",
                                                     "vol_ratio", "rv_z", "alt_down_share")},
                "rule_hits_during": n, "hits": hits,
-               "trades_opened_during": int(len(during)),
+               "trades_opened_during": len(during),
                "floor_trades_during": int((during["enter_tag"] == "activity_floor").sum()),
                "pnl_opened_during": round(float(during["pnl"].sum()), 2),
                "verdict": "stress_materialised" if n >= RULE_MIN_HITS else "false_alarm",

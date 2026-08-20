@@ -6,13 +6,14 @@ When allow_short=True (futures mode), strategies return -1/0/+1 signals.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import pandas as pd
 
 from src.features.library import _rsi, _true_range
-
 
 # ── Config dataclasses ────────────────────────────────────────────────────────
 
@@ -262,7 +263,7 @@ def build_strategy_signals_with_params(
         "engulfing": EngulfingConfig,
         "ml_signal": MLSignalConfig,
     }
-    strat_func_map = {
+    strat_func_map: dict[str, Callable[..., Any]] = {
         "ema_trend": ema_trend,
         "rsi_mean_reversion": rsi_mean_reversion,
         "bollinger_mean_reversion": bollinger_mean_reversion,
@@ -636,9 +637,7 @@ def _stateful_signal(
             state = 1
         elif se[i]:
             state = -1
-        elif state == 1 and lx[i]:
-            state = 0
-        elif state == -1 and sx[i]:
+        elif (state == 1 and lx[i]) or (state == -1 and sx[i]):
             state = 0
         position[i] = float(state)
     return pd.Series(position, index=long_entry.index)

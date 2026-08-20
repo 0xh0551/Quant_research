@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
+from src.analysis.wf_scan import _parse_dataset, scan_dataset, write_manifest
 from src.backtesting.engine import BacktestConfig, VectorizedBacktester
-from src.analysis.wf_scan import scan_dataset, write_manifest, _parse_dataset
 
 
 def _trend_data(n: int = 12000, seed: int = 7) -> pd.DataFrame:

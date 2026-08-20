@@ -10,6 +10,7 @@ López de Prado, *Advances in Financial Machine Learning*, ch. 7.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from typing import Any
 
 import numpy as np
 
@@ -30,7 +31,7 @@ class PurgedKFold:
         self.t1 = None if t1 is None else np.asarray(t1, dtype=int)
         self.embargo_pct = embargo_pct
 
-    def split(self, X) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    def split(self, X: Any) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         n = len(X)
         idx = np.arange(n)
         t1 = self.t1 if self.t1 is not None else idx
@@ -55,7 +56,7 @@ class PurgedKFold:
             if train_idx.size and test_idx.size:
                 yield train_idx, test_idx
 
-    def get_n_splits(self, X=None, y=None, groups=None) -> int:
+    def get_n_splits(self, X: Any = None, y: Any = None, groups: Any = None) -> int:
         return self.n_splits
 
 

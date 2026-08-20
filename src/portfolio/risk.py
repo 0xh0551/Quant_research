@@ -11,6 +11,8 @@ These sit on top of a sized strategy and cut exposure when conditions warrant:
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 
@@ -27,7 +29,7 @@ def drawdown_control(
     return scale.shift(1).fillna(1.0)
 
 
-def apply_drawdown_control(returns: pd.Series, **kw) -> pd.Series:
+def apply_drawdown_control(returns: pd.Series, **kw: Any) -> pd.Series:
     """Return the de-levered return stream under drawdown control."""
     scale = drawdown_control(returns, **kw)
     return pd.Series(returns).astype(float).fillna(0.0) * scale

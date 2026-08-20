@@ -24,6 +24,7 @@ in shape, so it plugs into `scripts/rotate_bot_pairs.py` the same way.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -88,7 +89,7 @@ def money_flow_score(df: pd.DataFrame, lookback: int = 20) -> dict:
     surge = float(np.clip((rvol - 1.0) / 2.0, 0.0, 1.0))  # rvol>=3x → fully saturated
 
     signed = (pressure * 0.5 + confirm * 0.3) / 0.8  # in [-1, 1]
-    score = int(round((abs(signed) * 0.7 + surge * 0.3) * 100))
+    score = round((abs(signed) * 0.7 + surge * 0.3) * 100)
     score = max(0, min(100, score))
 
     if score < 20 or abs(signed) < 0.1:
@@ -165,7 +166,7 @@ def money_flow_multiplier(row: dict | None, *, max_adj: float = 0.15,
 
 
 def apply_money_flow(
-    table: dict[str, dict], mf: dict, quote: str = "USDT", **kw,
+    table: dict[str, dict], mf: dict, quote: str = "USDT", **kw: Any,
 ) -> dict[str, dict]:
     """Adjust each base's score in-place by its money-flow multiplier.
 

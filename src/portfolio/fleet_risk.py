@@ -32,6 +32,7 @@ CLI:  python -m src.portfolio.fleet_risk   → writes outputs/fleet_risk.json
 
 from __future__ import annotations
 
+import contextlib
 import json
 import sqlite3
 from datetime import UTC, datetime
@@ -202,10 +203,8 @@ def _limits() -> dict[str, float]:
     cfg = (local_config._load().get("fleet_risk_limits") or {})
     merged = dict(DEFAULT_LIMITS)
     for k, v in cfg.items():
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             merged[k] = float(v)
-        except (TypeError, ValueError):
-            pass
     return merged
 
 
@@ -213,10 +212,8 @@ def _wallets() -> dict[str, float]:
     raw = local_config._load().get("bot_wallets") or {}
     out: dict[str, float] = {}
     for k, v in raw.items():
-        try:
+        with contextlib.suppress(TypeError, ValueError):
             out[str(k)] = float(v)
-        except (TypeError, ValueError):
-            pass
     return out
 
 
@@ -305,7 +302,7 @@ def build_snapshot() -> dict[str, Any]:
                 "net_notional": round(net, 2),
                 "beta_btc": None if not np.isfinite(beta) else beta,
                 "beta_delta": round(beta_delta, 2),
-                "n_positions": int(len(grp)),
+                "n_positions": len(grp),
                 "bots": sorted(grp["bot"].unique().tolist()),
             })
         per_asset.sort(key=lambda a: -a["gross_notional"])
@@ -330,7 +327,7 @@ def build_snapshot() -> dict[str, Any]:
         "net_beta_delta": round(net_delta, 2),
         "net_beta_delta_pct": round(100.0 * net_delta / fleet_equity, 1) if fleet_equity > 0 else None,
         "hhi": round(hhi, 3),
-        "n_positions": int(len(pos_df)),
+        "n_positions": len(pos_df),
         "n_bots": len(per_bot),
         "avg_pairwise_corr": corr["avg_pairwise"],
     }

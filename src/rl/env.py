@@ -11,6 +11,9 @@ evaluate out-of-sample on the next).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any, ClassVar
+
 import numpy as np
 import pandas as pd
 
@@ -54,7 +57,7 @@ class TradingEnv:
     def n_actions(self) -> int:
         return len(self.actions)
 
-    def reset(self, start: int | None = None):
+    def reset(self, start: int | None = None) -> np.ndarray:
         self.t = self.window if start is None else max(start, self.window)
         self.position = 0.0
         self.equity = 1.0
@@ -64,7 +67,7 @@ class TradingEnv:
         win = self._feat[self.t - self.window:self.t].ravel()
         return np.concatenate([win, [self.position]]).astype(np.float32)
 
-    def step(self, action_idx: int):
+    def step(self, action_idx: int) -> tuple[np.ndarray | None, float, bool, dict[str, Any]]:
         target = float(self.actions[int(action_idx)])
         turnover = abs(target - self.position)
         nxt = self._ret[self.t] if self.t < self.n else 0.0
@@ -76,12 +79,14 @@ class TradingEnv:
         return (self._obs() if not done else None), float(reward), done, {"equity": self.equity}
 
 
-def evaluate_policy(env: TradingEnv, policy_fn) -> dict:
+def evaluate_policy(env: TradingEnv, policy_fn: Callable[[np.ndarray], int]) -> dict:
     """Roll a policy(obs)->action_idx through the env once; report net metrics."""
-    obs = env.reset()
+    obs: np.ndarray | None = env.reset()
     rewards: list[float] = []
     done = False
-    while not done:
+    # step() hands back None for the terminal observation; the loop ends there,
+    # so the policy is never asked to act on it.
+    while not done and obs is not None:
         a = policy_fn(obs)
         obs, r, done, _info = env.step(a)
         rewards.append(r)
@@ -99,20 +104,21 @@ if _HAS_GYM:  # pragma: no cover - exposed only when gymnasium is installed
     class GymTradingEnv(gym.Env):
         """Gymnasium adapter so the env can be dropped into Stable-Baselines3."""
 
-        metadata = {"render_modes": []}  # noqa: RUF012 (gymnasium convention)
+        metadata: ClassVar[dict[str, Any]] = {"render_modes": []}  # gymnasium convention
 
-        def __init__(self, df, feature_cols, **kw):
+        def __init__(self, df: Any, feature_cols: Any, **kw: Any) -> None:
             super().__init__()
             self._env = TradingEnv(df, feature_cols, **kw)
             self.action_space = gym.spaces.Discrete(self._env.n_actions)
             self.observation_space = gym.spaces.Box(
                 low=-np.inf, high=np.inf, shape=(self._env.observation_dim,), dtype=np.float32)
 
-        def reset(self, *, seed=None, options=None):
+        def reset(self, *, seed: int | None = None,
+                  options: dict[str, Any] | None = None) -> tuple[np.ndarray, dict[str, Any]]:
             super().reset(seed=seed)
             return self._env.reset(), {}
 
-        def step(self, action):
+        def step(self, action: Any) -> tuple[np.ndarray, float, bool, bool, dict[str, Any]]:
             obs, r, done, info = self._env.step(action)
             if obs is None:
                 obs = np.zeros(self._env.observation_dim, dtype=np.float32)

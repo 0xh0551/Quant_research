@@ -42,9 +42,7 @@ def _long_short_reference(long_entry, long_exit, short_entry, short_exit):
             state = 1
         elif bool(short_entry.loc[idx]):
             state = -1
-        elif state == 1 and bool(long_exit.loc[idx]):
-            state = 0
-        elif state == -1 and bool(short_exit.loc[idx]):
+        elif (state == 1 and bool(long_exit.loc[idx])) or (state == -1 and bool(short_exit.loc[idx])):
             state = 0
         position.loc[idx] = float(state)
     return position

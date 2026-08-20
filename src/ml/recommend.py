@@ -24,7 +24,7 @@ DEFAULT_VENUES = ("bybit", "gate", "gateio", "gate_io", "okx")
 def estimate_hurst(returns: np.ndarray) -> float:
     """R/S-based Hurst exponent, clipped to [0.1, 0.9]; 0.5 on failure."""
     try:
-        lags = [l for l in [2, 4, 8, 16, 32, 64] if l < len(returns) // 4]
+        lags = [lag for lag in [2, 4, 8, 16, 32, 64] if lag < len(returns) // 4]
         if len(lags) < 2:
             return 0.5
         rs_values = []

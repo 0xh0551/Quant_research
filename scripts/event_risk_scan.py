@@ -22,6 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.intelligence.event_risk import build  # noqa: E402
+
 from scripts.ob_collect import _pairs_from_assignments  # noqa: E402
 
 

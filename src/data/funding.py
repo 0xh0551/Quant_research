@@ -13,13 +13,14 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
 logger = logging.getLogger(__name__)
 
 
-def _exchange(name: str):
+def _exchange(name: str) -> Any:
     import ccxt
     klass = getattr(ccxt, name, None)
     if klass is None:
