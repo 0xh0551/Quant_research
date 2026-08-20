@@ -57,6 +57,7 @@ async function init() {
   setLang(lang === 'en' ? 'en' : 'fa');
 
   setTodayEnd();
+  restoreRail();
   buildRail();
   initResearchStrategies();
   showSection('home');
