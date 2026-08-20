@@ -322,11 +322,19 @@ def _synthesize(bot, causes, loss_by_cause, trades_out, llm, tier) -> dict:
         "recover the most money, ordered by expected impact. Ground each fix in the dollar-weighted "
         "cause breakdown.\n\n" + json.dumps(ev, default=str)
     )
-    # 1500 = room for a headline + 3 grounded fixes; the client adds the thinking
-    # allowance on top (Sonnet spent 905 tokens thinking before writing a character,
-    # which is what truncated the old 800-token budget into "synthesis parse error").
+    # 1500 = room for a headline + 3 grounded fixes.
+    #
+    # effort=low (2026-08-19): Sonnet thinks adaptively unless told otherwise and those
+    # tokens are billed as output — the 905 it once spent reasoning before writing a
+    # character are what truncated the old 800-token budget into "synthesis parse
+    # error". Depth is reduced rather than removed: this output names the systemic fixes
+    # that build_risk_actions turns into ranked actions, so it is judgment-adjacent, not
+    # a restatement. The dollar ranking it works from is already ours, which is why
+    # shallow reasoning is enough — but "no reasoning" is a bigger step than the
+    # evidence so far supports. Revisit once the call ledger shows what it actually
+    # spends here.
     res = llm.complete(prompt, tier=tier, system=SYSTEM_RUBRIC, json_schema=SYNTH_SCHEMA,
-                       max_tokens=1500)
+                       max_tokens=1500, effort="low")
     data = res.get("data")
     if data:
         return data
