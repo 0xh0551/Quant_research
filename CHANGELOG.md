@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.6.0] — 2026-08-20
+
+### One screenful
+
+The wall had grown past what a laptop can show at once, and past what anyone
+reads at a glance. Both are now the same fix: less on each tile, and a grid
+sized to the viewport instead of flowing down it.
+
+- **All nineteen tiles fit one screen, no scrolling.** The grid is 5×4 (4×5
+  under 1240 px) with `1fr` rows, so each tile takes an equal share of whatever
+  height the screen has rather than a fixed one. Below 900 px it goes back to
+  scrolling, where tiles would be unreadable at any row height.
+- **Three numbers and one chart per tile — no more.** Every renderer is the same
+  shape now, checked in the test harness. The in-tile tables, second charts,
+  captions and segmented toggles are gone; that detail is one click away in the
+  section it belongs to. Bigger as a result: KPI values 19 px (hero 24) with the
+  chart taking all the leftover height.
+- **A new chart primitive that stretches.** `svgCols` is a column strip whose
+  bars own the remaining flex space, so the same tile looks right at a 130 px row
+  on a small laptop and a 210 px row on a large one. Sparklines and the ratio
+  meter fill the slot the same way. On screens under 800 px tall the column
+  value labels drop rather than the type shrinking.
+- **Favicon actually reads as the mark.** It was the full logo artwork on its
+  740-unit canvas — at 16 px the 16 %-opacity cells vanished and the margins ate
+  the glyph. Redrawn for the slot: same 4×3 lattice and same lit scan cell, on a
+  plate for contrast, with cut margins and a lifted opacity ramp. Rendered and
+  checked at 16/32/64 px, plus an apple-touch-icon.
+- Fixed: the research tile charted `by_timeframe`, which its payload never
+  carried, so it drew an empty frame. 71 i18n keys the trim orphaned removed.
+
 ## [1.5.2] — 2026-08-20
 
 ### Uniform tiles, bigger type

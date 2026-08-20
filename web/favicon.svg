@@ -1,23 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="130 165 740 740" width="740" height="740" role="img" aria-label="Quant Research">
-  <style>
-    .b{fill:#1B2C52} .a{fill:#2DD4BF} .halo{opacity:.16}
-    .t1{opacity:.16} .t2{opacity:.24} .t3{opacity:.28} .t4{opacity:.34} .t5{opacity:.42} .t6{opacity:.50}
-    @media (prefers-color-scheme: dark){
-      .b{fill:#5B79C9} .a{fill:#5EE6D0} .halo{opacity:.20}
-      .t1{opacity:.34} .t2{opacity:.40} .t3{opacity:.46} .t4{opacity:.52} .t5{opacity:.60} .t6{opacity:.66}
-    }
-  </style>
-  <rect x="148.55" y="257.15" width="87.2" height="87.2" rx="26" class="b t1"/>
-  <rect x="148.55" y="461.52" width="87.2" height="87.2" rx="26" class="b t1"/>
-  <rect x="148.55" y="658.04" width="87.2" height="87.2" rx="26" class="b t1"/>
-  <rect x="352.79" y="257.15" width="87.2" height="87.2" rx="26" class="b t3"/>
-  <rect x="352.79" y="461.52" width="87.2" height="87.2" rx="26" class="b t6"/>
-  <rect x="352.79" y="664.30" width="87.2" height="87.2" rx="26" class="b t3"/>
-  <rect x="561.50" y="257.15" width="87.2" height="87.2" rx="26" class="b t4"/>
-  <rect x="533.10" y="433.12" width="144" height="144" rx="44" class="a halo"/>
-  <rect x="553.10" y="453.12" width="104" height="104" rx="32" class="a"/>
-  <rect x="561.50" y="664.30" width="87.2" height="87.2" rx="26" class="b t5"/>
-  <rect x="761.36" y="250.32" width="87.2" height="87.2" rx="26" class="b t1"/>
-  <rect x="761.36" y="454.68" width="87.2" height="87.2" rx="26" class="b t2"/>
-  <rect x="761.36" y="657.46" width="87.2" height="87.2" rx="26" class="b t1"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
+     role="img" aria-label="Quant Research">
+  <!-- Favicon rendition of the quant mark. Same 4×3 lattice and same lit scan
+       cell as brand/quant-mark.svg, redrawn to survive 16px: a plate for
+       contrast on any tab strip, margins cut to a tenth, cells enlarged
+       relative to their spacing, and the opacity ramp lifted so that no cell
+       drops out at tab size. -->
+  <rect width="64" height="64" rx="14" fill="#0F1626"/>
+  <g fill="#7B93D6">
+    <rect x="5.5"  y="13" width="8" height="8" rx="2.4" opacity=".45"/>
+    <rect x="5.5"  y="28" width="8" height="8" rx="2.4" opacity=".45"/>
+    <rect x="5.5"  y="43" width="8" height="8" rx="2.4" opacity=".45"/>
+    <rect x="20.5" y="13" width="8" height="8" rx="2.4" opacity=".58"/>
+    <rect x="20.5" y="28" width="8" height="8" rx="2.4" opacity=".80"/>
+    <rect x="20.5" y="43" width="8" height="8" rx="2.4" opacity=".58"/>
+    <rect x="35.5" y="13" width="8" height="8" rx="2.4" opacity=".64"/>
+    <rect x="35.5" y="43" width="8" height="8" rx="2.4" opacity=".72"/>
+    <rect x="50.5" y="13" width="8" height="8" rx="2.4" opacity=".45"/>
+    <rect x="50.5" y="28" width="8" height="8" rx="2.4" opacity=".52"/>
+    <rect x="50.5" y="43" width="8" height="8" rx="2.4" opacity=".45"/>
+  </g>
+  <rect x="32.9" y="25.4" width="13.2" height="13.2" rx="4" fill="#5EE6D0" opacity=".24"/>
+  <rect x="34.7" y="27.2" width="9.6" height="9.6" rx="2.9" fill="#5EE6D0"/>
 </svg>

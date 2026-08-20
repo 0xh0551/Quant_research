@@ -138,7 +138,10 @@ function showSection(name) {
   homeAutoRefresh(name === 'home');
   const crumb = document.getElementById('home-crumb');
   if (crumb) crumb.style.display = name === 'home' ? 'none' : '';
-  document.getElementById('content').scrollTop = 0;
+  // The launcher sizes itself to the viewport; every other section scrolls.
+  const content = document.getElementById('content');
+  content.classList.toggle('home-mode', name === 'home');
+  content.scrollTop = 0;
   if (name === 'home') loadHome();
   if (name === 'inventory') loadInventory();
   if (name === 'research') populateResearchDatasets();

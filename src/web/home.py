@@ -625,6 +625,7 @@ def _tile_research() -> dict[str, Any]:
         })
     s = _scan_store()
     return {
+        "by_timeframe": s["by_timeframe"],
         "n_runs": len(runs),
         "recent": recent,
         "by_name": [{"k": k, "v": v} for k, v in names.most_common(5)],
