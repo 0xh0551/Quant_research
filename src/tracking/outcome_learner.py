@@ -274,7 +274,7 @@ def build_retrain_queue(prio: list[dict]) -> list[dict]:
 def bridge_priors(half_life_days: float = 14.0, max_adj: float = 0.25,
                   full_scale_avg: float = 0.02) -> dict:
     """Priors for bots OUTSIDE the rotation ledger (configs/local.json
-    `bridge_bots`, e.g. bot5/bot6) — computed straight from their own
+    `bridge_bots` in the site config) — computed straight from their own
     sqlite with the same time-decayed EWMA. Why (2026-08-12): the nightly
     postmortem joins on pair_priors.json[(bot, base)]; bridge bots were absent
     so every verdict came back prior_flag="unknown" and the postmortem agent
@@ -349,7 +349,7 @@ def run(half_life_days: float = 14.0, write: bool = True) -> dict:
     df = load_ledger()
     calib = score_calibration(df)
     priors = build_priors(df, half_life_days=half_life_days)
-    # bridge bots (bot5/bot6): ledger ندارند → prior از sqlite خودشان؛
+    # bridge bots: ledger ندارند → prior از sqlite خودشان؛
     # کلیدهای ledger-محور دست نمی‌خورند (ledger مرجعِ بات‌های روتیشنی می‌ماند)
     for bot, bases in bridge_priors(half_life_days=half_life_days).items():
         if bot not in priors:

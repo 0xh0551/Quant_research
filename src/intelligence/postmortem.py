@@ -183,7 +183,7 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
 
     # A closed trade's evidence never changes, so neither can its verdict — reuse
     # last night's. Measured 2026-08-12: the 10 worst losers in a 45-day window are
-    # almost the same set every night (bot1 and bot6 overlapped 100% on eight
+    # almost the same set every night (two bots once overlapped 100% on eight
     # consecutive runs), so ~92% of the per-trade calls were re-classifying trades
     # that had already been classified.
     cached = _cached_verdicts(_prior_run(bot))

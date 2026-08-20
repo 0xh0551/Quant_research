@@ -1,7 +1,7 @@
 """Per-bot exit actuator from live trade geometry (MFE/MAE) — the "analytics acts" layer.
 
 Owner asks (2026-08-19):
-  * «چرا فقط bot1 اکچوئیتور دارد؟ هر باتی اکچوئیتور خودش را داشته باشد» → one tuner,
+  * «چرا فقط یک بات اکچوئیتور دارد؟ هر باتی اکچوئیتور خودش را داشته باشد» → one tuner,
     seven bots, each gets its own evidence-based take-profit in PRICE space, written to
     user_data/agent_exits.json and read by the shared strategy helper `_agent_exit.py`.
   * «تمایز مشکلِ ورود از مشکلِ خروج» → `diagnose()` labels each bot exit_problem /
@@ -45,12 +45,10 @@ SMOOTH_STEPS = 2          # ±0.5%
 MIN_IMPROVE_USD = 20.0
 MAX_LOOKBACK_D = 60
 
-# هر بات از «دوره‌ی معماریِ فعلی»اش سنجیده می‌شود — دوره‌های بازنشسته نمی‌آیند
-# (bot1 v3 08-12، bot5 pooled 08-12، bot6 v5 07-27، bot4 v1.7 08-09، ...).
-BOT_EPOCH = {
-    "bot1": "2026-08-12", "bot5": "2026-08-12", "bot6": "2026-07-27",
-    "bot7": "2026-08-10", "bot4": "2026-08-09", "bot2": "2026-08-03", "bot3": "2026-08-01",
-}
+# هر بات از «دوره‌ی معماریِ فعلی»اش سنجیده می‌شود — دوره‌های بازنشسته نمی‌آیند،
+# وگرنه استراتژیِ بازنویسی‌شده با رفتارِ نسخهٔ قبلیِ خودش قضاوت می‌شود.
+# تاریخ‌ها site-local‌اند و از configs/local.json می‌آیند (کلیدِ `bot_epochs`).
+BOT_EPOCH = local_config.bot_epochs()
 # تشخیص: MFE میانگین (قیمتی) بالای این و capture ≤ 0 با PnL منفی = مشکلِ خروج
 DIAG_MFE_EXIT = 0.012
 DIAG_CAPTURE_EXIT = 0.10
@@ -64,9 +62,7 @@ def _bot_dbs() -> dict[str, Path]:
     ud = local_config.user_data_dir()
     if ud is None:
         return {}
-    names = {"bot2": "bot2", "bot3": "bot3", "bot4": "bot4", "bot1": "bot1",
-             "bot5": "bot5", "bot6": "bot6", "bot7": "bot7"}
-    return {b: ud / f"{f}.sqlite" for b, f in names.items() if (ud / f"{f}.sqlite").exists()}
+    return {b: db for b, db in local_config.bot_databases().items() if db.exists()}
 
 
 def load_bot_trades(bot: str, db: Path | None = None) -> pd.DataFrame:

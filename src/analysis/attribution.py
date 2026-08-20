@@ -80,7 +80,7 @@ def load_closed_trades(db_path: Path, since_days: float | None) -> pd.DataFrame:
     if not df.empty:
         # فیکس 2026-08-08: برای تریدهای چندفیلی (DCA)، open_rate_requestedِ تک-سفارشی
         # در برابر VWAPِ کلِ ترید «اسلیپیج/intended» را با میانگین‌گیریِ DCA قاطی
-        # می‌کرد (bot2: entry_slip منفیِ ناممکن روی سفارش‌های limit). VWAPِ
+        # می‌کرد (entry_slip منفیِ ناممکن روی سفارش‌های limit). VWAPِ
         # قیمت‌های درخواستیِ همه‌ی سفارش‌های فیل‌شده‌ی همان سمت، مرجعِ درست است.
         try:
             orders = pd.read_sql_query(
