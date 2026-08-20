@@ -27,6 +27,7 @@ OUTPUTS_DIR = ROOT / "outputs"
 LOG_DIR = ROOT / "logs"
 
 _TTL_SECONDS = 20.0
+_BUILD_BUDGET_SECONDS = 8.0
 _cache: dict[str, Any] = {"at": 0.0, "payload": None}
 _cache_lock = threading.Lock()
 
@@ -319,9 +320,12 @@ def _tile_trials() -> dict[str, Any]:
     out: dict[str, Any] = {"age_h": _age_hours(rep.get("generated_at")),
                            "n_deflated_pass": (rep.get("rigor") or {}).get("n_deflated_pass")}
     with contextlib.suppress(Exception):
-        from src.tracking.trial_ledger import default_ledger
+        from src.tracking.trial_ledger import DEFAULT_DB, TrialLedger
 
-        ledger = default_ledger()
+        # The nightly scan holds this database's write lock for hours. A tile is
+        # decoration: wait a moment, then go without it rather than hang the
+        # whole launcher behind one panel.
+        ledger = TrialLedger(DEFAULT_DB, timeout=1.5)
         stats = ledger.family_stats("wf_scan") or {}
         n_unique = stats.get("n_unique") or 0
         passed = stats.get("n_ever_passed") or 0
@@ -582,7 +586,13 @@ def summary(force: bool = False) -> dict[str, Any]:
             return cached
 
     tiles: dict[str, Any] = {}
+    deadline = time.monotonic() + _BUILD_BUDGET_SECONDS
     for key, build in _BUILDERS.items():
+        if time.monotonic() > deadline:
+            # Something upstream is slow. Ship the tiles that are ready rather
+            # than leave the whole wall on skeletons.
+            tiles[key] = {"error": True}
+            continue
         try:
             tiles[key] = build()
         except Exception:  # a broken artifact blanks one widget, never the grid

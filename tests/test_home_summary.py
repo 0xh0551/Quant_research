@@ -153,3 +153,30 @@ def test_result_is_ttl_cached(isolated):
     first = home.summary(force=True)
     assert home.summary() is first                  # inside the TTL, same object
     assert home.summary(force=True) is not first
+
+
+def test_demo_payload_matches_the_live_shape(isolated):
+    """A screenshot taken in demo mode has to show the real interface.
+
+    The moment the fixture's shape drifts from the endpoint's, the published
+    screenshots stop being evidence of anything — tiles would render from
+    fields the live payload no longer has, or miss ones it gained.
+    """
+    from src.web import demo
+
+    live = home.summary(force=True)["tiles"]
+    fake = demo.summary()["tiles"]
+    assert set(fake) == set(live)
+    for tile in sorted(live):
+        assert set(fake[tile]) == set(live[tile]), f"{tile} drifted"
+
+
+def test_demo_is_off_unless_asked_for(monkeypatch):
+    from src.web import demo
+
+    monkeypatch.delenv("QR_DEMO", raising=False)
+    assert not demo.enabled()
+    monkeypatch.setenv("QR_DEMO", "1")
+    assert demo.enabled()
+    monkeypatch.setenv("QR_DEMO", "0")
+    assert not demo.enabled()

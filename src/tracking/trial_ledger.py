@@ -71,14 +71,22 @@ def _hypothesis_key(dataset: str, strategy: str, direction: str, params: str = "
 
 
 class TrialLedger:
-    def __init__(self, db_path: Path | str = DEFAULT_DB) -> None:
+    def __init__(self, db_path: Path | str = DEFAULT_DB, timeout: float = 30.0) -> None:
+        """``timeout`` is how long a call waits for the write lock.
+
+        The default suits the nightly writers, which must not drop trials. A
+        reader that is only decorating a dashboard should pass something short
+        instead: while ``wf_scan`` holds the lock it would otherwise block for
+        the full thirty seconds, which is long enough to hang a page.
+        """
         self.db_path = Path(db_path)
+        self.timeout = timeout
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as con:
             con.executescript(_SCHEMA)
 
     def _conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path, timeout=30.0)
+        return sqlite3.connect(self.db_path, timeout=self.timeout)
 
     # ── recording ───────────────────────────────────────────────────────
 

@@ -194,8 +194,13 @@ def home_summary(refresh: int = 0) -> dict[str, Any]:
     parquet store, so the launcher never pays for a backtest or an exchange
     round-trip on load.
     """
+    from src.web import demo as _demo
     from src.web import home as _home
 
+    # QR_DEMO swaps in an invented snapshot so the interface can be shown in
+    # public — a README screenshot must not carry live positions or PnL.
+    if _demo.enabled():
+        return _demo.summary()
     return _home.summary(force=bool(refresh))
 
 

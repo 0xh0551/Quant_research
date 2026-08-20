@@ -790,10 +790,27 @@ function renderHome() {
 
   renderHomeFilter();
   applyHomeFilter();
+  paintHomeError();
   if (!d) return;
   wrap.querySelectorAll('.tile').forEach(el => {
     paintTile(el, el.dataset.tile, d.tiles[el.dataset.tile] || {});
   });
+}
+
+/* A launcher stuck on skeletons looks like a slow page; it is usually a stalled
+   backend. Say which, and keep the last good data on screen if there is any. */
+function paintHomeError() {
+  const host = document.getElementById('home-filter');
+  if (!host) return;
+  const old = host.querySelector('.home-err');
+  if (old) old.remove();
+  if (!homeState.error) return;
+  const el = document.createElement('span');
+  el.className = 'home-err';
+  el.title = homeState.error;
+  el.textContent = (homeState.data ? t('home_err_stale') : t('home_err_none'))
+    + ' · ' + homeState.error;
+  host.appendChild(el);
 }
 
 function skeletonTile() {
@@ -845,17 +862,31 @@ function applyHomeFilter() {
 }
 
 // ═════════════════════════════════════════════════════════════ DATA
+/* Give up on a slow summary rather than sit on skeletons.
+
+   The nightly scan holds the trial ledger's write lock for hours, and a fetch
+   with no deadline turned that into a permanently blank wall: the request never
+   returned, `loading` stayed set, and every later call short-circuited on it.
+   Everything after the flag is set now lives inside the try, so the loader can
+   never wedge itself. */
+const HOME_FETCH_TIMEOUT_MS = 9000;
+
 async function loadHome(force) {
   if (homeState.loading) return;
   homeState.loading = true;
-  if (!homeState.data) renderHome();          // paint skeletons on first entry
+  const ctl = new AbortController();
+  const bail = setTimeout(() => ctl.abort(), HOME_FETCH_TIMEOUT_MS);
   try {
-    const r = await fetch('/api/home/summary' + (force ? '?refresh=1' : ''));
+    if (!homeState.data) renderHome();        // paint skeletons on first entry
+    const r = await fetch('/api/home/summary' + (force ? '?refresh=1' : ''),
+                          { signal: ctl.signal });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     homeState.data = await r.json();
     homeState.error = null;
   } catch (e) {
-    homeState.error = String(e);
+    homeState.error = (e && e.name === 'AbortError') ? t('home_slow') : String(e && e.message || e);
   } finally {
+    clearTimeout(bail);
     homeState.loading = false;
   }
   renderHome();
