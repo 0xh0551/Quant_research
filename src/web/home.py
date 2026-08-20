@@ -236,16 +236,21 @@ def _tile_quality() -> dict[str, Any]:
     scannable = int(cov.get("n_scannable") or 0)
     bars = [int(d.get("bars") or 0) for d in datasets]
     gaps = 0
+    stale_rows: list[dict[str, Any]] = []
     today = datetime.now(UTC).date()
     for d in datasets:
         last = d.get("last")
         if not last:
             continue
         try:
-            if (today - datetime.fromisoformat(str(last)).date()).days > 3:
-                gaps += 1
+            days = (today - datetime.fromisoformat(str(last)).date()).days
         except Exception:
-            pass
+            continue
+        if days > 3:
+            gaps += 1
+            stale_rows.append({"dataset": d.get("dataset"), "days": days,
+                               "bars": d.get("bars"), "last": str(last)})
+    stale_rows.sort(key=lambda r: -r["days"])
     buckets = [("<2K", 0, 2000), ("2-6K", 2000, 6000), ("6-20K", 6000, 20000), ("20K+", 20000, 10**9)]
     hist = [{"k": lbl, "v": sum(1 for b in bars if lo <= b < hi)} for lbl, lo, hi in buckets]
     return {
@@ -256,6 +261,7 @@ def _tile_quality() -> dict[str, Any]:
         "median_bars": int(sorted(bars)[len(bars) // 2]) if bars else None,
         "min_scan_bars": cov.get("min_scan_bars"),
         "bars_hist": hist,
+        "stale_rows": stale_rows[:3],
         "age_h": _age_hours(cov.get("generated_at")),
     }
 
@@ -423,7 +429,7 @@ def _tile_attribution() -> dict[str, Any]:
         "entry_slip": _num(totals.get("entry_slip")),
         "exit_slip": _num(totals.get("exit_slip")),
         "n_bots": len(per_bot),
-        "rows": rows[:4],
+        "rows": rows[:5],
         "worst": worst,
         "mfe_capture_avg": round(sum(caps) / len(caps), 3) if caps else None,
         "age_h": _age_hours(at.get("generated_at")),
@@ -663,6 +669,7 @@ def _tile_lab() -> dict[str, Any]:
         pass
     s = _scan_store()
     return {
+        "by_timeframe": s["by_timeframe"],
         "n_strategies": len(names),
         "strategies": names[:8],
         "n_params": n_params,
@@ -679,7 +686,7 @@ def _tile_report() -> dict[str, Any]:
     sharpes = [x for x in sharpes if x is not None]
     rows = [{"symbol": e.get("symbol"), "strategy": e.get("strategy"),
              "timeframe": e.get("timeframe"), "sharpe": _num(e.get("oos_sharpe")),
-             "ret": _num(e.get("oos_mean_return"))} for e in top[:4]]
+             "ret": _num(e.get("oos_mean_return"))} for e in top[:5]]
     return {
         "rows": rows,
         "n_top": len(top),
