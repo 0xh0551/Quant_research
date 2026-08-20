@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.5.1] — 2026-08-20
+
+### Denser wall, and a sidebar you can actually read
+
+- **One continuous grid** instead of a grid per group. Five separate grids each
+  wrapped on their own and left a ragged half-empty row behind them; grouping
+  now lives in the accent colour plus a row of filter chips that also act as the
+  legend. Gutters, paddings and type all came down a step.
+- **Every tile carries more.** New backend reads feed them: walk-forward scan
+  history (`wf_history.jsonl`) and pipeline health history as trend sparklines,
+  the 30-day go-live scorecard folded into the fleet and models rows, funding
+  carry as the cross-exchange leaderboard, per-strategy pass rates, per-bot
+  execution drag, tightest-capacity edges, funding extremes, dataset-length
+  histogram, recent experiment runs, the actual late/missing job list, and the
+  last log problems. 272 readable data points across the wall, up from ~90.
+- **The sidebar is labelled again.** An icon-only rail of nineteen sections was
+  a guessing game. It is now a 172 px grouped menu where every row carries its
+  name *and* that section's headline number (deployable edges, gross leverage,
+  jobs healthy, error count…), collapsible to icons with the choice remembered.
+- Sign now sits outside the currency symbol (`-$14.3`), rotation action codes
+  are translated rather than leaked raw, and narrow tiles lay their KPIs out in
+  two rows instead of four squeezed columns.
+
 ## [1.5.0] — 2026-08-20
 
 ### Home screen: the menu becomes a wall of live widgets

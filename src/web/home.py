@@ -44,6 +44,29 @@ def _read_json(name: str) -> Any:
         return None
 
 
+def _tail_jsonl(name: str, n: int) -> list[dict[str, Any]]:
+    """Last ``n`` records of an append-only log, newest last.
+
+    Read from the end of the file: the rotation and health logs run to hundreds
+    of thousands of lines and the tiles only ever want the tail.
+    """
+    path = OUTPUTS_DIR / name
+    try:
+        with path.open("rb") as fh:
+            fh.seek(0, 2)
+            fh.seek(max(0, fh.tell() - 400 * n))
+            lines = fh.read().decode("utf-8", "replace").splitlines()[-n:]
+    except Exception:
+        return []
+    out = []
+    for line in lines:
+        line = line.strip()
+        if line:
+            with contextlib.suppress(Exception):
+                out.append(json.loads(line))
+    return out
+
+
 def _age_hours(iso: str | None) -> float | None:
     """Hours since an ISO timestamp, tolerant of trailing Z / offsets."""
     if not iso:
@@ -101,6 +124,7 @@ def _scan_store() -> dict[str, Any]:
     added_24h = 0
     added_7d = 0
     biggest = {"name": "", "mb": 0.0}
+    newest_rows: list[tuple[float, str]] = []
 
     try:
         entries = list(DATA_DIR.glob("*.parquet"))
@@ -123,6 +147,7 @@ def _scan_store() -> dict[str, Any]:
         if age_h > 720:
             stale_30d += 1
         newest = max(newest, st.st_mtime)
+        newest_rows.append((st.st_mtime, path.stem))
         mb = st.st_size / 1e6
         if mb > biggest["mb"]:
             biggest = {"name": path.stem, "mb": round(mb, 1)}
@@ -147,6 +172,7 @@ def _scan_store() -> dict[str, Any]:
             venues_by_symbol.setdefault(sym, set()).add(venue)
 
     multi_venue = sum(1 for v in venues_by_symbol.values() if len(v) > 1)
+    newest_rows.sort(reverse=True)
     value = {
         "n_datasets": n,
         "total_gb": round(total_bytes / 1e9, 2),
@@ -160,6 +186,8 @@ def _scan_store() -> dict[str, Any]:
         "added_7d": added_7d,
         "newest_age_h": round((now - newest) / 3600, 2) if newest else None,
         "biggest": biggest,
+        "newest": [{"name": name, "age_h": round((now - mt) / 3600, 2)}
+                   for mt, name in newest_rows[:4]],
         "multi_venue_symbols": multi_venue,
         "n_venues": len({v for vs in venues_by_symbol.values() for v in vs}),
     }
@@ -191,6 +219,8 @@ def _tile_inventory() -> dict[str, Any]:
 def _tile_download() -> dict[str, Any]:
     s = _scan_store()
     return {
+        "newest": s["newest"],
+        "by_timeframe": s["by_timeframe"],
         "refreshed_24h": s["added_24h"],
         "refreshed_7d": s["added_7d"],
         "newest_age_h": s["newest_age_h"],
@@ -216,6 +246,8 @@ def _tile_quality() -> dict[str, Any]:
                 gaps += 1
         except Exception:
             pass
+    buckets = [("<2K", 0, 2000), ("2-6K", 2000, 6000), ("6-20K", 6000, 20000), ("20K+", 20000, 10**9)]
+    hist = [{"k": lbl, "v": sum(1 for b in bars if lo <= b < hi)} for lbl, lo, hi in buckets]
     return {
         "n_datasets": n,
         "n_scannable": scannable,
@@ -223,6 +255,7 @@ def _tile_quality() -> dict[str, Any]:
         "stale_gt_3d": gaps,
         "median_bars": int(sorted(bars)[len(bars) // 2]) if bars else None,
         "min_scan_bars": cov.get("min_scan_bars"),
+        "bars_hist": hist,
         "age_h": _age_hours(cov.get("generated_at")),
     }
 
@@ -247,9 +280,13 @@ def _tile_edges() -> dict[str, Any]:
             tf_robust[tf] = int(v.get("robust") or 0)
         else:
             tf_counts[tf] = int(v or 0)
+    hist = _tail_jsonl("wf_history.jsonl", 30)
     return {
         "n_scanned": rep.get("n_scanned"),
         "n_passed": rep.get("n_passed"),
+        "n_symbols": len(rep.get("by_symbol") or {}),
+        "trend_passed": [int(h.get("n_passed") or 0) for h in hist],
+        "trend_sharpe": [_num(h.get("top_sharpe")) or 0 for h in hist],
         "n_robust": rep.get("n_robust"),
         "n_deployable": rep.get("n_deployable"),
         "n_alerts": len(rep.get("alerts") or []),
@@ -267,15 +304,23 @@ def _tile_fleet() -> dict[str, Any]:
     fr = _read_json("fleet_risk.json") or {}
     f = fr.get("fleet") or {}
     limits = fr.get("limits") or {}
+    card = (_read_json("golive_scorecard.json") or {}).get("bots") or {}
     bots = []
     for b in (fr.get("per_bot") or []):
+        name = b.get("bot")
+        m = (card.get(name) or {}).get("last_30d") or {}
         bots.append({
-            "bot": b.get("bot"),
+            "bot": name,
             "gross_leverage": _num(b.get("gross_leverage")),
             "n_open": b.get("n_open"),
             "pnl": _num(b.get("realized_pnl", 0)) or 0,
+            "net_30d": _num(m.get("net")),
+            "pf_30d": _num(m.get("pf")),
+            "trades_30d": m.get("trades"),
+            "dd_30d": _num(m.get("max_dd_pct")),
         })
     bots.sort(key=lambda b: -(b["gross_leverage"] or 0))
+    stale = sum(1 for p in (fr.get("positions") or []) if p.get("price_stale"))
     return {
         "equity_usd": _num(f.get("equity_usd")),
         "gross_leverage": _num(f.get("gross_leverage")),
@@ -286,7 +331,8 @@ def _tile_fleet() -> dict[str, Any]:
         "n_bots": f.get("n_bots"),
         "hhi": _num(f.get("hhi")),
         "n_alerts": len(fr.get("alerts") or []),
-        "bots": bots[:7],
+        "n_stale_prices": stale,
+        "bots": bots[:8],
         "age_h": _age_hours(fr.get("generated_at")),
     }
 
@@ -326,8 +372,20 @@ def _tile_pipeline() -> dict[str, Any]:
                      "age_h": _num(j.get("age_hours")), "severity": j.get("severity")}
             break
     prog = _read_json("wf_scan_progress.json") or {}
+    hist = _tail_jsonl("pipeline_health_history.jsonl", 48)
+    jobs = []
+    for j in sorted((hb.get("jobs") or []),
+                    key=lambda j: ({"missing": 0, "late": 1, "ok": 2}.get(j.get("status"), 3),
+                                   -(_num(j.get("age_hours")) or 0))):
+        jobs.append({
+            "name": j.get("name"), "status": j.get("status"),
+            "age_h": _num(j.get("age_hours")), "max_age_h": _num(j.get("max_age_hours")),
+            "severity": j.get("severity"),
+        })
     return {
         "healthy": hb.get("healthy"),
+        "jobs": jobs[:5],
+        "trend_ok": [int(h.get("ok") or 0) for h in hist],
         "n_jobs": hb.get("n_jobs"),
         "ok": counts.get("ok"), "late": counts.get("late"), "missing": counts.get("missing"),
         "n_critical_failing": len(hb.get("critical_failing") or []),
@@ -351,6 +409,11 @@ def _tile_attribution() -> dict[str, Any]:
                  "mfe_capture": _num(w.get("mfe_capture_mean"))}
     caps = [_num(b.get("mfe_capture_mean")) for b in per_bot]
     caps = [c for c in caps if c is not None]
+    rows = sorted(
+        ({"bot": b.get("bot"), "net": _num((b.get("components") or {}).get("net")),
+          "drag": _num(b.get("execution_drag")), "n_trades": b.get("n_trades")}
+         for b in per_bot if b.get("n_trades")),
+        key=lambda r: -(r["drag"] or 0))
     return {
         "window_days": _num(at.get("window_days")),
         "net": _num(totals.get("net")),
@@ -360,6 +423,7 @@ def _tile_attribution() -> dict[str, Any]:
         "entry_slip": _num(totals.get("entry_slip")),
         "exit_slip": _num(totals.get("exit_slip")),
         "n_bots": len(per_bot),
+        "rows": rows[:4],
         "worst": worst,
         "mfe_capture_avg": round(sum(caps) / len(caps), 3) if caps else None,
         "age_h": _age_hours(at.get("generated_at")),
@@ -388,6 +452,13 @@ def _tile_trials() -> dict[str, Any]:
             "n_ever_passed": passed,
             "pass_rate": round(100 * passed / n_unique, 2) if n_unique else None,
         })
+        breakdown = default_ledger().strategy_breakdown("wf_scan") or []
+        rows = [{"k": r.get("strategy"),
+                 "v": round(100 * (_num(r.get("pass_rate")) or 0), 1),
+                 "n": r.get("n_hypotheses")}
+                for r in breakdown if r.get("strategy")]
+        rows.sort(key=lambda r: -r["v"])
+        out["strategies"] = rows[:4]
     except Exception:
         pass
     return out
@@ -433,7 +504,12 @@ def _tile_capacity() -> dict[str, Any]:
         t = min(edges, key=lambda e: _num(e.get("capacity_notional")) or 0)
         tight = {"symbol": t.get("symbol"), "venue": t.get("venue"),
                  "capacity": _num(t.get("capacity_notional"))}
+    rows = [{"symbol": e.get("symbol"), "venue": e.get("venue"),
+             "capacity": _num(e.get("capacity_notional")),
+             "edge_bps": _num(e.get("edge_rt_bps"))}
+            for e in sorted(edges, key=lambda e: _num(e.get("capacity_notional")) or 0)[:4]]
     return {
+        "rows": rows,
         "n_edges": cap.get("n_edges") or len(edges),
         "n_books": cap.get("n_books"),
         "fee_rt_bps": _num(cap.get("fee_rt_bps")),
@@ -458,7 +534,14 @@ def _tile_altdata() -> dict[str, Any]:
     if fx:
         e = max(fx, key=lambda f: abs(_num(f.get("funding_ann_pct")) or 0))
         extreme = {"symbol": e.get("symbol"), "funding_ann_pct": _num(e.get("funding_ann_pct"))}
+    top_fund = sorted(fx, key=lambda f: -(abs(_num(f.get("funding_ann_pct")) or 0)))[:4]
+    ev = _read_json("event_risk.json") or {}
     return {
+        "funding_rows": [{"symbol": f.get("symbol"),
+                          "ann": _num(f.get("funding_ann_pct")),
+                          "premium_bps": _num(f.get("premium_bps"))} for f in top_fund],
+        "event_risk": _num((ev.get("global") or {}).get("risk")),
+        "n_event_symbols": ev.get("n_symbols"),
         "dvol_btc": _num(btc.get("value") if isinstance(btc, dict) else btc),
         "dvol_eth": _num(eth.get("value") if isinstance(eth, dict) else eth),
         "dvol_series": [v for v in series if v is not None],
@@ -486,12 +569,27 @@ def _tile_models() -> dict[str, Any]:
     n_adjusted = 0
     for b in (sp.get("bots") or {}).values():
         n_adjusted += len((b or {}).get("feedback_adjustments") or {})
+
+    card = (_read_json("golive_scorecard.json") or {}).get("bots") or {}
+    for r in rows:
+        m = (card.get(r["bot"]) or {}).get("last_30d") or {}
+        r["net_30d"] = _num(m.get("net"))
+        r["pf_30d"] = _num(m.get("pf"))
+        r["trades_30d"] = m.get("trades")
+
+    drops = _read_json("drop_list.json") or {}
+    n_dropped = sum(len(v or []) for v in (drops.get("bots") or {}).values())
+    prio = (_read_json("retrain_priority.json") or {}).get("retrain_priority") or []
+    worst = [{"bot": x.get("bot"), "base": x.get("base"), "action": x.get("action"),
+              "avg_profit": _num(x.get("decayed_avg_profit"))} for x in prio[:4]]
     return {
         "n_bots": len(rows),
         "n_pairs": n_pairs,
         "bots": rows[:8],
         "retrain_queue": len(rq.get("queue") or []),
         "feedback_adjusted": n_adjusted,
+        "n_dropped": n_dropped,
+        "worst_pairs": worst,
         "age_h": _age_hours(pa.get("generated_at")),
     }
 
@@ -509,9 +607,20 @@ def _tile_research() -> dict[str, Any]:
         pass
     names = Counter(r.get("name") for r in runs if r.get("name"))
     last = runs[-1] if runs else None
+    recent = []
+    for r in reversed(runs[-4:]):
+        metrics = r.get("metrics") or {}
+        first = next(iter(metrics.items()), (None, None))
+        recent.append({
+            "name": r.get("name"),
+            "target": (r.get("params") or {}).get("filename") or (r.get("params") or {}).get("strategy"),
+            "metric": first[0], "value": _num(first[1]),
+            "age_h": _age_hours(datetime.fromtimestamp(r.get("ts") or 0, UTC).isoformat()),
+        })
     s = _scan_store()
     return {
         "n_runs": len(runs),
+        "recent": recent,
         "by_name": [{"k": k, "v": v} for k, v in names.most_common(5)],
         "last_name": (last or {}).get("name"),
         "last_age_h": _age_hours(
@@ -526,7 +635,15 @@ def _tile_insights() -> dict[str, Any]:
     s = _scan_store()
     rep = _read_json("wf_report.json") or {}
     strat = Counter(e.get("strategy") for e in (rep.get("top") or []) if e.get("strategy"))
+    ev = _read_json("event_risk.json") or {}
+    ad = _read_json("altdata_snapshot.json") or {}
+    per_sym = {p.get("symbol"): p for p in (ad.get("per_symbol") or [])}
+    tf_top = Counter(e.get("timeframe") for e in (rep.get("top") or []) if e.get("timeframe"))
     return {
+        "event_risk": _num((ev.get("global") or {}).get("risk")),
+        "dvol_btc": _num((ad.get("dvol") or {}).get("BTC")),
+        "ls_ratio_btc": _num((per_sym.get("BTCUSDT") or {}).get("ls_ratio")),
+        "top_timeframes": [{"k": k, "v": v} for k, v in tf_top.most_common(4)],
         "n_datasets": s["n_datasets"],
         "n_symbols": s["n_symbols"],
         "by_timeframe": s["by_timeframe"],
@@ -535,16 +652,20 @@ def _tile_insights() -> dict[str, Any]:
 
 
 def _tile_lab() -> dict[str, Any]:
-    n_strategies = 0
+    names: list[str] = []
+    n_params = 0
     try:
         from src.strategies.rules import STRATEGY_PARAM_SPECS
 
-        n_strategies = len(STRATEGY_PARAM_SPECS)
+        names = list(STRATEGY_PARAM_SPECS)
+        n_params = sum(len(v or {}) for v in STRATEGY_PARAM_SPECS.values())
     except Exception:
         pass
     s = _scan_store()
     return {
-        "n_strategies": n_strategies,
+        "n_strategies": len(names),
+        "strategies": names[:8],
+        "n_params": n_params,
         "n_datasets": s["n_datasets"],
         "n_timeframes": len(s["by_timeframe"]),
     }
@@ -556,7 +677,11 @@ def _tile_report() -> dict[str, Any]:
     best = top[0] if top else None
     sharpes = [_num(e.get("oos_sharpe")) for e in top]
     sharpes = [x for x in sharpes if x is not None]
+    rows = [{"symbol": e.get("symbol"), "strategy": e.get("strategy"),
+             "timeframe": e.get("timeframe"), "sharpe": _num(e.get("oos_sharpe")),
+             "ret": _num(e.get("oos_mean_return"))} for e in top[:4]]
     return {
+        "rows": rows,
         "n_top": len(top),
         "best": {
             "symbol": (best or {}).get("symbol"), "strategy": (best or {}).get("strategy"),
@@ -571,11 +696,19 @@ def _tile_report() -> dict[str, Any]:
 
 def _tile_crossex() -> dict[str, Any]:
     s = _scan_store()
+    fc = _read_json("funding_carry.json") or {}
+    carry = [{"base": c.get("base"), "short": c.get("short_venue"), "long": c.get("long_venue"),
+              "spread": _num(c.get("gross_spread_ann_pct"))}
+             for c in (fc.get("top_carry") or [])[:4]]
     return {
         "multi_venue_symbols": s["multi_venue_symbols"],
         "n_venues": s["n_venues"],
         "n_symbols": s["n_symbols"],
         "by_exchange": s["by_exchange"],
+        "carry": carry,
+        "best_spread": carry[0]["spread"] if carry else None,
+        "n_carry": len(fc.get("top_carry") or []),
+        "carry_age_h": _age_hours(fc.get("generated_at")),
     }
 
 
@@ -586,6 +719,7 @@ _LOG_RE = re.compile(r"\b(CRITICAL|ERROR|WARNING|INFO|DEBUG)\b")
 def _tile_logs() -> dict[str, Any]:
     counts = Counter()
     last_error = None
+    problems: list[dict[str, str]] = []
     try:
         path = LOG_DIR / "app.log"
         with path.open("rb") as fh:
@@ -597,6 +731,8 @@ def _tile_logs() -> dict[str, Any]:
             m = _LOG_RE.search(ln)
             if m:
                 counts[m.group(1)] += 1
+                if m.group(1) in ("ERROR", "CRITICAL", "WARNING"):
+                    problems.append({"level": m.group(1), "text": ln[-150:].strip()})
                 if m.group(1) in ("ERROR", "CRITICAL"):
                     last_error = ln[:160]
     except Exception:
@@ -606,6 +742,7 @@ def _tile_logs() -> dict[str, Any]:
         "levels": [{"k": lv, "v": counts.get(lv, 0)} for lv in _LOG_LEVELS],
         "n_errors": counts.get("ERROR", 0) + counts.get("CRITICAL", 0),
         "n_warnings": counts.get("WARNING", 0),
+        "problems": problems[-3:][::-1],
         "last_error": last_error,
     }
 
