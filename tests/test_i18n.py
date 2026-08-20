@@ -35,7 +35,7 @@ STRESS_VERDICTS = ("ok", "hit", "critical", "wiped")
 HEARTBEAT_STATUSES = ("ok", "late", "missing")
 ALTDATA_HINTS = ("dvol_high", "dvol_low", "crowd_long", "crowd_short", "backwardation")
 ML_VERDICTS = ("predictable", "weak", "noise")
-SECTIONS = ("download", "inventory", "research", "report", "insights", "lab", "edges",
+SECTIONS = ("home", "download", "inventory", "research", "report", "insights", "lab", "edges",
             "crossex", "fleet", "altdata", "attribution", "trials", "stress",
             "capacity", "portfolio", "models", "pipeline", "quality", "logs")
 
@@ -77,6 +77,7 @@ def test_no_persian_in_the_en_dictionary():
     ("verdict_", ML_VERDICTS),
     ("title_", SECTIONS),
     ("sub_", SECTIONS),
+    ("nav_", SECTIONS),
 ])
 def test_backend_codes_all_resolve(prefix, codes):
     """The dashboard builds these keys as `prefix + code`. An unlisted code
@@ -87,11 +88,25 @@ def test_backend_codes_all_resolve(prefix, codes):
         assert key in fa and key in en, f"{key} is not translated"
 
 
-def test_no_persian_string_literals_in_app_js():
-    """Every user-facing string in app.js must go through t()."""
-    lines = (WEB / "app.js").read_text(encoding="utf-8").splitlines()
+@pytest.mark.parametrize("script", ["app.js", "home.js"])
+def test_no_persian_string_literals_in_scripts(script):
+    """Every user-facing string in the app logic must go through t()."""
+    lines = (WEB / script).read_text(encoding="utf-8").splitlines()
     bad = [f"{n}: {ln.strip()[:100]}" for n, ln in enumerate(lines, 1) if PERSIAN.search(ln)]
-    assert not bad, "hardcoded Persian in app.js:\n" + "\n".join(bad)
+    assert not bad, f"hardcoded Persian in {script}:\n" + "\n".join(bad)
+
+
+def test_home_tiles_cover_every_section():
+    """The launcher is the only navigation surface left, so a section with no
+    tile is a section nobody can reach."""
+    home = (WEB / "home.js").read_text(encoding="utf-8")
+    tiles = set(re.findall(r"tiles: \[([^\]]*)\]", home))
+    keys = {k.strip().strip("'\"") for group in tiles for k in group.split(",") if k.strip()}
+    html = (WEB / "dashboard.html").read_text(encoding="utf-8")
+    sections = set(re.findall(r'id="sec-([a-z]+)"', html)) - {"home"}
+    assert keys == sections, f"tiles {keys ^ sections} have no counterpart"
+    renderers = set(re.findall(r"^  ([a-z]+)\(d\) \{", home, re.M))
+    assert keys <= renderers, f"tiles without a renderer: {sorted(keys - renderers)}"
 
 
 def test_markup_persian_is_always_tagged_for_translation():
