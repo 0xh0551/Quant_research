@@ -572,9 +572,15 @@ html[dir=rtl] .c-loss .tk{transform:translateX(1.5px)}
 .c-pips{align-items:center;gap:4px;flex-wrap:wrap;align-content:center}
 .c-pips .pip{
   flex:1;min-width:9px;max-width:26px;height:30px;border-radius:4px;position:relative;
-  background:rgba(255,255,255,.06);overflow:hidden;display:flex;align-items:flex-end;
+  background:rgba(255,255,255,.06);overflow:hidden;display:block;
 }
-.c-pips .pip i{width:100%;background:var(--green);opacity:.8;transition:height .5s var(--ease)}
+/* The fill is positioned rather than laid out: a percentage height on a flex
+   item resolves against the flex line, not the track, and collapsed to a
+   couple of pixels. Against a positioned parent it always means what it says. */
+.c-pips .pip i{
+  position:absolute;inset-inline:0;bottom:0;display:block;
+  background:var(--green);opacity:.8;transition:height .5s var(--ease);
+}
 .c-pips .pip.warn i{background:var(--yellow)}
 .c-pips .pip.bad i{background:var(--red);height:100%!important}
 .c-pips .pip:hover i{opacity:1}
@@ -714,4 +720,15 @@ html[dir=rtl] #app.rail-collapsed .rail-foot svg{transform:none}
 #cmdk .none{padding:22px;text-align:center;color:var(--text3);font-size:12.5px}
 
 /* Persian never gets tracked-out capitals — it breaks the joins. */
-html[lang=fa] .kpi .l,html[lang=fa] .rail-group,html[lang=fa] 
+html[lang=fa] .kpi .l,html[lang=fa] .rail-group,
+html[lang=fa] .c-grid .gr,html[lang=fa] .c-bullets .k,html[lang=fa] .c-lolli .k{
+  letter-spacing:0;text-transform:none;
+}
+
+/* A stalled backend must read as a stalled backend, not as a slow page. */
+.home-err{
+  font-size:11.5px;color:var(--yellow);background:rgba(251,191,36,.1);
+  border:1px solid rgba(251,191,36,.3);border-radius:9px;padding:4px 11px;
+  margin-inline-start:auto;max-width:46ch;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
