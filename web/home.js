@@ -350,7 +350,12 @@ const HOME_RENDER = {
             right: t('home_q_minbars', { n: hNum(d.min_scan_bars) }), tone: 'var(--acc)',
           })
         + tsub(t('home_hdr_bars'))
-        + svgBars(d.bars_hist, { max: 4 }),
+        + svgBars(d.bars_hist, { max: 4 })
+        + tsub(t('home_hdr_stale'))
+        + trows((d.stale_rows || []).slice(0, 2).map(r => ({
+            a: `<b>${hEsc(shortDs(r.dataset))}</b>`, b: r.last,
+            c: t('home_days', { n: hNum(r.days) }), tone: 'tone-warn', rank: false,
+          }))),
     };
   },
 
@@ -368,7 +373,10 @@ const HOME_RENDER = {
             b: hAgo(r.age_h),
             c: r.value == null ? '' : hNum(r.value, 2),
           })))
-        + (!(d.recent || []).length ? `<div class="tile-note">${t('home_no_runs')}</div>` : ''),
+        + (!(d.recent || []).length ? `<div class="tile-note">${t('home_no_runs')}</div>` : '')
+        + tsub(t('home_hdr_run_kinds'))
+        + svgBars(d.by_name, { max: 3 })
+        + `<div class="tile-note">${t('home_research_note')}</div>`,
     };
   },
 
@@ -387,8 +395,8 @@ const HOME_RENDER = {
       ], 2)
         + tsub(t('home_ins_top'))
         + svgBars(d.top_strategies, { max: 3, keyFmt: k => (STRATEGY_LABELS[k] || k) })
-        + `<div class="tile-note">${t('home_ins_tf', {
-            tf: (d.top_timeframes || []).map(x => `${x.k}·${x.v}`).join(' / ') || '—' })}</div>`,
+        + tsub(t('home_hdr_edge_tf'))
+        + svgBars(d.top_timeframes, { max: 3 }),
     };
   },
 
@@ -404,6 +412,8 @@ const HOME_RENDER = {
         + `<div style="display:flex;flex-wrap:wrap;gap:3px">${(d.strategies || []).slice(0, 7)
             .map(k => `<span class="tile-chip">${hEsc(STRATEGY_LABELS[k] || k)}</span>`).join('')}
            </div>`
+        + tsub(t('home_hdr_by_tf'))
+        + svgBars(d.by_timeframe, { max: 3 })
         + `<div class="tile-note">${t('home_lab_note')}</div>`,
     };
   },
@@ -418,9 +428,9 @@ const HOME_RENDER = {
           tone: hTone(b.oos_mean_return) },
         { l: t('home_k_ranked'), v: hNum(d.n_top) },
       ], 3)
-        + svgSpark(d.sharpes, { h: 34, digits: 1 })
+        + svgSpark(d.sharpes, { h: 44, digits: 1 })
         + tsub(t('home_hdr_leaderboard'))
-        + trows((d.rows || []).slice(0, 3).map(r => ({
+        + trows((d.rows || []).slice(0, 4).map(r => ({
             a: `<b>${hEsc(r.symbol || '')}</b> <span class="b">${hEsc(STRATEGY_LABELS[r.strategy] || r.strategy || '')}</span>`,
             b: r.timeframe, c: hSign(r.sharpe, 1), tone: 'tone-pos',
           }))),
@@ -444,15 +454,14 @@ const HOME_RENDER = {
             <span class="tile-note">${t('home_edges_reach', {
               n: hNum(d.n_symbols), a: hNum(d.n_alerts) })}</span>
           </div>`
-        + `<div class="grid-2" style="gap:10px;grid-template-columns:1fr 1fr">
-            <div>${tsub(t('home_hdr_by_tf'))}${svgBars(bars, { max: 4 })}</div>
-            <div>${tsub(t('home_hdr_trend'))}${svgSpark(d.trend_passed, { h: 40, digits: 0 })}</div>
-          </div>`
-        + tsub(t('home_hdr_top_edges'))
-        + trows((d.top || []).slice(0, 4).map(e => ({
-            a: `<b>${hEsc(e.symbol || '')}</b> <span class="b">${hEsc(STRATEGY_LABELS[e.strategy] || e.strategy || '')}</span>`,
-            b: e.timeframe, c: hSign(e.oos_sharpe, 1), tone: 'tone-pos',
-          }))),
+        + `<div class="grid-2" style="gap:12px;grid-template-columns:1fr 1fr">
+            <div>${tsub(t('home_hdr_by_tf'))}${svgBars(bars, { max: 4 })}
+                 ${tsub(t('home_hdr_trend'))}${svgSpark(d.trend_passed, { h: 38, digits: 0 })}</div>
+            <div>${tsub(t('home_hdr_top_edges'))}${trows((d.top || []).slice(0, 5).map(e => ({
+              a: `<b>${hEsc(e.symbol || '')}</b> <span class="b">${hEsc(STRATEGY_LABELS[e.strategy] || e.strategy || '')}</span>`,
+              b: e.timeframe, c: hSign(e.oos_sharpe, 1), tone: 'tone-pos',
+            })))}</div>
+          </div>`,
     };
   },
 
@@ -509,7 +518,8 @@ const HOME_RENDER = {
             a: `<b>${hEsc(c.base || '')}</b> <span class="b">${hEsc(c.short || '')}→${hEsc(c.long || '')}</span>`,
             c: hPct(c.spread, 1), tone: 'tone-pos',
           })))
-        + `<div class="tile-note">${t('home_cx_note', { n: hNum(d.n_symbols) })}</div>`,
+        + tsub(t('home_hdr_venues'))
+        + svgBars(d.by_exchange, { max: 3 }),
     };
   },
 
@@ -541,15 +551,17 @@ const HOME_RENDER = {
            <span class="tile-note">${d.n_alerts > 0
              ? t('home_fleet_alerts', { n: hNum(d.n_alerts) })
              : t('home_fleet_ok_stale', { n: hNum(d.n_stale_prices) })}</span></div>`
-        + (mode === 'pnl'
-            ? svgDiverging(bars, { fmt: v => hSign(v, 0) })
-            : svgBars(bars, { max: 8, fmt: v => (mode === 'lev' ? hNum(v, 2) + '×' : hNum(v)) }))
-        + tsub(t('home_hdr_bots_30d'))
-        + trows((d.bots || []).filter(b => b.trades_30d).slice(0, 4).map(b => ({
-            a: `<b>${hEsc(b.bot || '')}</b> <span class="b">${hNum(b.trades_30d)} ${t('home_k_trades')}</span>`,
-            b: 'PF ' + hNum(b.pf_30d, 2),
-            c: hUsd(b.net_30d), tone: hTone(b.net_30d),
-          }))),
+        + `<div class="grid-2" style="gap:12px;grid-template-columns:1fr 1fr">
+            <div>${tsub(t('home_hdr_by_bot'))}${mode === 'pnl'
+              ? svgDiverging(bars.slice(0, 6), { fmt: v => hSign(v, 0) })
+              : svgBars(bars, { max: 6, fmt: v => (mode === 'lev' ? hNum(v, 2) + '×' : hNum(v)) })}</div>
+            <div>${tsub(t('home_hdr_bots_30d'))}${trows((d.bots || [])
+              .filter(b => b.trades_30d).slice(0, 5).map(b => ({
+                a: `<b>${hEsc(b.bot || '')}</b> <span class="b">${hNum(b.trades_30d)} ${t('home_k_trades')}</span>`,
+                b: 'PF ' + hNum(b.pf_30d, 2),
+                c: hUsd(b.net_30d), tone: hTone(b.net_30d), rank: false,
+              })))}</div>
+          </div>`,
     };
   },
 
@@ -584,9 +596,11 @@ const HOME_RENDER = {
         { l: t('home_k_liquidations'), v: hNum(d.n_liquidations),
           tone: d.n_liquidations ? 'tone-neg' : 'tone-pos' },
       ], 3)
-        + `<div class="tile-note">${hEsc(label || w.key || t('no_data'))}</div>`
+        + tsub(t('home_hdr_loss_spread'))
+        + svgBars((d.rows || []).map(r => ({ k: r.key, v: Math.abs(r.loss || 0) })),
+                  { max: 3, fmt: v => '-' + hUsd(v) })
         + tsub(t('home_hdr_scenarios', { n: hNum(d.n_scenarios) }))
-        + trows((d.rows || []).slice(0, 4).map(r => ({
+        + trows((d.rows || []).slice(0, 3).map(r => ({
             a: `<b>${hEsc((LANG === 'fa' ? r.label_fa : r.label_en) || r.key || '')}</b>`,
             c: hUsd(r.loss), tone: hTone(r.loss), rank: false,
           }))),
@@ -609,9 +623,10 @@ const HOME_RENDER = {
               { k: t('home_a_fees'), v: d.fees == null ? null : -Math.abs(d.fees) },
               { k: t('home_a_exit'), v: d.exit_slip },
               { k: t('home_a_funding'), v: d.funding },
+              { k: t('home_a_entry'), v: d.entry_slip },
             ], { fmt: v => hSign(v, 0) })}</div>
-            <div>${tsub(t('home_hdr_drag_by_bot'))}${trows((d.rows || []).slice(0, 4).map(r => ({
-              a: `<b>${hEsc(r.bot || '')}</b>`,
+            <div>${tsub(t('home_hdr_drag_by_bot'))}${trows((d.rows || []).slice(0, 5).map(r => ({
+              a: `<b>${hEsc(r.bot || '')}</b>`, b: hNum(r.n_trades),
               c: hUsd(r.drag), tone: 'tone-neg', rank: false,
             })))}</div>
           </div>`
@@ -679,9 +694,8 @@ const HOME_RENDER = {
       body: kpis([
         { l: t('home_k_live_pairs'), v: hNum(d.n_pairs), hero: true },
         { l: t('home_k_bots'), v: hNum(d.n_bots) },
-        { l: t('home_k_retrain_q'), v: hNum(d.retrain_queue), tone: d.retrain_queue ? 'tone-warn' : '' },
         { l: t('home_k_dropped'), v: hNum(d.n_dropped), tone: d.n_dropped ? 'tone-warn' : '' },
-      ], 2)
+      ], 3)
         + tsub(t('home_hdr_bots_30d'))
         + trows((d.bots || []).slice(0, 3).map(b => ({
             a: `<b>${hEsc(b.bot || '')}</b> <span class="b">${hEsc(b.exchange || '')} ${hEsc(b.timeframe || '')}</span>`,
@@ -689,12 +703,13 @@ const HOME_RENDER = {
             c: hUsd(b.net_30d), tone: hTone(b.net_30d), rank: false,
           })))
         + tsub(t('home_hdr_worst_pairs'))
-        + trows((d.worst_pairs || []).slice(0, 3).map(w => ({
+        + trows((d.worst_pairs || []).slice(0, 2).map(w => ({
             a: `<b>${hEsc(w.base || '')}</b> <span class="b">${hEsc(w.bot || '')}</span>`,
             b: w.action ? t('home_act_' + w.action) : '',
             c: hPct((w.avg_profit || 0) * 100, 1), tone: hTone(w.avg_profit), rank: false,
           })))
-        + `<div class="tile-note">${t('home_models_feedback', { n: hNum(d.feedback_adjusted) })}</div>`,
+        + `<div class="tile-note">${t('home_models_feedback', {
+            n: hNum(d.feedback_adjusted), q: hNum(d.retrain_queue) })}</div>`,
     };
   },
 
@@ -712,7 +727,8 @@ const HOME_RENDER = {
         + ((d.problems || []).length
             ? trows(d.problems.slice(0, 3).map(pr => ({
                 a: `<b>${hEsc(pr.level)}</b> ${hEsc(pr.text)}`, rank: false })))
-            : `<div class="tile-note">${t('home_logs_clean', { n: hNum(d.n_lines) })}</div>`),
+            : `<div class="tile-note">${t('home_logs_clean', { n: hNum(d.n_lines) })}</div>`)
+        + `<div class="tile-note">${t('home_logs_window', { n: hNum(d.n_lines) })}</div>`,
     };
   },
 };
