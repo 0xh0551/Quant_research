@@ -69,8 +69,6 @@ def test_reads_the_artifacts_it_advertises(isolated):
     }), encoding="utf-8")
     (outputs / "wf_report.json").write_text(json.dumps({
         "n_scanned": 100, "n_passed": 10, "n_robust": 4, "n_deployable": 2,
-        "by_timeframe": {"1h": {"scanned": 60, "passed": 7, "robust": 3},
-                         "15m": {"scanned": 40, "passed": 3, "robust": 1}},
         "top": [{"symbol": "BTCUSDT", "strategy": "ema_trend", "timeframe": "1h",
                  "oos_sharpe": 2.5, "deployable": True}],
         "alerts": [], "rigor": {"median_pbo": 0.2},
@@ -80,9 +78,10 @@ def test_reads_the_artifacts_it_advertises(isolated):
     tiles = home.summary(force=True)["tiles"]
     assert tiles["fleet"]["equity_usd"] == 7000.0
     assert tiles["fleet"]["n_alerts"] == 1
-    # by_timeframe carries `passed`, not a bare count — a wrong key reads as zero
-    assert {b["k"]: b["v"] for b in tiles["edges"]["by_timeframe"]} == {"15m": 3, "1h": 7}
-    assert {b["k"]: b["v"] for b in tiles["edges"]["by_timeframe_robust"]} == {"15m": 1, "1h": 3}
+    # the edges tile charts the survival funnel, in order
+    assert [f["k"] for f in tiles["edges"]["funnel"]] == [
+        "scanned", "passed", "robust", "deployable"]
+    assert [f["v"] for f in tiles["edges"]["funnel"]] == [100, 10, 4, 2]
     # portfolio shares fleet's per_asset and must normalise to percentages
     assert [a["pct"] for a in tiles["portfolio"]["top"]] == [75.0, 25.0]
 
@@ -105,11 +104,16 @@ def test_dataset_sweep_never_opens_a_parquet(isolated, monkeypatch):
     inv = tiles["inventory"]
     assert inv["n_datasets"] == 4
     assert inv["n_symbols"] == 2                    # BTCUSDT + ETHUSDT
-    assert {b["k"]: b["v"] for b in inv["by_timeframe"]} == {"15m": 1, "1h": 3}
-    assert {b["k"]: b["v"] for b in tiles["download"]["by_exchange"]} == {
-        "bybit": 2, "okx": 1, "gate": 1}
-    # ETHUSDT lives on okx and gate_futures, BTCUSDT only on bybit_futures
+    # the coverage grid is venue x timeframe, spot and futures folded together
+    m = inv["matrix"]
+    assert m["timeframes"] == ["15m", "1h"]
+    cells = {v: dict(zip(m["timeframes"], row, strict=True))
+             for v, row in zip(m["venues"], m["cells"], strict=True)}
+    assert cells["bybit"] == {"15m": 1, "1h": 1}
+    assert cells["okx"] == {"15m": 0, "1h": 1}
+    # ETHUSDT lives on okx and gate, BTCUSDT only on bybit
     assert tiles["crossex"]["multi_venue_symbols"] == 1
+    assert tiles["download"]["n_datasets"] == 4
 
 
 def test_payload_carries_only_what_the_tiles_read(isolated):
@@ -118,29 +122,29 @@ def test_payload_carries_only_what_the_tiles_read(isolated):
     every poll, and it drifts out of sync unnoticed."""
     fields = {k: set(v) for k, v in home.summary(force=True)["tiles"].items()}
     expected = {
-        "inventory": {"n_datasets", "n_symbols", "total_gb", "by_timeframe", "newest_age_h"},
-        "download": {"refreshed_24h", "refreshed_7d", "n_venues", "by_exchange", "newest_age_h"},
-        "quality": {"scannable_pct", "median_bars", "stale_gt_3d", "bars_hist"},
-        "research": {"n_runs", "n_datasets", "n_symbols", "by_timeframe"},
-        "insights": {"event_risk", "dvol_btc", "ls_ratio_btc", "top_strategies"},
-        "lab": {"n_strategies", "n_params", "n_datasets", "by_timeframe"},
-        "report": {"n_top", "best", "sharpes", "age_h"},
-        "edges": {"n_passed", "n_deployable", "median_pbo", "live_timeframe",
-                  "by_timeframe", "by_timeframe_robust", "age_h"},
-        "trials": {"n_deflated_pass", "age_h", "n_unique", "pass_rate", "strategies"},
-        "capacity": {"n_books", "median_capacity", "total_capacity", "rows", "age_h"},
-        "crossex": {"best_spread", "multi_venue_symbols", "n_venues", "carry", "carry_age_h"},
-        "fleet": {"equity_usd", "gross_leverage", "max_gross_leverage",
-                  "net_beta_delta_pct", "n_alerts", "bots", "age_h"},
-        "portfolio": {"gross_usd", "hhi", "n_assets", "top", "age_h"},
-        "stress": {"worst", "rows", "n_liquidations", "age_h"},
-        "attribution": {"net", "intended", "fees", "funding", "exit_slip",
-                        "mfe_capture_avg", "age_h"},
-        "altdata": {"dvol_btc", "dvol_eth", "dvol_series", "liquidations_24h_usd", "age_h"},
-        "pipeline": {"healthy", "n_jobs", "ok", "late", "missing",
+        "inventory": {"n_datasets", "n_symbols", "total_gb", "matrix"},
+        "download": {"recency", "n_venues", "newest_age_h", "n_datasets"},
+        "quality": {"scannable_pct", "n_scannable", "n_datasets", "median_bars", "stale_gt_3d"},
+        "research": {"n_runs", "n_symbols", "first", "last",
+                     "median_span_days", "max_span_days"},
+        "insights": {"gauges", "dvol_btc", "ls_ratio_btc", "n_event_symbols"},
+        "lab": {"strategies", "n_strategies", "n_params"},
+        "report": {"sharpes", "n_top", "best_sharpe", "best_return", "age_h"},
+        "edges": {"funnel", "median_pbo", "live_timeframe", "age_h"},
+        "trials": {"age_h", "n_deflated_pass", "n_unique", "pass_rate", "strategies"},
+        "capacity": {"points", "median_capacity", "min_capacity", "n_books", "age_h"},
+        "crossex": {"carry", "best_spread", "multi_venue_symbols", "n_venues", "carry_age_h"},
+        "fleet": {"gross_leverage", "max_gross_leverage", "equity_usd",
+                  "net_beta_delta_pct", "n_positions", "n_alerts", "age_h"},
+        "portfolio": {"top", "gross_usd", "hhi", "n_assets", "age_h"},
+        "stress": {"ticks", "worst_pct", "worst_key", "n_liquidations",
+                   "n_scenarios", "age_h"},
+        "attribution": {"steps", "net", "window_days", "age_h"},
+        "altdata": {"dvol_series", "dvol_btc", "dvol_eth", "liquidations_24h_usd", "age_h"},
+        "pipeline": {"jobs", "ok", "late", "missing", "n_jobs", "healthy",
                      "run_state", "run_step", "age_h"},
-        "models": {"n_pairs", "n_bots", "n_dropped", "bots", "age_h"},
-        "logs": {"n_lines", "n_errors", "n_warnings", "levels"},
+        "models": {"split", "n_pairs", "n_bots", "n_dropped", "age_h"},
+        "logs": {"hourly", "n_hours", "n_errors", "n_warnings", "n_lines"},
     }
     assert fields == expected
 
