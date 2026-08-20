@@ -1,63 +1,150 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="brand/quant-mark-dark-1024.png">
-    <img src="brand/quant-mark-1024.png" alt="Quant Research" width="230">
+    <img src="brand/quant-mark-1024.png" alt="Quant Research" width="140">
   </picture>
 </p>
 
-# Quant Research Platform
+<h1 align="center">Quant Research Platform</h1>
 
-![Python](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)
-![License](https://img.shields.io/badge/license-MIT-green)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.136-009688?logo=fastapi&logoColor=white)
-![CCXT](https://img.shields.io/badge/CCXT-111%20exchanges-orange)
-![Parquet](https://img.shields.io/badge/storage-Parquet-blueviolet)
+<p align="center">
+  <em>Market data from 111+ exchanges → walk-forward validated edges → live bots,<br>
+  behind one bilingual dashboard that fits on a single screen.</em>
+</p>
 
-**v1.3** — An end-to-end quantitative research platform covering data acquisition from **111+ exchanges**, interactive backtesting across **14 strategy families**, full **long/short futures support**, and — new in v1.3 — **statistical-rigor selection-bias defences** (Deflated/Probabilistic Sharpe, PBO, bootstrap CIs), a **cross-exchange edge suite** (lead-lag, cointegration, basis), **portfolio construction & sizing** (HRP, fractional Kelly), **leakage-free ML evaluation** (purged CV + triple-barrier) and **RL coin recommendation**, plus **MLOps** (experiment tracking, forward-test attribution, data-quality monitoring) — all in a fully **bilingual (FA/EN)** **Midnight Aurora** dashboard (Vazirmatn font).
+<p align="center">
+  <img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-3776AB?logo=python&logoColor=white">
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
+  <img alt="Parquet" src="https://img.shields.io/badge/storage-Parquet-50A3C7">
+  <img alt="CCXT" src="https://img.shields.io/badge/CCXT-111%20exchanges-F7931A">
+  <img alt="Tests" src="https://img.shields.io/badge/tests-138-2dd4bf">
+  <img alt="License MIT" src="https://img.shields.io/badge/license-MIT-34d399">
+  <img alt="Bilingual" src="https://img.shields.io/badge/UI-FA%20%2F%20EN-818cf8">
+</p>
 
+<p align="center">
+  <img src="docs/screenshots/mission-control-en.png"
+       alt="Mission Control — all nineteen modules on one screen" width="100%">
+</p>
+
+<p align="center"><sub>Mission Control, in demo mode. Every panel is live —
+one chart form per module, no two plotting the same series.</sub></p>
+
+---
+
+## What this is
+
+A complete quantitative research stack: acquire market data, research strategies
+against it with the selection-bias defences the results actually need, and hand
+the survivors to live trading bots — with every stage visible in one interface.
+
+It is opinionated about two things.
+
+**Statistical honesty.** A backtest that looks good is the null hypothesis. Every
+candidate carries a Deflated and Probabilistic Sharpe, a bootstrap Sharpe CI, and
+a Probability of Backtest Overfitting, deflated against the *cumulative* trial
+count in a persistent ledger — not just tonight's. Only what survives walk-forward
+out-of-sample testing across venues reaches a bot.
+
+**One screen.** The dashboard's landing view is nineteen live panels, sized to the
+viewport so nothing scrolls. Each one shows what only its module measures, in the
+chart form that quantity deserves — a coverage grid is not a funnel is not a
+waterfall is not a decade axis.
+
+## The dashboard
+
+Nineteen modules, grouped, all reachable in one click from the launcher, the
+labelled sidebar (which carries each module's headline number), or `Ctrl/⌘+K`.
+
+| | Module | What its panel shows |
+|---|---|---|
+| **Data** | Data Inventory | venue × timeframe coverage grid over the Parquet store |
+| | Download Data | age distribution of the store, venue by venue |
+| | Data Quality | share of datasets long enough to walk forward on |
+| **Research** | Research | how far back a backtest can actually reach |
+| | Insights | three regime gauges the strategy picker is conditioned on |
+| | Lab | the strategy palette, tinted by family |
+| | Report | the OOS Sharpe decay curve across ranked candidates |
+| **Edges** | Edges | the survival funnel: scanned → passed → robust → deployable |
+| | Trial Ledger | pass rate by strategy family, over every trial ever run |
+| | Capacity | every live edge on a decade axis of tradable size |
+| | Cross-Exchange | both legs of the best funding spreads, and the gap |
+| **Risk** | Fleet Risk | gross leverage read against the ceiling it must not cross |
+| | Portfolio | the open book as areas — concentration you can see |
+| | Stress Test | every scenario placed on one signed equity axis |
+| | Attribution | the bridge from intended alpha to realised net |
+| | Alt-Data | the implied-vol track behind today's reading |
+| **Ops** | Pipeline Health | a pip per scheduled job, filled by its freshness budget |
+| | Models | the live pair budget as slots per bot |
+| | Logs | hourly chatter, so a silent or screaming service shows |
+
+Opening a module gives the full instrument: Plotly charts, sortable tables,
+parameter sliders, optimisers.
+
+<p align="center">
+  <img src="docs/screenshots/edges-en.png" alt="Edges section" width="49%">
+  <img src="docs/screenshots/command-palette.png" alt="Command palette" width="49%">
+</p>
+
+### Bilingual, not translated-ish
+
+Every user-facing string goes through one dictionary (`web/i18n.js`), and the
+layout flips RTL↔LTR with CSS logical properties. A test asserts that no Persian
+survives a switch to English and that no key is missing from either side, so the
+two languages cannot drift apart.
+
+<p align="center">
+  <img src="docs/screenshots/mission-control-fa.png"
+       alt="Mission Control in Persian, right-to-left" width="100%">
+</p>
+
+### Demo mode
+
+The launcher renders live trading state. To show the interface publicly without
+publishing positions, PnL or bot names:
+
+```bash
+QR_DEMO=1 make web
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                  Quant Research Platform                        │
-│                                                                 │
-│  ┌────────────┐    ┌──────────────┐    ┌──────────────────────┐ │
-│  │  CCXT      │    │   Nobitex    │    │  Binance Bulk        │ │
-│  │ 111 exchgs │    │  UDF API     │    │  Monthly Archives    │ │
-│  └─────┬──────┘    └──────┬───────┘    └──────────┬───────────┘ │
-│        └──────────────────┴──────────────┬─────────┘           │
-│                                          ▼                      │
-│                          ┌───────────────────────────┐          │
-│                          │   Parquet Data Store      │          │
-│                          │   data/processed/*.parquet│          │
-│                          └───────────────┬───────────┘          │
-│                                          ▼                      │
-│              ┌────────────────────────────────────────┐         │
-│              │         FastAPI Web Dashboard          │         │
-│              │  Download │ Inventory │ Research       │         │
-│              │  Report   │ Insights  │ Lab  │ Logs    │         │
-│              └────────────────────────────────────────┘         │
-└─────────────────────────────────────────────────────────────────┘
+
+`QR_DEMO` swaps the summary endpoint for an invented snapshot in the payload's
+exact shape — a test pins the two together, so a screenshot taken this way shows
+the real interface, never a mock-up that has drifted from the code. Every
+screenshot in this README was taken in demo mode.
+
+## How it flows
+
+```mermaid
+flowchart LR
+  subgraph ACQ["Acquisition"]
+    A1["CCXT<br/>111 exchanges"]
+    A2["Nobitex<br/>UDF API"]
+    A3["Binance<br/>bulk archives"]
+  end
+  ST[("Parquet store<br/>data/processed")]
+  subgraph RES["Research"]
+    R1["Backtest engine<br/>long / flat / short"]
+    R2["Walk-forward scan<br/>PSR · DSR · PBO"]
+    R3["Trial ledger<br/>cumulative deflation"]
+  end
+  subgraph LIVE["Execution"]
+    L1["Edge manifest"]
+    L2["Pair rotation"]
+    L3["freqtrade bots"]
+  end
+  UI["FastAPI dashboard<br/>19 modules · FA / EN"]
+
+  A1 --> ST
+  A2 --> ST
+  A3 --> ST
+  ST --> R1 --> R2 --> R3
+  R2 --> L1 --> L2 --> L3
+  ST --> UI
+  R3 --> UI
+  L3 --> UI
 ```
 
 ## Features
-
-### Web Dashboard (primary interface)
-
-| Section | Description |
-|---|---|
-| **Download** | Select any of 111+ CCXT exchanges or Nobitex, pick symbol, date range, multiple timeframes; real-time progress bar; saves to Parquet |
-| **Data Inventory** | Visual grid of all downloaded datasets with exchange, symbol, timeframe, date range, row count, and file size |
-| **Research** | Multi-select datasets and 14 strategies, configure capital/fees/slippage, run vectorized backtests (full Long+Short for futures) with live progress |
-| **Report** | Interactive Plotly charts — equity curve with regime shading, drawdown panel, monthly heatmap, rolling Sharpe, sortable metrics table |
-| **Insights** | Deep analysis: 90-day rolling strategy scores, regime detection, strategy rotation on price chart, ML/RL fitness scoring with bot hints |
-| **Lab** | Customize strategy parameters with sliders, run instant backtests, and run Grid Search optimizer to find best params |
-| **Edges** | Walk-forward out-of-sample survivors that live bots actually trade — now with **Deflated/Probabilistic Sharpe, PBO and bootstrap Sharpe CIs** per candidate plus a rigor summary, so cherry-picked Sharpe is correctly discounted ([details](#walk-forward-edge-scan--live-bot-bridge)) |
-| **Cross-Exchange** | Edges that exist *between* venues: lead-lag (latency), cointegration / stat-arb spreads, perp-vs-spot basis, and comparative liquidity for any symbol on ≥2 exchanges |
-| **Portfolio** | Correlation-aware allocation across selected datasets — HRP / risk-parity / inverse-vol weights with fractional-Kelly and vol-target sizing |
-| **Models** | Honest, leakage-free ML evaluation (triple-barrier labels + purged/embargoed CV, optional Optuna), an RL coin recommender for 15m futures (Bybit/OKX/Gate), and the experiment ledger |
-| **Data Quality** | Fleet-wide feed-health monitor (gaps/dupes/malformed) and forward-test attribution (expected vs realized PnL from the live bots) |
-| **Logs** | Live log viewer with level filtering |
-
-**Language (FA/EN):** every string is fully translated via a single `web/i18n.js` dictionary — switching to English leaves no Persian behind, and the layout flips RTL↔LTR via CSS logical properties. The default language is chosen at install time (`make setup`) and stored in `configs/app.json`; a per-user choice in the top bar overrides it. The whole frontend is split into `dashboard.html` (shell) + `styles.css` + `i18n.js` + `app.js` and served as prefix-aware static assets, so it also works behind the `/admin/quant/` reverse proxy.
 
 ### Python Library
 
@@ -76,7 +163,7 @@
 ### Install
 
 ```bash
-git clone https://github.com/<your-org>/Quant_research
+git clone https://github.com/0xh0551/Quant_research
 cd Quant_research
 make setup          # installs deps and asks for the default dashboard language (EN/FA)
 # or, non-interactive:
@@ -174,16 +261,6 @@ All strategies support **long/flat** mode (spot) and **long/short** mode (future
 | Execution delay | 1 bar | Signal at close, executed next bar |
 | Spot position | 0–100% long | Binary long/flat |
 | Futures position | −100% to +100% | Full long/short enabled automatically for futures datasets |
-
-## Backtesting Assumptions
-
-| Parameter | Default | Notes |
-|---|---|---|
-| Initial capital | $10,000 | Configurable via UI |
-| Transaction fee | 10 bps | One-way; charged on position changes |
-| Slippage | 2 bps | One-way; charged on position changes |
-| Execution delay | 1 bar | Signal generated at bar close, executed at next open |
-| Position sizing | 100% long / 0% cash | Binary long/flat, no leverage |
 
 ## Performance Metrics
 
@@ -312,22 +389,32 @@ Quant_research/
 │   │   └── research.py        # LightGBM/XGBoost return + volatility forecasting
 │   ├── validation/
 │   │   └── quality.py         # Data quality checks and gap detection
+│   ├── tracking/
+│   │   └── trial_ledger.py    # Cumulative hypothesis account (deflation base)
 │   ├── web/
 │   │   ├── app.py             # FastAPI server (all API endpoints)
+│   │   ├── home.py            # One cheap summary for all 19 launcher panels
+│   │   ├── demo.py            # Invented snapshot for QR_DEMO=1 screenshots
 │   │   └── jobs.py            # Background job manager (download, research)
 │   ├── cli/
 │   │   └── app.py             # Typer CLI entrypoint
 │   └── config.py              # Pydantic project configuration models
 ├── web/
-│   ├── dashboard.html         # Single-page browser dashboard
-│   └── edges.html             # Walk-forward edges dashboard (/edges)
+│   ├── dashboard.html         # Single-page shell (sidebar, sections, palette)
+│   ├── home.js                # Launcher: chart vocabulary + 19 tile renderers
+│   ├── app.js                 # Section logic (Plotly charts, tables, forms)
+│   ├── i18n.js                # FA/EN dictionary — the single source of strings
+│   ├── styles.css             # Midnight Aurora theme
+│   └── favicon.svg            # Mark, redrawn for a 16px slot
 ├── scripts/
 │   ├── refresh_candidates.py  # Re-scan, write manifest+report, copy to bots, reload
 │   └── refresh_candidates.sh  # Weekly cron wrapper (host)
 ├── data/
 │   ├── processed/             # OHLCV Parquet files ({exchange}_{symbol}_{tf}.parquet)
 │   └── research/              # Feature matrices and research artefacts
-├── docs/                      # Methodology documentation
+├── docs/
+│   ├── screenshots/           # README images (all taken in QR_DEMO mode)
+│   └── *.md                   # Methodology documentation
 ├── reports/                   # Generated HTML and Markdown reports
 ├── tests/                     # Pytest suite
 ├── notebooks/                 # Exploratory notebooks
@@ -399,7 +486,16 @@ Downloads are **incremental**: re-running a download for an existing file only f
 | [ML Research](docs/ml_research.md) | Machine learning baselines |
 | [Monte Carlo](docs/monte_carlo.md) | Bootstrap robustness |
 | [Portfolio Research](docs/portfolio_research.md) | Multi-asset aggregation |
+| [Alpha Research](docs/alpha_research.md) | Signal discovery and evaluation |
+| [Exchange Data](docs/exchange_data.md) | Venue coverage and quirks |
 
 ## Disclaimer
 
-This repository is research infrastructure. It is not financial advice and does not represent live trading performance. All strategy results are in-sample unless explicitly labelled as walk-forward out-of-sample results. Past backtest performance does not predict future returns.
+This repository is research infrastructure. It is not financial advice and does not
+represent live trading performance. All strategy results are in-sample unless
+explicitly labelled as walk-forward out-of-sample. Every figure in the screenshots
+is invented demo data. Past backtest performance does not predict future returns.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
