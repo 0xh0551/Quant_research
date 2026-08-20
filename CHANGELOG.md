@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.5.0] — 2026-08-20
+
+### Home screen: the menu becomes a wall of live widgets
+
+The dashboard had grown to nineteen sections behind one long labelled sidebar —
+a list you had to read top to bottom to find anything, and which said nothing
+about the state of what it linked to. That list is gone.
+
+- **Launcher grid** (`web/home.js`, new default view). Every section is a tile
+  laid out like a phone home screen: equal gutters, squircle app glyph, two
+  widget widths. A tile is a *widget*, not a link — it carries that section's
+  own KPIs, a micro-chart, and controls that work inside the card:
+  - segmented toggles that repaint a tile without a refetch (inventory by
+    timeframe/venue, edges passed/robust, fleet leverage/open/PnL),
+  - sparklines with a live hover readout (top-20 OOS Sharpe, BTC DVOL series),
+  - bar, diverging-bar, funnel, donut and meter charts, all hand-rolled inline
+    SVG — nineteen Plotly instances on the landing view would have cost more
+    than the rest of the dashboard put together,
+  - freshness dot per tile, and a hero strip with fleet equity, deployable
+    edges, job health and dataset count.
+- **`GET /api/home/summary`** (`src/web/home.py`). One TTL-cached call feeds all
+  nineteen widgets. It reads only artifacts other jobs already wrote plus a
+  `stat()` sweep of the parquet store — never a backtest, a parquet parse or an
+  exchange round-trip — so the landing view costs ~0.2 s warm. A missing or
+  corrupt artifact blanks one tile, never the grid.
+- **Icon rail** replaces the sidebar: 66 px, grouped, tooltipped, with red dots
+  for fleet alerts / failing pipeline jobs / log errors.
+- **Command palette** (`Ctrl/⌘+K`) matches on the FA name, the EN name or the
+  section key, so either language finds the same section.
+- Tiles, rail and palette are keyboard-operable and fully bilingual; the FA/EN
+  guard now covers `home.js` and asserts every section has a tile and every tile
+  a renderer.
+
 ## [1.3.0] — 2026-06-11
 
 ### Quant rigor, cross-exchange alpha, portfolio, ML/RL, MLOps

@@ -5,7 +5,7 @@
  * ========================================================================== */
 
 const state = {
-  currentSection: 'download',
+  currentSection: 'home',
   exchanges: [],
   inventory: [],
   inventoryFiltered: [],
@@ -57,12 +57,16 @@ async function init() {
   setLang(lang === 'en' ? 'en' : 'fa');
 
   setTodayEnd();
+  buildRail();
   initResearchStrategies();
-  await loadExchanges();
-  await loadInventory();
+  showSection('home');
 
   // deep-link: /…/edges opens the edges section directly
   if (/\/edges\/?$/.test(window.location.pathname)) showSection('edges');
+
+  // Background fills for the tool sections; the launcher never waits on them.
+  loadExchanges();
+  loadInventory();
 }
 
 function setTodayEnd() {
@@ -76,6 +80,8 @@ function fmtDateTime(ts) {
 // Re-render dynamic content when the language flips.
 window.onLangChange = function () {
   updateSectionHeader(state.currentSection);
+  buildRail();
+  renderHome();
   initResearchStrategies();
   renderInventorySummary();
   renderInventoryCards();
@@ -118,13 +124,21 @@ function updateSectionHeader(name) {
 }
 
 function showSection(name) {
+  const sec = document.getElementById('sec-' + name);
+  if (!sec) return;                       // bail before anything is de-activated
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.getElementById('sec-' + name).classList.add('active');
-  const nav = document.querySelector('.nav-item[data-section="' + name + '"]');
+  document.querySelectorAll('.rail-item').forEach(n => n.classList.remove('active'));
+  sec.classList.add('active');
+  const nav = document.querySelector('.rail-item[data-section="' + name + '"]');
   if (nav) nav.classList.add('active');
   state.currentSection = name;
   updateSectionHeader(name);
+  // The launcher polls itself; every other section is a one-shot load.
+  homeAutoRefresh(name === 'home');
+  const crumb = document.getElementById('home-crumb');
+  if (crumb) crumb.style.display = name === 'home' ? 'none' : '';
+  document.getElementById('content').scrollTop = 0;
+  if (name === 'home') loadHome();
   if (name === 'inventory') loadInventory();
   if (name === 'research') populateResearchDatasets();
   if (name === 'insights') loadInsights();
@@ -147,7 +161,8 @@ function showSection(name) {
 
 function refreshCurrentSection() {
   const s = state.currentSection;
-  if (s === 'inventory') loadInventory();
+  if (s === 'home') loadHome(true);
+  else if (s === 'inventory') loadInventory();
   else if (s === 'insights') loadInsights();
   else if (s === 'research') populateResearchDatasets();
   else if (s === 'lab') initLab();
@@ -309,7 +324,6 @@ async function loadInventory() {
   const { items } = await r.json();
   state.inventory = items || [];
   state.inventoryFiltered = [...state.inventory];
-  document.getElementById('inv-count').textContent = state.inventory.length;
   renderInventorySummary();
   renderInventoryCards();
   populateExchangeFilter();
