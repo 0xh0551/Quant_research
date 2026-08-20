@@ -1,24 +1,43 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"
      role="img" aria-label="Quant Research">
-  <!-- Favicon rendition of the quant mark. Same 4×3 lattice and same lit scan
-       cell as brand/quant-mark.svg, redrawn to survive 16px: a plate for
-       contrast on any tab strip, margins cut to a tenth, cells enlarged
-       relative to their spacing, and the opacity ramp lifted so that no cell
-       drops out at tab size. -->
-  <rect width="64" height="64" rx="14" fill="#0F1626"/>
-  <g fill="#7B93D6">
-    <rect x="5.5"  y="13" width="8" height="8" rx="2.4" opacity=".45"/>
-    <rect x="5.5"  y="28" width="8" height="8" rx="2.4" opacity=".45"/>
-    <rect x="5.5"  y="43" width="8" height="8" rx="2.4" opacity=".45"/>
-    <rect x="20.5" y="13" width="8" height="8" rx="2.4" opacity=".58"/>
-    <rect x="20.5" y="28" width="8" height="8" rx="2.4" opacity=".80"/>
-    <rect x="20.5" y="43" width="8" height="8" rx="2.4" opacity=".58"/>
-    <rect x="35.5" y="13" width="8" height="8" rx="2.4" opacity=".64"/>
-    <rect x="35.5" y="43" width="8" height="8" rx="2.4" opacity=".72"/>
-    <rect x="50.5" y="13" width="8" height="8" rx="2.4" opacity=".45"/>
-    <rect x="50.5" y="28" width="8" height="8" rx="2.4" opacity=".52"/>
-    <rect x="50.5" y="43" width="8" height="8" rx="2.4" opacity=".45"/>
+  <!-- Favicon rendition of the quant mark (brand/quant-mark.svg): the same
+       rounded-square scan lattice with one lit cell, rebuilt for a 16px slot.
+       The mark's own 4x3 grid letterboxes inside a square and dissolves at tab
+       size, so the icon simplifies to 3x3 and fills the frame. Transparent —
+       the opacity ramp climbs toward the lit cell and lifts on dark UI so the
+       lattice holds on either tab strip. -->
+  <defs>
+    <linearGradient id="qr-lat" gradientUnits="userSpaceOnUse" x1="6" y1="6" x2="56" y2="56">
+      <stop offset="0" stop-color="#6FE9D8"/>
+      <stop offset=".55" stop-color="#6D8BD8"/>
+      <stop offset="1" stop-color="#9AA4FB"/>
+    </linearGradient>
+    <linearGradient id="qr-lit" gradientUnits="userSpaceOnUse" x1="43" y1="23" x2="61" y2="41">
+      <stop offset="0" stop-color="#8CF6E6"/>
+      <stop offset="1" stop-color="#25CCB7"/>
+    </linearGradient>
+    <radialGradient id="qr-halo">
+      <stop offset="0" stop-color="#5EE6D0" stop-opacity=".5"/>
+      <stop offset=".45" stop-color="#5EE6D0" stop-opacity=".14"/>
+      <stop offset="1" stop-color="#5EE6D0" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .f{opacity:.5} .m{opacity:.68} .n{opacity:.8} .h{opacity:.9}
+      @media (prefers-color-scheme: dark){
+        .f{opacity:.62} .m{opacity:.78} .n{opacity:.9} .h{opacity:1}
+      }
+    </style>
+  </defs>
+  <g fill="url(#qr-lat)">
+    <rect x="4.5"  y="4.5"  width="15" height="15" rx="5" class="f"/>
+    <rect x="24.5" y="4.5"  width="15" height="15" rx="5" class="m"/>
+    <rect x="44.5" y="4.5"  width="15" height="15" rx="5" class="n"/>
+    <rect x="4.5"  y="24.5" width="15" height="15" rx="5" class="m"/>
+    <rect x="24.5" y="24.5" width="15" height="15" rx="5" class="h"/>
+    <rect x="4.5"  y="44.5" width="15" height="15" rx="5" class="f"/>
+    <rect x="24.5" y="44.5" width="15" height="15" rx="5" class="m"/>
+    <rect x="44.5" y="44.5" width="15" height="15" rx="5" class="n"/>
   </g>
-  <rect x="32.9" y="25.4" width="13.2" height="13.2" rx="4" fill="#5EE6D0" opacity=".24"/>
-  <rect x="34.7" y="27.2" width="9.6" height="9.6" rx="2.9" fill="#5EE6D0"/>
+  <circle cx="52" cy="32" r="16" fill="url(#qr-halo)"/>
+  <rect x="43" y="23" width="18" height="18" rx="6" fill="url(#qr-lit)"/>
 </svg>
