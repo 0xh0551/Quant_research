@@ -61,9 +61,9 @@ def test_reads_the_artifacts_it_advertises(isolated):
     (outputs / "fleet_risk.json").write_text(json.dumps({
         "generated_at": "2026-08-20T00:00:00+00:00",
         "fleet": {"equity_usd": 7000.0, "gross_leverage": 0.5, "n_positions": 3, "n_bots": 2},
-        "per_bot": [{"bot": "Popeye", "gross_leverage": 0.4, "n_open": 2, "realized_pnl": -5.0}],
-        "per_asset": [{"base": "BTC", "gross_notional": 100.0, "bots": ["Popeye"]},
-                      {"base": "ETH", "gross_notional": 300.0, "bots": ["Popeye"]}],
+        "per_bot": [{"bot": "Alpha", "gross_leverage": 0.4, "n_open": 2, "realized_pnl": -5.0}],
+        "per_asset": [{"base": "BTC", "gross_notional": 100.0, "bots": ["Alpha"]},
+                      {"base": "ETH", "gross_notional": 300.0, "bots": ["Alpha"]}],
         "limits": {"max_gross_leverage": 3.0},
         "alerts": [{"code": "gross_leverage"}],
     }), encoding="utf-8")
