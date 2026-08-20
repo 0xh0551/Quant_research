@@ -19,6 +19,7 @@ import os
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -83,7 +84,7 @@ class ScanResult:
 
 def _bars_per_year(timeframe: str) -> int:
     hpb = TF_HOURS.get(timeframe, 24.0)
-    return max(1, int(round(24.0 * 365.0 / hpb)))
+    return max(1, round(24.0 * 365.0 / hpb))
 
 
 def _parse_dataset(stem: str) -> tuple[str, str, str]:
@@ -179,7 +180,7 @@ def scan_dataset(
                 passed=passed,
                 oos_mu_bar=round(float(mu), 8),
                 oos_sigma_bar=round(float(sd), 8),
-                n_oos_bars=int(len(stitched)),
+                n_oos_bars=len(stitched),
             ))
             stitched_by_result.append(stitched.to_numpy(dtype=float))
 
@@ -267,7 +268,7 @@ def scan_processed_dir(
     processed_dir: Path,
     *,
     only_symbols: list[str] | None = None,
-    **kwargs,
+    **kwargs: Any,
 ) -> list[ScanResult]:
     """دیتاهای کوتاه‌تر از ۶۰۰۰ کندل (مثل Hyperliquid) با پنجرهٔ کوچک‌تر اسکن می‌شوند.
 
@@ -358,7 +359,7 @@ def _write_json_atomic(path: Path, payload: dict) -> None:
     tmp.replace(path)
 
 
-def _json_safe(o):
+def _json_safe(o: Any) -> Any:
     """NaN/Inf → None. استاندارد JSON این مقادیر را ندارد؛ پایتون آن‌ها را بدون
     کوتیشن می‌نویسد و هر مصرف‌کنندهٔ مرورگری (داشبورد QR و تب «کوانت ریسرچ» در
     پنل نریمانی) روی JSON.parse می‌شکند. dsr_cum وقتی دفترچهٔ trial داده کافی
@@ -474,7 +475,8 @@ def apply_robustness(
 
 # ── reporting (dashboard report + external admin mirrors) ──────────────────
 
-def _best_per_symbol(survivors: list[ScanResult], timeframe: str | None = None):
+def _best_per_symbol(survivors: list[ScanResult],
+                     timeframe: str | None = None) -> dict[str, ScanResult]:
     """بهترین کاندید (بیشترین Sharpe) به ازای هر symbol، اختیاراً محدود به یک tf."""
     best: dict[str, ScanResult] = {}
     for r in survivors:

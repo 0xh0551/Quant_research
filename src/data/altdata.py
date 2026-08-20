@@ -65,8 +65,8 @@ def fetch_dvol(currency: str = "BTC", days: int = 30) -> pd.DataFrame:
         start = end - days * 86_400_000
         r = requests.get(
             "https://www.deribit.com/api/v2/public/get_volatility_index_data",
-            params={"currency": currency, "start_timestamp": start,
-                    "end_timestamp": end, "resolution": "3600"},
+            params={"currency": currency, "start_timestamp": str(start),
+                    "end_timestamp": str(end), "resolution": "3600"},
             timeout=HTTP_TIMEOUT,
         )
         rows = (r.json().get("result") or {}).get("data") or []
@@ -211,7 +211,8 @@ def fetch_liquidations(inst_family: str = "BTC-USDT", limit: int = 100) -> pd.Da
         ct_vals = _okx_contract_values(inst_family)
         r = requests.get(
             "https://www.okx.com/api/v5/public/liquidation-orders",
-            params={"instType": "SWAP", "state": "filled", "uly": inst_family, "limit": limit},
+            params={"instType": "SWAP", "state": "filled", "uly": inst_family,
+                    "limit": str(limit)},
             timeout=HTTP_TIMEOUT,
         )
         out = []

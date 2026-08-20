@@ -34,6 +34,7 @@ from __future__ import annotations
 import json
 import math
 from datetime import UTC, datetime
+from itertools import pairwise
 from pathlib import Path
 from typing import Any
 
@@ -146,9 +147,9 @@ def capacity_curve(
     grid: list[float] | None = None,
 ) -> dict[str, Any]:
     """Net round-trip expectancy across the size grid + capacity points."""
-    grid = grid or SIZE_GRID_USD
+    sizes: list[float] = [float(x) for x in (grid or SIZE_GRID_USD)]
     points = []
-    for n in grid:
+    for n in sizes:
         imp_rt = 2.0 * impact_bps(n, k_l2, adv)
         net = edge_rt_bps - fee_rt_bps - imp_rt
         points.append({"notional": n, "impact_rt_bps": round(imp_rt, 2), "net_edge_bps": round(net, 2)})
@@ -159,7 +160,7 @@ def capacity_curve(
     if gross_net > 0:
         # closed-form under the √N regime: impact_rt(N) = 2k√N (book regime
         # dominates at these sizes); fall back to grid scan when only ADV known
-        for prev, cur in zip(points, points[1:]):
+        for prev, cur in pairwise(points):
             if prev["net_edge_bps"] > 0 >= cur["net_edge_bps"]:
                 # linear interpolation in √N space
                 f = prev["net_edge_bps"] / (prev["net_edge_bps"] - cur["net_edge_bps"])
@@ -167,7 +168,7 @@ def capacity_curve(
                 break
         if capacity is None and points and points[-1]["net_edge_bps"] > 0:
             capacity = float(points[-1]["notional"])  # beyond the grid — report grid max
-        for prev, cur in zip(points, points[1:]):
+        for prev, cur in pairwise(points):
             half = gross_net / 2.0
             if prev["net_edge_bps"] > half >= cur["net_edge_bps"]:
                 f = (prev["net_edge_bps"] - half) / (prev["net_edge_bps"] - cur["net_edge_bps"])

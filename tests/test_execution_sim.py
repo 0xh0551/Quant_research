@@ -3,7 +3,6 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-
 from src.backtesting.engine import BacktestConfig
 from src.backtesting.execution_sim import (
     ExecutionParams,

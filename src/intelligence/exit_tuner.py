@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
 EVIDENCE = OUT / "agent_exits_evidence.json"
 
-UTC = timezone.utc
+UTC = UTC
 FEE_RT = 0.0012           # round-trip taker fee on notional (conservative across venues)
 MIN_N = 8
 MIN_TP, MAX_TP = 0.01, 0.08   # 1% کف: زیرِ آن اسکالپِ نویزِ کندلی است (درسِ براکتِ 08-12)
@@ -128,7 +128,7 @@ def tune(df: pd.DataFrame) -> dict:
     h1, h2 = df.iloc[:half], df.iloc[half:]
     imp1 = round(sim_pnl(h1, tp) - float(h1["close_profit_abs"].sum()), 2)
     imp2 = round(sim_pnl(h2, tp) - float(h2["close_profit_abs"].sum()), 2)
-    ev.update({"curve": [[float(g), round(float(s), 2)] for g, s in zip(grid, sims)],
+    ev.update({"curve": [[float(g), round(float(s), 2)] for g, s in zip(grid, sims, strict=True)],
                "tp_candidate": tp, "sim_pnl": round(float(sims[i]), 2),
                "raw_improvement": raw_imp, "smooth_improvement": smooth_imp,
                "split_half_improvement": [imp1, imp2],
@@ -194,12 +194,12 @@ def stop_geometry(df: pd.DataFrame) -> dict:
     usage = (ws["mae"] / ws["stop_dist"]).replace([np.inf], np.nan).dropna() if len(ws) else pd.Series(dtype=float)
     stops = df[df["exit_reason"].fillna("").str.contains("stop|liquidation", case=False)]
     gave_back = stops[stops["mfe"] >= 0.01]
-    return {"n_winners": int(len(w)), "n_with_stop_info": int(len(ws)),
+    return {"n_winners": len(w), "n_with_stop_info": len(ws),
             "winner_stop_usage_p50": round(float(usage.quantile(0.5)), 2) if len(usage) else None,
             "winner_stop_usage_p90": round(float(usage.quantile(0.9)), 2) if len(usage) else None,
             "winners_near_stop_share": round(float((usage >= 0.8).mean()), 3) if len(usage) else None,
-            "stop_exits": int(len(stops)), "stop_exit_share": round(float(len(stops) / len(df)), 3),
-            "stop_exits_gave_back_first": int(len(gave_back)),
+            "stop_exits": len(stops), "stop_exit_share": round(float(len(stops) / len(df)), 3),
+            "stop_exits_gave_back_first": len(gave_back),
             "stop_exits_gave_back_usd": round(float(gave_back["close_profit_abs"].sum()), 2),
             "median_stop_dist_pct": round(float(df["stop_dist"].median() * 100), 3) if df["stop_dist"].notna().any() else None,
             "read": ("stops look TIGHT (many winners used >80% of the distance)" if len(usage) and float((usage >= 0.8).mean()) > 0.3
@@ -215,7 +215,7 @@ def pair_capture(df: pd.DataFrame, min_n: int = 4) -> list[dict]:
         if len(g) < min_n:
             continue
         cs = capture_stats(g)
-        rows.append({"pair": pair, "n": int(len(g)), "pnl": round(float(g["close_profit_abs"].sum()), 2),
+        rows.append({"pair": pair, "n": len(g), "pnl": round(float(g["close_profit_abs"].sum()), 2),
                      "mfe_mean": round(float(g["mfe"].mean()), 4), **cs,
                      "flag": ("big_mfe_negative_capture" if float(g["mfe"].mean()) >= 0.02
                               and (cs["capture_weighted"] or 0) <= 0 else "")})
@@ -232,7 +232,7 @@ def tune_fleet() -> tuple[dict, dict]:
         sides = {}
         for name, sub in (("long", df[df["is_short"] == 0] if len(df) else df),
                           ("short", df[df["is_short"] == 1] if len(df) else df)):
-            sides[name] = tune(sub) if len(sub) >= MIN_N else {"n": int(len(sub)), "tp": None,
+            sides[name] = tune(sub) if len(sub) >= MIN_N else {"n": len(sub), "tp": None,
                                                                 "why": "n<MIN_N -> pooled"}
         tp_long = sides["long"].get("tp") or pooled.get("tp")
         tp_short = sides["short"].get("tp") or pooled.get("tp")
@@ -242,12 +242,12 @@ def tune_fleet() -> tuple[dict, dict]:
         payload_bots[bot] = {
             "tp_long_pct": tp_long, "tp_short_pct": tp_short,
             "diagnosis": diag.get("label"),
-            "epoch": BOT_EPOCH.get(bot), "n": int(len(df)),
+            "epoch": BOT_EPOCH.get(bot), "n": len(df),
             "why": pooled.get("why"),
         }
         evidence[bot] = {"pooled": pooled, "sides": sides, "diagnosis": diag,
                          "stop_geometry": stops, "pair_capture": pairs,
-                         "epoch": BOT_EPOCH.get(bot), "n": int(len(df))}
+                         "epoch": BOT_EPOCH.get(bot), "n": len(df)}
     return payload_bots, evidence
 
 

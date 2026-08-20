@@ -17,10 +17,10 @@ from __future__ import annotations
 import json
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # load-bearing
-from src.llm.client import get_llm  # noqa: E402
+from src.llm.client import get_llm
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(_ROOT, "outputs")
@@ -109,7 +109,7 @@ def run() -> dict:
         brief = _fallback(f)
         source = source or "llm_disabled"
     out = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
         "source": source, "model": model, "cost_usd": round(cost, 6),
         "month_spend": round(llm.month_spend(), 4), "budget_remaining": llm.budget_remaining(),
         "brief": brief,

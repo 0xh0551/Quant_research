@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,7 +29,7 @@ def _rows(days: float | None) -> list[dict]:
         return []
     cutoff = None
     if days:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
     out = []
     for line in LEDGER.read_text().splitlines():
         line = line.strip()
@@ -102,7 +102,7 @@ def main() -> None:
     if SPEND.exists():
         try:
             book = json.loads(SPEND.read_text())
-            mk = datetime.now(timezone.utc).strftime("%Y-%m")
+            mk = datetime.now(UTC).strftime("%Y-%m")
             print(f"\nmonth-to-date (authoritative counter): ${float(book.get(mk, 0.0)):.4f}")
         except (OSError, ValueError):
             pass

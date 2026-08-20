@@ -172,10 +172,8 @@ class CCXTFallbackDownloader:
             since = int(first_batch[-1][0]) + step
         elif first_batch is not None:
             found = self._first_available_ms(symbol, request.timeframe, since, end_ms, limit)
-            if found is None:
-                since = end_ms  # واقعاً داده‌ای نیست
-            else:
-                since = found
+            # None → واقعاً داده‌ای نیست؛ به انتهای بازه بپر
+            since = end_ms if found is None else found
 
         while since < end_ms:
             try:

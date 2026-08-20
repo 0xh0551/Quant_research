@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """Backtest the cross-sectional money-flow signal on NATIVE Hyperliquid data
 (208 days of 1h OHLCV that HL actually serves — no proxy).
 
@@ -11,9 +10,13 @@ accumulate. This answers "test on the real exchange's data" as far as the data a
 Long top-k inflow / short bottom-k outflow, dollar-neutral, hysteresis, net of HL fees.
 """
 from __future__ import annotations
-import math, time, sys
+
+import math
 from pathlib import Path
-import numpy as np, pandas as pd, ccxt
+
+import ccxt
+import numpy as np
+import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE = ROOT / "data" / "hl_flow" / "ohlcv"
@@ -27,8 +30,9 @@ def liquid_universe(ex, min_oi=10e6, min_vol=2e6, cap=35):
     info = ex.publicPostInfo({"type": "metaAndAssetCtxs"})
     meta, ctxs = info[0], info[1]
     rows = []
-    for u, c in zip(meta["universe"], ctxs):
-        mark = float(c.get("markPx") or 0); oi = float(c.get("openInterest") or 0)
+    for u, c in zip(meta["universe"], ctxs, strict=False):
+        mark = float(c.get("markPx") or 0)
+        oi = float(c.get("openInterest") or 0)
         vol = float(c.get("dayNtlVlm") or 0)
         if oi * mark >= min_oi and vol >= min_vol:
             rows.append((u["name"], oi * mark))
@@ -90,33 +94,51 @@ def _z_t(s):  # time-series z (per coin) just to stabilize; XS-z happens at deci
 
 
 def backtest(S, R, k, band, cost, every):
-    cols = list(S.columns); Sv = S.to_numpy(); Rv = R.to_numpy()
+    cols = list(S.columns)
+    Sv = S.to_numpy()
+    Rv = R.to_numpy()
     idx_of = {c: i for i, c in enumerate(cols)}
-    cur_l, cur_s = set(), set(); w_prev = np.zeros(len(cols))
+    cur_l, cur_s = set(), set()
+    w_prev = np.zeros(len(cols))
     rets, turns = [], []
     for t in range(len(S)):
-        row = Sv[t]; fin = np.where(np.isfinite(row))[0]
+        row = Sv[t]
+        fin = np.where(np.isfinite(row))[0]
         if len(fin) >= 2 * k and t % every == 0:
-            vals = row[fin]; z = (vals - vals.mean()) / (vals.std() + 1e-9)
-            order = fin[np.argsort(z)]; ranked = [cols[i] for i in order]
+            vals = row[fin]
+            z = (vals - vals.mean()) / (vals.std() + 1e-9)
+            order = fin[np.argsort(z)]
+            ranked = [cols[i] for i in order]
             rank = {p: r for r, p in enumerate(ranked)}
-            topb = set(ranked[-(k + band):]); botb = set(ranked[:k + band])
-            keep_l = sorted([p for p in cur_l if p in topb], key=lambda p: rank[p], reverse=True)[:k]
+            topb = set(ranked[-(k + band):])
+            botb = set(ranked[:k + band])
+            keep_l = sorted([p for p in cur_l if p in topb],
+                            key=lambda p: rank[p], reverse=True)[:k]
             for p in reversed(ranked):
-                if len(keep_l) >= k: break
-                if p not in keep_l: keep_l.append(p)
+                if len(keep_l) >= k:
+                    break
+                if p not in keep_l:
+                    keep_l.append(p)
             keep_s = sorted([p for p in cur_s if p in botb], key=lambda p: rank[p])[:k]
             for p in ranked:
-                if len(keep_s) >= k: break
-                if p not in keep_s and p not in keep_l: keep_s.append(p)
+                if len(keep_s) >= k:
+                    break
+                if p not in keep_s and p not in keep_l:
+                    keep_s.append(p)
             cur_l, cur_s = set(keep_l[:k]), set(keep_s[:k])
         w = np.zeros(len(cols))
-        for p in cur_l: w[idx_of[p]] = 1.0 / k
-        for p in cur_s: w[idx_of[p]] = -1.0 / k
+        for p in cur_l:
+            w[idx_of[p]] = 1.0 / k
+        for p in cur_s:
+            w[idx_of[p]] = -1.0 / k
         turn = np.abs(w - w_prev).sum()
         r1 = np.where(np.isfinite(Rv[t]), Rv[t], 0.0)
-        rets.append(float((w * r1).sum()) - turn * cost / 2.0); turns.append(turn); w_prev = w
-    rets = np.asarray(rets); n = len(rets); ann = math.sqrt(8760)
+        rets.append(float((w * r1).sum()) - turn * cost / 2.0)
+        turns.append(turn)
+        w_prev = w
+    rets = np.asarray(rets)
+    n = len(rets)
+    ann = math.sqrt(8760)
     sh = float(rets.mean() / (rets.std() + 1e-12) * ann) if n > 10 else float("nan")
     cum = float(np.prod(1 + rets) - 1)
     return {"sharpe": round(sh, 2), "cum": round(cum, 3),
@@ -141,7 +163,8 @@ def main():
                     tag = f"L={L} k={k} e={every} {cn}"
                     print(f"{L:>3}{k:>3}{every:>6}{cn:>6} |{r['sharpe']:>7}{r['cum']:>8}"
                           f"{r['dayturn']:>8}{r['hit']:>6}{r['n']:>6}")
-                    if cn == "mk": best.append((r["sharpe"], tag, r))
+                    if cn == "mk":
+                        best.append((r["sharpe"], tag, r))
         print()
     best.sort(reverse=True)
     print("=== TOP 5 (maker 4bps, on REAL HL data) ===")

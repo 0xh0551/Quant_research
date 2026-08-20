@@ -19,7 +19,7 @@ downstream from the rolling parquet, not per-fetch.
 
 from __future__ import annotations
 
-import numpy as np
+from typing import Any
 
 # ccxt exchange id + defaultType per supported venue
 VENUES = {
@@ -30,7 +30,7 @@ VENUES = {
 }
 
 
-def make_exchange(venue: str):
+def make_exchange(venue: str) -> Any:
     import ccxt
 
     spec = VENUES[venue]
@@ -69,7 +69,8 @@ def _vwap(levels: list, target_notional: float) -> float | None:
     return notional / qty
 
 
-def book_features(book: dict, symbol: str, venue: str, target_notionals=(500.0, 2000.0), n_levels: int = 10) -> dict:
+def book_features(book: dict, symbol: str, venue: str,
+                  target_notionals: tuple[float, ...] =(500.0, 2000.0), n_levels: int = 10) -> dict:
     bids = book.get("bids") or []
     asks = book.get("asks") or []
     if not bids or not asks:
@@ -111,4 +112,4 @@ def compute_ofi(prev: dict, cur: dict) -> float | None:
     denom = abs(d_bid) + abs(d_ask)
     if denom == 0:
         return 0.0
-    return round((d_bid - d_ask) / denom, 4)
+    return float(round((d_bid - d_ask) / denom, 4))

@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import itertools
 import json
 import logging
 import subprocess
-import sys
 import threading
 import time
 from collections.abc import AsyncGenerator
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import ccxt as _ccxt
 import numpy as np
@@ -26,26 +26,26 @@ from pydantic import BaseModel
 from src.analysis import cross_exchange as _cx
 from src.analysis import forward_test as _fwd
 from src.analysis.statistics import bootstrap_metric_ci
-from src.backtesting.engine import BacktestConfig, VectorizedBacktester
 from src.backtesting import execution_sim as _exec_sim
+from src.backtesting.engine import BacktestConfig, VectorizedBacktester
 from src.data.downloader import CCXTFallbackDownloader, DataIngestionPipeline, DownloadRequest
-from src.ml import model_eval as _ml_eval
-from src.portfolio import construction as _pf
-from src.portfolio import sizing as _sizing
-from src.ml.recommend import recommend_ml_coins
-from src.rl.recommend import recommend_rl_coins
-from src.tracking.money_flow import recommend_money_flow_coins
-from src.tracking.experiments import log_run, recent_runs
-from src.validation.monitor import quality_report
 from src.data.nobitex import NobitexDataIngestionPipeline, NobitexDownloadRequest
 from src.data.storage import ParquetDataStore
 from src.logging_config import setup_logging, tail_log
+from src.ml import model_eval as _ml_eval
+from src.ml.recommend import recommend_ml_coins
+from src.portfolio import construction as _pf
+from src.portfolio import sizing as _sizing
+from src.rl.recommend import recommend_rl_coins
 from src.strategies.rules import (
     STRATEGY_PARAM_GRIDS,
     STRATEGY_PARAM_SPECS,
     build_strategy_signals,
     build_strategy_signals_with_params,
 )
+from src.tracking.experiments import log_run, recent_runs
+from src.tracking.money_flow import recommend_money_flow_coins
+from src.validation.monitor import quality_report
 from src.web.jobs import JobStatus, job_manager
 
 ROOT = Path(__file__).parent.parent.parent
@@ -180,7 +180,7 @@ def _load_app_config() -> dict[str, Any]:
     cfg_path = ROOT / "configs" / "app.json"
     if cfg_path.exists():
         try:
-            return json.loads(cfg_path.read_text(encoding="utf-8"))
+            return cast(dict[str, Any], json.loads(cfg_path.read_text(encoding="utf-8")))
         except Exception:
             pass
     return {}
@@ -368,10 +368,8 @@ def get_edges() -> dict[str, Any]:
         for line in history_path.read_text(encoding="utf-8").splitlines()[-60:]:
             line = line.strip()
             if line:
-                try:
+                with contextlib.suppress(Exception):
                     history.append(json.loads(line))
-                except Exception:
-                    pass
 
     return {
         "report": report,
@@ -412,7 +410,7 @@ def _pipeline_status_now() -> dict:
                 status["stale"] = True
         except Exception:
             pass
-    return status
+    return cast(dict[Any, Any], status)
 
 
 @app.get("/api/edges/pipeline-status")
@@ -483,10 +481,8 @@ def _run_edge_refresh(job_id: str) -> None:
             if lr.get("ok"):
                 report_path = OUTPUTS_DIR / "wf_report.json"
                 report: dict = {}
-                try:
+                with contextlib.suppress(Exception):
                     report = json.loads(report_path.read_text(encoding="utf-8"))
-                except Exception:
-                    pass
                 n_passed = report.get("n_passed", 0)
                 n_alerts = len(report.get("alerts", []))
                 job_manager.update(
@@ -732,7 +728,7 @@ def lab_run(req: LabRunRequest) -> dict[str, Any]:
             "params": req.params,
         }
     except Exception as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.post("/api/lab/optimize")
@@ -888,7 +884,7 @@ def capacity_route(refresh: int = 0, fee_rt_bps: float = 11.0) -> dict[str, Any]
 
     path = OUTPUTS_DIR / "capacity_report.json"
     if not refresh and path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     try:
         return _cap.write_report(fee_rt_bps=fee_rt_bps)
     except Exception as exc:
@@ -909,7 +905,7 @@ def altdata_route(refresh: int = 0) -> dict[str, Any]:
             _alt.refresh_all()
             return _alt.build_snapshot()
         if _alt.SNAPSHOT_PATH.exists():
-            return json.loads(_alt.SNAPSHOT_PATH.read_text(encoding="utf-8"))
+            return cast(dict[str, Any], json.loads(_alt.SNAPSHOT_PATH.read_text(encoding="utf-8")))
         return _alt.build_snapshot()
     except Exception as exc:
         logger.exception("altdata snapshot failed")
@@ -945,7 +941,7 @@ def attribution_route(days: float = 45.0, refresh: int = 0) -> dict[str, Any]:
         try:
             cached = json.loads(path.read_text(encoding="utf-8"))
             if cached.get("window_days") == days:
-                return cached
+                return cast(dict[str, Any], cached)
         except Exception:
             pass
     try:
@@ -1016,7 +1012,7 @@ def stress_route(refresh: int = 1) -> dict[str, Any]:
 
     path = OUTPUTS_DIR / "stress_report.json"
     if not refresh and path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
+        return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     try:
         return _stress.write_report()
     except Exception as exc:
@@ -1038,7 +1034,7 @@ def fleet_risk_route(cached: int = 0) -> dict[str, Any]:
     if cached:
         path = OUTPUTS_DIR / "fleet_risk.json"
         if path.exists():
-            return json.loads(path.read_text(encoding="utf-8"))
+            return cast(dict[str, Any], json.loads(path.read_text(encoding="utf-8")))
     try:
         return _fleet.write_snapshot()
     except Exception as exc:  # degrade to an explicit empty snapshot, never 500
@@ -1183,7 +1179,16 @@ def _run_research(job_id: str, req: ResearchRequest) -> None:
                 taker_slippage_bps=req.slippage_bps,
             )
 
-            def _bt_run(signals: pd.Series):
+            # Bound as defaults, not captured: this is defined inside the
+            # per-dataset loop, and a late-binding closure would silently read
+            # the last dataset's frame if it were ever called after the loop.
+            def _bt_run(
+                signals: pd.Series, *,
+                realistic: bool = realistic, df: pd.DataFrame = df,
+                config: BacktestConfig = config,
+                exec_params: Any = exec_params, funding_series: Any = funding_series,
+                backtester: VectorizedBacktester = backtester,
+            ) -> Any:
                 if realistic:
                     return _exec_sim.run_realistic(
                         df.set_index("timestamp"),
@@ -1283,12 +1288,14 @@ def _run_optimize(job_id: str, req: LabOptRequest) -> None:
         backtester = VectorizedBacktester(config)
 
         grid = STRATEGY_PARAM_GRIDS.get(req.strategy, {})
+        all_params: list[dict[str, Any]]
         if not grid:
             all_params = [{}]
         else:
             keys = list(grid.keys())
             values = list(grid.values())
-            all_params = [dict(zip(keys, combo)) for combo in itertools.product(*values)]
+            all_params = [dict(zip(keys, combo, strict=True))
+                          for combo in itertools.product(*values)]
 
         total = len(all_params)
         results: list[dict[str, Any]] = []
@@ -1578,7 +1585,7 @@ def _price_momentum(df: pd.DataFrame) -> float:
 def _estimate_hurst(returns: np.ndarray) -> float:
     """Simplified R/S Hurst exponent estimation."""
     try:
-        lags = [l for l in [2, 4, 8, 16, 32, 64] if l < len(returns) // 4]
+        lags = [lag for lag in [2, 4, 8, 16, 32, 64] if lag < len(returns) // 4]
         if len(lags) < 2:
             return 0.5
         rs_values = []

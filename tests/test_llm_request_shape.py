@@ -7,10 +7,10 @@ request shape, because the cost of getting it wrong is silent and monthly.
 from __future__ import annotations
 
 import types
+from typing import ClassVar
 
 import pytest
-
-from src.llm import client as C
+from src.llm import client as llm_client
 
 
 class _FakeUsage:
@@ -25,15 +25,15 @@ class _FakeResp:
     model = "claude-sonnet-5"
     stop_reason = "end_turn"
     usage = _FakeUsage()
-    content = [types.SimpleNamespace(type="text", text='{"ok": true}')]
+    content: ClassVar[list] = [types.SimpleNamespace(type="text", text='{"ok": true}')]
 
 
 @pytest.fixture
 def llm(tmp_path, monkeypatch):
     """A client that records the request instead of sending it."""
-    monkeypatch.setattr(C, "LEDGER_FILE", tmp_path / "calls.jsonl")
-    monkeypatch.setattr(C, "SPEND_FILE", tmp_path / "spend.json")
-    obj = C.QuantLLM(api_key="test")
+    monkeypatch.setattr(llm_client, "LEDGER_FILE", tmp_path / "calls.jsonl")
+    monkeypatch.setattr(llm_client, "SPEND_FILE", tmp_path / "spend.json")
+    obj = llm_client.QuantLLM(api_key="test")
     sent: dict = {}
 
     def _create(**kwargs):
@@ -61,7 +61,7 @@ def test_omitting_thinking_keeps_the_headroom(llm):
     obj.complete("hi", tier="smart", max_tokens=1500)
 
     assert "thinking" not in sent
-    assert sent["max_tokens"] == 1500 + C.THINKING_HEADROOM
+    assert sent["max_tokens"] == 1500 + llm_client.THINKING_HEADROOM
 
 
 def test_effort_rides_in_output_config_next_to_the_schema(llm):

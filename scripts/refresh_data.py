@@ -27,7 +27,9 @@ sys.path.insert(0, str(ROOT))
 
 from src import local_config  # noqa: E402
 from src.data.downloader import (  # noqa: E402
-    CCXTFallbackDownloader, DownloadRequest, timeframe_to_milliseconds,
+    CCXTFallbackDownloader,
+    DownloadRequest,
+    timeframe_to_milliseconds,
 )
 
 PROCESSED = ROOT / "data" / "processed"
@@ -343,7 +345,7 @@ def write_coverage(files: list[Path]) -> str:
         try:
             ts = pd.read_parquet(path, columns=["timestamp"])["timestamp"]
             ccxt_id, market_type, symbol, tf = _parse(path.stem)
-            bars = int(len(ts))
+            bars = len(ts)
             rows.append({
                 "dataset": path.stem,
                 "exchange": f"{ccxt_id}_{market_type}" if market_type != "spot" else ccxt_id,
@@ -357,7 +359,7 @@ def write_coverage(files: list[Path]) -> str:
                 "refreshable": ccxt_id not in SKIP_EXCHANGES,
                 "size_mb": round(path.stat().st_size / 1e6, 2),
             })
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             rows.append({"dataset": path.stem, "error": str(exc)})
 
     COVERAGE_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -384,7 +386,7 @@ def main() -> int:
     for args in all_bootstrap:
         try:
             print("  " + bootstrap_one(*args))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  FAIL bootstrap {args}: {exc}")
 
     # فاز ۲: عمیق‌سازی فایل‌های کوتاه (تا وارد اسکن walk-forward شوند)
@@ -395,7 +397,7 @@ def main() -> int:
             msg = deepen_one(path)
             if not msg.startswith("ok   "):
                 print("  " + msg)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  FAIL deepen {path.name}: {exc}")
 
     # فاز ۳: رفرشِ افزایشیِ پارکت‌های موجود
@@ -404,13 +406,13 @@ def main() -> int:
     for path in files:
         try:
             print("  " + refresh_one(path))
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             print(f"  FAIL {path.name}: {exc}")
 
     # فاز ۴: خلاصهٔ پوشش
     try:
         print(write_coverage(files))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         print(f"FAIL coverage: {exc}")
     return 0
 

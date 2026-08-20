@@ -86,7 +86,7 @@ def main() -> int:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / "funding_carry.json").write_text(json.dumps(payload, indent=2))
     if not args.quiet:
-        print(f"top carry (gross %/yr):")
+        print("top carry (gross %/yr):")
         for o in payload["top_carry"][:6]:
             print(f"  {o['base']:10} short@{o['short_venue']:12} long@{o['long_venue']:12} ≈ {o['gross_spread_ann_pct']:6.1f}%/yr")
         print("[written] outputs/funding_carry.json")

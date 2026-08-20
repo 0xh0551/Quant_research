@@ -24,8 +24,10 @@ from __future__ import annotations
 import itertools
 import math
 from dataclasses import dataclass
+from typing import cast
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy import stats
 
 EULER_MASCHERONI = 0.5772156649015329
@@ -35,7 +37,7 @@ EULER_MASCHERONI = 0.5772156649015329
 
 def _clean(returns: np.ndarray) -> np.ndarray:
     r = np.asarray(returns, dtype=float)
-    return r[np.isfinite(r)]
+    return cast(NDArray, r[np.isfinite(r)])
 
 
 def per_bar_sharpe(returns: np.ndarray) -> float:
@@ -71,10 +73,10 @@ def _expected_max_sharpe(sr_std: float, n_trials: int) -> float:
     if n_trials < 2 or sr_std <= 0:
         return 0.0
     n = float(n_trials)
-    return sr_std * (
+    return float(sr_std * (
         (1.0 - EULER_MASCHERONI) * stats.norm.ppf(1.0 - 1.0 / n)
         + EULER_MASCHERONI * stats.norm.ppf(1.0 - 1.0 / (n * math.e))
-    )
+    ))
 
 
 def deflated_sharpe_ratio(
@@ -136,7 +138,7 @@ def _moving_block_bootstrap(returns: np.ndarray, block: int, rng: np.random.Gene
     n_blocks = int(np.ceil(n / block))
     starts = rng.integers(0, max(n - block, 1), size=n_blocks)
     idx = np.concatenate([np.arange(s, s + block) for s in starts])[:n] % n
-    return returns[idx]
+    return cast(NDArray, returns[idx])
 
 
 def bootstrap_metric_ci(
@@ -149,7 +151,7 @@ def bootstrap_metric_ci(
     if r.size < 20:
         return out
     if block is None:
-        block = max(2, int(round(r.size ** (1.0 / 3.0))))  # ~ n^(1/3) rule of thumb
+        block = max(2, round(r.size ** (1.0 / 3.0)))  # ~ n^(1/3) rule of thumb
     rng = np.random.default_rng(seed)
 
     def metrics(x: np.ndarray) -> tuple[float, float, float]:
@@ -189,7 +191,7 @@ def probability_of_backtest_overfitting(
     M = np.asarray(returns_matrix, dtype=float)
     if M.ndim != 2 or M.shape[1] < 2 or M.shape[0] < n_splits:
         return {"pbo": float("nan"), "n_combinations": 0}
-    T, N = M.shape
+    T, _N = M.shape
     s = n_splits - (n_splits % 2)  # must be even
     if s < 2:
         return {"pbo": float("nan"), "n_combinations": 0}
@@ -227,7 +229,7 @@ def probability_of_backtest_overfitting(
             var = (Q - S * S / n_col) / (n_col - 1.0)
             sd = np.sqrt(np.maximum(var, 0.0))
             sd[sd == 0] = np.nan
-            return mu / sd
+            return cast(NDArray, mu / sd)
 
     is_perf_all = _sr_bulk(member)
     oos_perf_all = _sr_bulk(comp)

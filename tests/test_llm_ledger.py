@@ -3,18 +3,18 @@ from __future__ import annotations
 
 import json
 
-from src.llm import client as C
+from src.llm import client as llm_client
 
 
 def _ledger_rows(path):
-    return [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
+    return [json.loads(ln) for ln in path.read_text().splitlines() if ln.strip()]
 
 
 def test_record_call_writes_one_row(tmp_path, monkeypatch):
     led = tmp_path / "llm_calls.jsonl"
-    monkeypatch.setattr(C, "LEDGER_FILE", led)
+    monkeypatch.setattr(llm_client, "LEDGER_FILE", led)
 
-    C.QuantLLM._record_call(
+    llm_client.QuantLLM._record_call(
         mode="sync", model="claude-sonnet-5", tier="smart", cost=0.0271,
         usage={"input": 3300, "output": 2050, "thinking": 900,
                "cache_read": 0, "cache_write": 300},
@@ -34,9 +34,9 @@ def test_skipped_calls_are_logged_too(tmp_path, monkeypatch):
     """A call refused by the budget cap is the thing most likely to be mistaken for a
     bug, so it has to leave a trace."""
     led = tmp_path / "llm_calls.jsonl"
-    monkeypatch.setattr(C, "LEDGER_FILE", led)
+    monkeypatch.setattr(llm_client, "LEDGER_FILE", led)
 
-    C.QuantLLM._record_call(mode="sync", model="claude-sonnet-5", tier="smart", cost=0.0,
+    llm_client.QuantLLM._record_call(mode="sync", model="claude-sonnet-5", tier="smart", cost=0.0,
                             skipped="monthly_budget_exceeded", est_usd=0.05)
 
     r = _ledger_rows(led)[0]
@@ -46,17 +46,17 @@ def test_skipped_calls_are_logged_too(tmp_path, monkeypatch):
 
 def test_ledger_rotates_and_never_raises(tmp_path, monkeypatch):
     led = tmp_path / "llm_calls.jsonl"
-    monkeypatch.setattr(C, "LEDGER_FILE", led)
-    monkeypatch.setattr(C, "LEDGER_MAX_BYTES", 200)
+    monkeypatch.setattr(llm_client, "LEDGER_FILE", led)
+    monkeypatch.setattr(llm_client, "LEDGER_MAX_BYTES", 200)
 
     for i in range(20):
-        C.QuantLLM._record_call(mode="sync", model="m", tier="cheap", cost=0.001,
+        llm_client.QuantLLM._record_call(mode="sync", model="m", tier="cheap", cost=0.001,
                                 usage={"input": i, "output": i})
 
     assert led.with_suffix(".jsonl.1").exists()   # rolled over, nothing lost silently
     assert _ledger_rows(led)                      # and the live file keeps taking writes
 
     # an unwritable path must be swallowed: accounting never takes the call down
-    monkeypatch.setattr(C, "LEDGER_FILE", tmp_path / "no-such-dir" / "x" / "l.jsonl")
-    monkeypatch.setattr(C.Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("boom")))
-    C.QuantLLM._record_call(mode="sync", model="m", tier="cheap", cost=0.1)
+    monkeypatch.setattr(llm_client, "LEDGER_FILE", tmp_path / "no-such-dir" / "x" / "l.jsonl")
+    monkeypatch.setattr(llm_client.Path, "mkdir", lambda *a, **k: (_ for _ in ()).throw(OSError("boom")))
+    llm_client.QuantLLM._record_call(mode="sync", model="m", tier="cheap", cost=0.1)

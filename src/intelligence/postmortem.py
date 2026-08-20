@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any, cast
 
 import pandas as pd
 
@@ -101,7 +102,8 @@ def _trade_prompt(t: dict) -> str:
     )
 
 
-def _enrich(bot: str, db_path, priors: dict, n_worst: int, since_days: float) -> pd.DataFrame:
+def _enrich(bot: str, db_path: Any, priors: dict, n_worst: int,
+            since_days: float) -> pd.DataFrame:
     trades = load_trades(db_path, since_days=since_days)
     if trades.empty:
         return trades
@@ -116,11 +118,9 @@ def _enrich(bot: str, db_path, priors: dict, n_worst: int, since_days: float) ->
         if o.empty:
             return {"order_type": "?", "entry_slip_bps": None, "exit_slip_bps": None,
                     "n_fills": 0, "dca_adds": 0, "exit_latency_s": None}
-        entry = o[o["ft_order_side"] == "buy"] if bool(o["is_short"].iloc[0]) is False else o[o["ft_order_side"] == "sell"]
-        # simpler: entry orders vs exit orders by ft_order_side matching trade direction
-        entries = o[o["ft_order_side"].isin(["buy", "sell"])]
-        # entry side = the side that opens; freqtrade tags exit differently, but ft_order_side
-        # is buy/sell — use order sequence: first order(s) = entry, last = exit
+        # freqtrade tags exits differently per side, but ft_order_side is only
+        # buy/sell — so the sequence is what identifies them: the last order is
+        # the exit, everything before it is entry (including DCA adds).
         o_sorted = o.sort_values("order_date")
         exit_row = o_sorted.iloc[-1]
         entry_rows = o_sorted.iloc[:-1] if len(o_sorted) > 1 else o_sorted
@@ -128,7 +128,7 @@ def _enrich(bot: str, db_path, priors: dict, n_worst: int, since_days: float) ->
             "order_type": exit_row["order_type"],
             "entry_slip_bps": round(float(entry_rows["adv_bps"].mean()), 2) if len(entry_rows) else None,
             "exit_slip_bps": round(float(exit_row["adv_bps"]), 2),
-            "n_fills": int(len(o)),
+            "n_fills": len(o),
             "dca_adds": int(max(0, len(entry_rows) - 1)),
             "exit_latency_s": round(float(exit_row["fill_latency_s"]), 2) if pd.notna(exit_row["fill_latency_s"]) else None,
         }
@@ -179,7 +179,7 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
 
     llm = get_llm()
     if not llm.is_enabled():
-        return {"bot": bot, "note": "LLM disabled (no key)", "n_losers": int(len(df))}
+        return {"bot": bot, "note": "LLM disabled (no key)", "n_losers": len(df)}
 
     # A closed trade's evidence never changes, so neither can its verdict — reuse
     # last night's. Measured 2026-08-12: the 10 worst losers in a 45-day window are
@@ -223,12 +223,12 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
 def _prior_run(bot: str) -> dict:
     """Last night's post-mortem for this bot ({} if none/unreadable)."""
     try:
-        return json.loads((OUT / f"postmortem_{bot.lower()}.json").read_text())
+        return cast(dict[Any, Any], json.loads((OUT / f"postmortem_{bot.lower()}.json").read_text()))
     except Exception:
         return {}
 
 
-def _ids(trades) -> set[int]:
+def _ids(trades: Any) -> set[int]:
     """Trade ids as plain ints — the stored JSON and a live pandas row do not
     otherwise compare equal (numpy int64 vs int vs str)."""
     out = set()
@@ -260,7 +260,7 @@ def _cached_verdicts(prior: dict) -> dict[int, dict]:
     return out
 
 
-def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, write: bool,
+def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm: Any, synth_tier: str, write: bool,
             *, n_reused: int = 0) -> dict:
     from collections import Counter
 
@@ -297,7 +297,7 @@ def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, wr
     out = {
         "bot": bot,
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
-        "n_analyzed": int(len(df)),
+        "n_analyzed": len(df),
         "n_verdicts_reused": int(n_reused),
         "cause_counts": dict(causes),
         "loss_by_cause_quote": {k: round(v, 2) for k, v in sorted(loss_by_cause.items(), key=lambda x: x[1])},
@@ -310,7 +310,8 @@ def _finish(bot: str, df: pd.DataFrame, verdicts: dict, llm, synth_tier: str, wr
     return out
 
 
-def _synthesize(bot, causes, loss_by_cause, trades_out, llm, tier) -> dict:
+def _synthesize(bot: str, causes: Any, loss_by_cause: Any, trades_out: Any,
+                llm: Any, tier: str) -> dict:
     ev = {
         "bot": bot,
         "cause_counts": dict(causes),
@@ -337,7 +338,7 @@ def _synthesize(bot, causes, loss_by_cause, trades_out, llm, tier) -> dict:
                        max_tokens=1500, effort="low")
     data = res.get("data")
     if data:
-        return data
+        return cast(dict[Any, Any], data)
     # Never hand the dashboard an error string: fall back to the deterministic roll-up
     # the per-trade verdicts already support, and label it so nobody mistakes it for
     # Claude's synthesis.
@@ -345,7 +346,8 @@ def _synthesize(bot, causes, loss_by_cause, trades_out, llm, tier) -> dict:
                                reason=res.get("skipped") or res.get("parse_error") or "no_data")
 
 
-def _fallback_synthesis(bot, loss_by_cause, trades_out, *, reason: str) -> dict:
+def _fallback_synthesis(bot: str, loss_by_cause: Any, trades_out: Any, *,
+                        reason: str) -> dict:
     """Deterministic stand-in when the synthesis call is unusable ($0, no LLM).
 
     Ranks causes by dollars bled and promotes the per-trade `suggested_fix` from the
@@ -388,7 +390,7 @@ def _load_priors() -> dict:
     p = OUT / "pair_priors.json"
     if p.exists():
         try:
-            return json.loads(p.read_text()).get("priors", {})
+            return cast(dict[Any, Any], json.loads(p.read_text()).get("priors", {}))
         except Exception:
             return {}
     return {}

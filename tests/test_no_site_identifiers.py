@@ -17,7 +17,6 @@ import subprocess
 from pathlib import Path
 
 import pytest
-
 from src import local_config
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,5 +57,5 @@ def test_no_tracked_file_names_a_live_bot():
                 hits.append(f"{path.relative_to(ROOT)}:{n}")
     assert not hits, (
         "tracked files name a live bot — move the identifier into "
-        f"configs/local.json instead:\n  " + "\n  ".join(hits[:20])
+        "configs/local.json instead:\n  " + "\n  ".join(hits[:20])
     )

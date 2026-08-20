@@ -19,19 +19,22 @@ the site-local config).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import re
 from pathlib import Path
+from typing import Any, cast
 
 import numpy as np
 import pandas as pd
+
+from src import local_config
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "outputs"
 PROCESSED = ROOT / "data" / "processed"
 MS_LATEST = OUT / "microstructure_latest.json"
 EVENT_CACHE = OUT / "event_catalysts.json"  # LLM catalyst results, refreshed a few x/day
-from src import local_config
 
 BOT_UD = local_config.user_data_dir()  # None on a plain research checkout
 
@@ -300,10 +303,8 @@ def _write_event_cache(events: dict[str, tuple[float, str]]) -> None:
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
         "events": {b: {"risk": r, "reason": rs} for b, (r, rs) in events.items()},
     }
-    try:
+    with contextlib.suppress(Exception):
         EVENT_CACHE.write_text(json.dumps(payload, indent=2))
-    except Exception:
-        pass
 
 
 def _load_event_cache(max_age_h: float = 26.0) -> dict[str, tuple[float, str]]:
@@ -339,7 +340,7 @@ def _load_altdata() -> dict | None:
         st = _ALTDATA_PATH.stat()
         if (pd.Timestamp.utcnow().timestamp() - st.st_mtime) > _ALTDATA_STALE_H * 3600:
             return None
-        return json.loads(_ALTDATA_PATH.read_text(encoding="utf-8"))
+        return cast(dict[Any, Any], json.loads(_ALTDATA_PATH.read_text(encoding="utf-8")))
     except Exception:
         return None
 
@@ -411,7 +412,8 @@ def altdata_funding_bias(alt: dict | None) -> dict[str, float]:
 
 
 def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
-          weights=(0.35, 0.30, 0.35), event_weight: float = 0.6, write: bool = True) -> dict:
+          weights: tuple[float, float, float] = (0.35, 0.30, 0.35),
+          event_weight: float = 0.6, write: bool = True) -> dict:
     """venue_symbols = {venue: [pair,...]} -> event_risk.json payload.
 
     Deterministic risk = weighted blend of (vol, funding, liquidity). If

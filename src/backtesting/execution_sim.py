@@ -30,6 +30,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -135,7 +136,7 @@ def simulate_fills(
         if not np.isfinite(volume[i]) or params.order_notional_usd <= 0:
             return np.inf
         bar_usd = volume[i] * close[i]
-        return params.participation_cap * bar_usd / params.order_notional_usd
+        return cast(float, params.participation_cap * bar_usd / params.order_notional_usd)
 
     for i in range(1, n):
         # 1) work any resting maker order against this bar

@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -213,7 +214,7 @@ def bot_execution_summary(bot: str, db_path: str | Path, since_days: float | Non
     """
     trades = load_trades(db_path, since_days=since_days)
     orders = load_orders(db_path, since_days=since_days)
-    out: dict = {"bot": bot, "since_days": since_days, "n_trades": int(len(trades))}
+    out: dict = {"bot": bot, "since_days": since_days, "n_trades": len(trades)}
     if trades.empty:
         out["note"] = "no closed trades in window"
         return out
@@ -228,9 +229,9 @@ def bot_execution_summary(bot: str, db_path: str | Path, since_days: float | Non
         maker = orders[~orders["is_taker"]]
         slip_cost = float(orders["adv_cost_quote"].sum())
         out["orders"] = {
-            "n_fills": int(len(orders)),
-            "taker_fills": int(len(taker)),
-            "maker_fills": int(len(maker)),
+            "n_fills": len(orders),
+            "taker_fills": len(taker),
+            "maker_fills": len(maker),
             "taker_slip_bps_wavg": _round(_wavg(taker["adv_bps"], taker["notional"])),
             "maker_slip_bps_wavg": _round(_wavg(maker["adv_bps"], maker["notional"])),
             "taker_slip_cost_quote": round(float(taker["adv_cost_quote"].sum()), 2) if not taker.empty else 0.0,
@@ -282,13 +283,13 @@ def fleet_report(user_data: str | Path = USER_DATA, since_days: float | None = 4
     }
 
 
-def _round(x, nd: int = 2):
+def _round(x: Any, nd: int = 2) -> float | None:
     if x is None or (isinstance(x, float) and (np.isnan(x) or np.isinf(x))):
         return None
     return round(float(x), nd)
 
 
-def _pct_of_gross(cost: float, gross: float):
+def _pct_of_gross(cost: float, gross: float) -> float | None:
     if not gross:
         return None
     # cost is a drag; express as % of |gross| so sign is intuitive

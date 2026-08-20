@@ -32,7 +32,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
 import pandas as pd
 
 from src import local_config
@@ -205,23 +204,23 @@ def attribute_bot(name: str, db_path: Path, since_days: float | None) -> dict[st
     agg = {k: round(float(comps[k].sum()), 2)
            for k in ("intended", "entry_slip", "exit_slip", "fees", "funding", "net", "residual")}
     captures = exc["capture"].dropna()
-    by_reason = []
+    by_reason: list[dict[str, Any]] = []
     trades2 = pd.concat([trades[["exit_reason"]], comps], axis=1)
     for reason, grp in trades2.groupby(trades2["exit_reason"].fillna("unknown")):
         by_reason.append({
-            "exit_reason": str(reason), "n": int(len(grp)),
+            "exit_reason": str(reason), "n": len(grp),
             "net": round(float(grp["net"].sum()), 2),
             "intended": round(float(grp["intended"].sum()), 2),
         })
-    by_reason.sort(key=lambda r: r["net"])
+    by_reason.sort(key=lambda r: float(r["net"]))
     return {
         "bot": name,
-        "n_trades": int(len(trades)),
+        "n_trades": len(trades),
         "components": agg,
         "execution_drag": round(agg["entry_slip"] + agg["exit_slip"] + agg["fees"], 2),
         "mfe_capture_mean": round(float(captures.mean()), 3) if len(captures) else None,
         "mfe_capture_median": round(float(captures.median()), 3) if len(captures) else None,
-        "n_capture_measured": int(len(captures)),
+        "n_capture_measured": len(captures),
         "mfe_mean_pct": round(float(exc["mfe_pct"].dropna().mean()), 3)
             if exc["mfe_pct"].notna().any() else None,
         "mae_mean_pct": round(float(exc["mae_pct"].dropna().mean()), 3)

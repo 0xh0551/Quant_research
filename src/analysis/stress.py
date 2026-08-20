@@ -25,10 +25,10 @@ CLI:  python -m src.analysis.stress   → writes outputs/stress_report.json
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 
@@ -168,7 +168,7 @@ def _load_fleet() -> dict[str, Any]:
         return fleet_risk.build_snapshot()
     except Exception:
         try:
-            return json.loads((OUTPUTS_DIR / "fleet_risk.json").read_text(encoding="utf-8"))
+            return cast(dict[str, Any], json.loads((OUTPUTS_DIR / "fleet_risk.json").read_text(encoding="utf-8")))
         except Exception:
             return {"positions": [], "per_bot": [], "per_asset": [], "fleet": {}}
 

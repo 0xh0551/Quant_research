@@ -25,7 +25,9 @@ Read-only over `outputs/` + bot sqlite; writes only under `outputs/`.
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -167,7 +169,7 @@ def build_priors(df: pd.DataFrame, half_life_days: float = 14.0, max_adj: float 
             "latest_win_rate": _f(last["win_rate"]),
             "latest_trades": _i(last["trades"]),
             "latest_selected_score": _i(last["selected_score"]),
-            "n_snapshots": int(len(g)),
+            "n_snapshots": len(g),
             "first_seen": str(g.iloc[0]["date"]),
             "last_seen": str(last["date"]),
             "prior_mult": round(1.0 + adj, 4),
@@ -281,7 +283,7 @@ def bridge_priors(half_life_days: float = 14.0, max_adj: float = 0.25,
     analyzed blind. Same key set as build_priors so downstream needs no change
     (`latest_selected_score` stays None — bridge bots have no fitness score)."""
     import sqlite3
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     try:
         cfg = json.loads((ROOT / "configs" / "local.json").read_text())
@@ -293,7 +295,7 @@ def bridge_priors(half_life_days: float = 14.0, max_adj: float = 0.25,
         return {}
     user_data = Path(cfg["user_data"])
     out: dict = {}
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     for bot in bots:
         db = dbs.get(bot)
         if not db or not (user_data / db).exists():
@@ -320,7 +322,7 @@ def bridge_priors(half_life_days: float = 14.0, max_adj: float = 0.25,
             for profit, cd in trades:
                 try:
                     age_d = (now - datetime.fromisoformat(cd).replace(
-                        tzinfo=timezone.utc)).total_seconds() / 86400.0
+                        tzinfo=UTC)).total_seconds() / 86400.0
                 except ValueError:
                     age_d = half_life_days
                 w = 0.5 ** (age_d / half_life_days)
@@ -360,7 +362,7 @@ def run(half_life_days: float = 14.0, write: bool = True) -> dict:
     retrain_queue = build_retrain_queue(prio)
     meta = {
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
-        "ledger_rows": int(len(df)),
+        "ledger_rows": len(df),
         "bots": sorted(df["bot"].unique().tolist()) if not df.empty else [],
         "half_life_days": half_life_days,
     }
@@ -376,14 +378,14 @@ def run(half_life_days: float = 14.0, write: bool = True) -> dict:
     return result
 
 
-def _f(x):
+def _f(x: Any) -> float | None:
     try:
         return round(float(x), 3)
     except (TypeError, ValueError):
         return None
 
 
-def _i(x):
+def _i(x: Any) -> int | None:
     try:
         return int(x)
     except (TypeError, ValueError):

@@ -55,7 +55,18 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP", "N", "C4", "SIM", "RUF"]
-ignore = ["N999", "E501", "B008", "RUF022"]
+ignore = [
+  "N999", "E501", "B008", "RUF022",
+  # This codebase is bilingual by design: comments, docstrings and UI strings
+  # are written in Persian, and RUF001/2/3 fire on every Arabic-script letter
+  # as an "ambiguous unicode character". They are not ambiguous here, they are
+  # the content — 161 of the findings were this alone.
+  "RUF001", "RUF002", "RUF003",
+  # Quant and ML code follows the maths: `X` for a design matrix (as scikit-learn
+  # itself names it), `M`, `R`, `S`, `T` for matrices and horizons. Lower-casing
+  # those makes the formulae harder to read, not easier.
+  "N803", "N806",
+]
 
 [tool.mypy]
 python_version = "3.12"
