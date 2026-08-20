@@ -8,6 +8,8 @@ Operators who wire the platform to a live fleet describe their site in
     {
       "user_data": "/path/to/freqtrade/user_data",
       "bot_dbs": {"MyBot": "mybot.sqlite"},
+      "bot_epochs": {"MyBot": "2026-01-31"},
+      "venue_whitelist_bots": {"okx": "MyBot"},
       "env_files": ["/path/to/.env"]
     }
 
@@ -63,6 +65,47 @@ def bridge_bot_databases() -> dict[str, Path]:
     """
     names = {str(n) for n in (_load().get("bridge_bots") or [])}
     return {n: p for n, p in bot_databases().items() if n in names}
+
+
+def bot_configs() -> dict[str, Path]:
+    """Mapping of bot name -> its freqtrade config file.
+
+    Taken from a ``bot_configs`` block when present; otherwise derived from
+    :func:`bot_databases` by the usual freqtrade convention, ``x.sqlite`` next
+    to ``x_config.json``.
+    """
+    ud = user_data_dir()
+    explicit = _load().get("bot_configs") or {}
+    out: dict[str, Path] = {}
+    for name, db in bot_databases().items():
+        raw = explicit.get(name)
+        p = Path(raw) if raw else db.with_name(f"{db.stem}_config.json")
+        if not p.is_absolute() and ud is not None:
+            p = ud / p
+        out[name] = p
+    return out
+
+
+def bot_epochs() -> dict[str, str]:
+    """Bot name -> ISO date its current architecture came into force.
+
+    Diagnostics measure a bot only from this date, so a rewritten strategy is
+    not judged on the behaviour of the one it replaced. Absent for a bot means
+    "no epoch" — measure over the full lookback.
+    """
+    raw = _load().get("bot_epochs") or {}
+    return {str(k): str(v) for k, v in raw.items()}
+
+
+def venue_whitelist_config(venue: str) -> Path | None:
+    """Config whose live ``pair_whitelist`` must be covered on ``venue``.
+
+    Data discovery ranks a venue's pairs by volume, but a bot trading there
+    needs native data for whatever it currently holds, even outside the top N.
+    Configured as ``{"venue_whitelist_bots": {"okx": "SomeBot"}}``.
+    """
+    bot = (_load().get("venue_whitelist_bots") or {}).get(venue)
+    return bot_configs().get(str(bot)) if bot else None
 
 
 def env_files() -> list[Path]:

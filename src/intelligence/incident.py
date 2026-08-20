@@ -106,9 +106,7 @@ def _bot_dbs() -> dict[str, Path]:
     ud = local_config.user_data_dir()
     if ud is None:
         return {}
-    names = {"bot2": "bot2", "bot3": "bot3", "bot4": "bot4", "bot1": "bot1",
-             "bot5": "bot5", "bot6": "bot6", "bot7": "bot7"}
-    return {b: ud / f"{f}.sqlite" for b, f in names.items() if (ud / f"{f}.sqlite").exists()}
+    return {b: db for b, db in local_config.bot_databases().items() if db.exists()}
 
 
 def fleet_equity() -> float:
@@ -116,19 +114,18 @@ def fleet_equity() -> float:
     ud = local_config.user_data_dir()
     total, n = 0.0, 0
     if ud is not None:
-        cfgs = {"bot2": "bot2_config.json", "bot3": "bot3_config.json",
-                "bot4": "bot4_config.json", "bot1": "bot1_config.json",
-                "bot5": "bot5_config.json", "bot6": "bot6_config.json",
-                "bot7": "bot7_config.json"}
+        cfgs = local_config.bot_configs()
         for bot in _bot_dbs():
-            p = ud / cfgs.get(bot, "")
+            p = cfgs.get(bot)
+            if p is None:
+                continue
             try:
                 w = float(json.loads(p.read_text()).get("dry_run_wallet", DEFAULT_WALLET))
             except Exception:
                 w = DEFAULT_WALLET
             total += w
             n += 1
-    return total if n else DEFAULT_WALLET * 7
+    return total if n else DEFAULT_WALLET * max(1, len(local_config.bot_databases()))
 
 
 def fleet_trades(since: datetime, until: datetime | None = None) -> pd.DataFrame:

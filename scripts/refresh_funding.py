@@ -37,7 +37,7 @@ from src.data.funding import fetch_funding_history, fetch_open_interest_history 
 OUT_DIR = ROOT / "data" / "funding"
 ASSIGNMENTS = ROOT / "outputs" / "pair_assignments.json"
 DEFAULT_BASES = ["BTC", "ETH", "SOL"]
-# 2026-08-09: gate added — bot1 (gate futures) gets funding/OI as FreqAI features
+# 2026-08-09: gate added — a gate-futures bot gets funding/OI as FreqAI features
 # (v2 phase-2, owner-approved); bases come from pair_assignments so live pairs
 # of every bot are covered automatically.
 DEFAULT_VENUES = ["bybit", "gate"]
