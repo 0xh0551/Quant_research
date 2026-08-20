@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.5.2] — 2026-08-20
+
+### Uniform tiles, bigger type
+
+- **Every tile is now the same height.** `grid-auto-rows: 340px` with the body
+  clipping instead of pushing, so the wall reads as a grid rather than a ragged
+  column stack. To make that honest rather than a crop, each tile's content was
+  measured against the budget and retuned: the two wide tiles (edges, fleet) put
+  their chart beside their table instead of stacking them, and the eight tiles
+  that came in short gained a real block — stalest datasets on data quality, run
+  kinds on research, the store's timeframe mix on lab, venue coverage on
+  cross-exchange, a loss-spread chart on stress, top-edge timeframes on
+  insights, entry slippage and a fifth bot on attribution. Every tile now lands
+  between 286 px and 331 px in a 340 px row, in both languages. Below 760 px the
+  rows go back to auto so nothing clips on a phone.
+- **Type went up a step throughout**: KPI values 16→20 px (hero 21→26), table
+  rows 10.5→12, bar labels 10→11.5, captions 9→10.5, tile titles 12.5→14, and
+  the sidebar 11.5→12.5 at 186 px wide. Column minimum widened to 272 px to
+  match.
+
 ## [1.5.1] — 2026-08-20
 
 ### Denser wall, and a sidebar you can actually read

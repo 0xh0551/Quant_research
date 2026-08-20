@@ -13,7 +13,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'پلتفرم ریسرچ کوانت',
-    version_label: 'نسخهٔ ۱.۵.۱',
+    version_label: 'نسخهٔ ۱.۵.۲',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
@@ -97,7 +97,7 @@ const I18N = {
     home_a_intended: 'آلفا', home_a_fees: 'کارمزد', home_a_exit: 'اسلیپیج خروج', home_a_funding: 'فاندینگ',
     home_pipe_fresh: 'تازگی آرتیفکت‌ها',
     home_pipe_running: 'مرحلهٔ {step} — {for}',
-    home_models_feedback: '{n} تعدیل بازخوردی در آخرین چرخش',
+    home_models_feedback: '{n} تعدیل بازخوردی · صف بازآموزی {q}',
     home_logs_clean: 'بدون خطا در {n} خط اخیر',
 
     /* ── home screen: dense-wall additions ────────────────────────── */
@@ -143,7 +143,6 @@ const I18N = {
     home_hdr_worst_pairs: 'ضعیف‌ترین جفت‌ارزها',
     home_hdr_problems: 'آخرین مشکلات',
     home_inv_stale: '{n} کهنه',
-    home_ins_tf: 'تایم‌فریم لبه‌های برتر: {tf}',
     home_edges_reach: '{n} نماد · {a} هشدار',
     home_seg_net30: 'خالص ۳۰ر',
     home_fleet_ok_stale: 'در محدودهٔ مجاز · {n} قیمت کهنه',
@@ -151,6 +150,16 @@ const I18N = {
     home_n_pairs: '{n} جفت',
     home_attr_window: 'پنجرهٔ {d} روزه',
     home_act_drop: 'حذف', home_act_trust: 'اعتماد', home_act_watch: 'زیر نظر',
+    home_hdr_by_bot: 'به تفکیک ربات',
+    home_hdr_edge_tf: 'تایم‌فریم لبه‌های برتر',
+    home_hdr_stale: 'کهنه‌ترین دیتاست‌ها',
+    home_hdr_run_kinds: 'نوع اجراها',
+    home_hdr_venues: 'پوشش صرافی‌ها',
+    home_hdr_loss_spread: 'پراکندگی زیان',
+    home_a_entry: 'اسلیپیج ورود',
+    home_days: '{n} روز',
+    home_research_note: 'بک‌تست چنداستراتژی روی چند دیتاست',
+    home_logs_window: 'شمارش روی {n} خط آخر app.log',
 
     /* ── common ───────────────────────────────────────────────────── */
     refresh: 'رفرش', reload: 'بارگیری', back: 'بازگشت', run: 'اجرا',
@@ -609,7 +618,7 @@ const I18N = {
     /* ── brand / chrome ───────────────────────────────────────────── */
     brand: 'QuantResearch',
     brand_tagline: 'Quant Research Platform',
-    version_label: 'v1.5.1',
+    version_label: 'v1.5.2',
     theme_aurora: 'Midnight Aurora',
 
     /* ── navigation ───────────────────────────────────────────────── */
@@ -693,7 +702,7 @@ const I18N = {
     home_a_intended: 'Alpha', home_a_fees: 'Fees', home_a_exit: 'Exit slip', home_a_funding: 'Funding',
     home_pipe_fresh: 'Artifact freshness',
     home_pipe_running: '{step} stage — {for}',
-    home_models_feedback: '{n} feedback adjustments last rotation',
+    home_models_feedback: '{n} feedback adjustments · retrain queue {q}',
     home_logs_clean: 'No errors in the last {n} lines',
 
     /* ── home screen: dense-wall additions ────────────────────────── */
@@ -739,7 +748,6 @@ const I18N = {
     home_hdr_worst_pairs: 'Weakest pairs',
     home_hdr_problems: 'Latest problems',
     home_inv_stale: '{n} stale',
-    home_ins_tf: 'Top-edge timeframes: {tf}',
     home_edges_reach: '{n} symbols · {a} alerts',
     home_seg_net30: '30d net',
     home_fleet_ok_stale: 'Within limits · {n} stale prices',
@@ -747,6 +755,16 @@ const I18N = {
     home_n_pairs: '{n} pairs',
     home_attr_window: '{d}-day window',
     home_act_drop: 'drop', home_act_trust: 'trust', home_act_watch: 'watch',
+    home_hdr_by_bot: 'By bot',
+    home_hdr_edge_tf: 'Top-edge timeframes',
+    home_hdr_stale: 'Stalest datasets',
+    home_hdr_run_kinds: 'Run kinds',
+    home_hdr_venues: 'Venue coverage',
+    home_hdr_loss_spread: 'Loss spread',
+    home_a_entry: 'Entry slip',
+    home_days: '{n}d',
+    home_research_note: 'Multi-strategy backtest across datasets',
+    home_logs_window: 'Counted over the last {n} lines of app.log',
 
     /* ── common ───────────────────────────────────────────────────── */
     refresh: 'Refresh', reload: 'Reload', back: 'Back', run: 'Run',
