@@ -186,6 +186,19 @@ def _load_app_config() -> dict[str, Any]:
     return {}
 
 
+@app.get("/api/home/summary")
+def home_summary(refresh: int = 0) -> dict[str, Any]:
+    """KPI payload for every home-screen tile in a single (TTL-cached) call.
+
+    Reads only artifacts other jobs already wrote plus a ``stat()`` sweep of the
+    parquet store, so the launcher never pays for a backtest or an exchange
+    round-trip on load.
+    """
+    from src.web import home as _home
+
+    return _home.summary(force=bool(refresh))
+
+
 @app.get("/api/config")
 def get_app_config() -> dict[str, Any]:
     cfg = _load_app_config()
