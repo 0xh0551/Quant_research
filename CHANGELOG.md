@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.6.1] — 2026-08-20
+
+### A favicon that looks designed, and a payload with nothing spare in it
+
+- **Favicon redrawn, transparent.** The previous one was the mark's flat
+  lattice on a dark plate — eleven dull squares that read like a Windows 95
+  icon. It now carries an aurora gradient across the lattice, an opacity ramp
+  that climbs toward the lit scan cell, and a soft halo behind it; no plate, so
+  it sits on any tab strip, with the ramp lifting under
+  `prefers-color-scheme: dark`. The mark's own 4×3 grid letterboxes inside a
+  square and dissolves at 16 px, so the icon simplifies to 3×3 and fills the
+  frame — checked as rendered pixels at 16/32/64 px on both a light and a dark
+  strip, against a faithful 4×3 alternative that lost.
+- **`/api/home/summary` now emits exactly what the view reads.** The tiles were
+  cut to three numbers and one chart in 1.6.0, but the endpoint still carried
+  the tables, trends and per-bot rows the old dense layout used — 11.2 KB per
+  poll, most of it unread, and free to drift out of sync unnoticed. Derived the
+  field list from the renderers and the sidebar, pruned to it (4.2 KB), and
+  pinned the whole shape in a test. Dropped with it: the walk-forward and
+  pipeline history tails, the retrain-priority and selection-performance reads,
+  and four unused fields from the parquet sweep.
+
 ## [1.6.0] — 2026-08-20
 
 ### One screenful

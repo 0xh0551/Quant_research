@@ -101,13 +101,48 @@ def test_dataset_sweep_never_opens_a_parquet(isolated, monkeypatch):
 
     monkeypatch.setattr(pd, "read_parquet", explode)
 
-    inv = home.summary(force=True)["tiles"]["inventory"]
+    tiles = home.summary(force=True)["tiles"]
+    inv = tiles["inventory"]
     assert inv["n_datasets"] == 4
     assert inv["n_symbols"] == 2                    # BTCUSDT + ETHUSDT
     assert {b["k"]: b["v"] for b in inv["by_timeframe"]} == {"15m": 1, "1h": 3}
-    assert {b["k"]: b["v"] for b in inv["by_exchange"]} == {"bybit": 2, "okx": 1, "gate": 1}
+    assert {b["k"]: b["v"] for b in tiles["download"]["by_exchange"]} == {
+        "bybit": 2, "okx": 1, "gate": 1}
     # ETHUSDT lives on okx and gate_futures, BTCUSDT only on bybit_futures
-    assert home.summary()["tiles"]["crossex"]["multi_venue_symbols"] == 1
+    assert tiles["crossex"]["multi_venue_symbols"] == 1
+
+
+def test_payload_carries_only_what_the_tiles_read(isolated):
+    """Each tile shows three numbers and one chart. The endpoint emits exactly
+    the fields that view consumes — a field nothing reads is dead weight on
+    every poll, and it drifts out of sync unnoticed."""
+    fields = {k: set(v) for k, v in home.summary(force=True)["tiles"].items()}
+    expected = {
+        "inventory": {"n_datasets", "n_symbols", "total_gb", "by_timeframe", "newest_age_h"},
+        "download": {"refreshed_24h", "refreshed_7d", "n_venues", "by_exchange", "newest_age_h"},
+        "quality": {"scannable_pct", "median_bars", "stale_gt_3d", "bars_hist"},
+        "research": {"n_runs", "n_datasets", "n_symbols", "by_timeframe"},
+        "insights": {"event_risk", "dvol_btc", "ls_ratio_btc", "top_strategies"},
+        "lab": {"n_strategies", "n_params", "n_datasets", "by_timeframe"},
+        "report": {"n_top", "best", "sharpes", "age_h"},
+        "edges": {"n_passed", "n_deployable", "median_pbo", "live_timeframe",
+                  "by_timeframe", "by_timeframe_robust", "age_h"},
+        "trials": {"n_deflated_pass", "age_h", "n_unique", "pass_rate", "strategies"},
+        "capacity": {"n_books", "median_capacity", "total_capacity", "rows", "age_h"},
+        "crossex": {"best_spread", "multi_venue_symbols", "n_venues", "carry", "carry_age_h"},
+        "fleet": {"equity_usd", "gross_leverage", "max_gross_leverage",
+                  "net_beta_delta_pct", "n_alerts", "bots", "age_h"},
+        "portfolio": {"gross_usd", "hhi", "n_assets", "top", "age_h"},
+        "stress": {"worst", "rows", "n_liquidations", "age_h"},
+        "attribution": {"net", "intended", "fees", "funding", "exit_slip",
+                        "mfe_capture_avg", "age_h"},
+        "altdata": {"dvol_btc", "dvol_eth", "dvol_series", "liquidations_24h_usd", "age_h"},
+        "pipeline": {"healthy", "n_jobs", "ok", "late", "missing",
+                     "run_state", "run_step", "age_h"},
+        "models": {"n_pairs", "n_bots", "n_dropped", "bots", "age_h"},
+        "logs": {"n_lines", "n_errors", "n_warnings", "levels"},
+    }
+    assert fields == expected
 
 
 def test_result_is_ttl_cached(isolated):
