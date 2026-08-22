@@ -195,7 +195,7 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
             verdicts = {int(r["id"]): cached[int(r["id"])] for _, r in df.iterrows()}
             return _finish(bot, df, verdicts, llm, synth_tier, write, n_reused=len(verdicts))
         items = [{"custom_id": str(r["id"]), "prompt": _trade_prompt(r)} for r in todo]
-        batch_id = llm.batch_submit(items, tier=per_trade_tier, system=SYSTEM_RUBRIC,
+        batch_id = llm.batch_submit(items, tier=per_trade_tier, system=SYSTEM_RUBRIC, budget_reserve=0.6,
                                     json_schema=VERDICT_SCHEMA, max_tokens=400)
         return {"bot": bot, "mode": "batch", "batch_id": batch_id, "n_submitted": len(items),
                 "n_reused": len(df) - len(items),
@@ -208,7 +208,7 @@ def analyze(bot: str, *, n_worst: int = 12, since_days: float = 45.0, mode: str 
             verdicts[tid] = cached[tid]
             n_reused += 1
             continue
-        res = llm.complete(_trade_prompt(r), tier=per_trade_tier, system=SYSTEM_RUBRIC,
+        res = llm.complete(_trade_prompt(r), tier=per_trade_tier, system=SYSTEM_RUBRIC, budget_reserve=0.6,
                            json_schema=VERDICT_SCHEMA, max_tokens=400)
         # Record WHY a verdict is missing (budget skip vs truncation vs bad JSON) —
         # a blanket "parse_error" hid which of those was happening.
@@ -334,7 +334,7 @@ def _synthesize(bot: str, causes: Any, loss_by_cause: Any, trades_out: Any,
     # shallow reasoning is enough — but "no reasoning" is a bigger step than the
     # evidence so far supports. Revisit once the call ledger shows what it actually
     # spends here.
-    res = llm.complete(prompt, tier=tier, system=SYSTEM_RUBRIC, json_schema=SYNTH_SCHEMA,
+    res = llm.complete(prompt, tier=tier, system=SYSTEM_RUBRIC, json_schema=SYNTH_SCHEMA, budget_reserve=0.6,
                        max_tokens=1500, effort="low")
     data = res.get("data")
     if data:
