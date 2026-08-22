@@ -100,7 +100,7 @@ def run() -> dict:
         # adaptively (billed as output) before writing those few lines — several times
         # the answer itself. Nothing here needs reasoning depth, so it is turned off.
         res = llm.complete(prompt, tier="smart", system=SYSTEM, json_schema=SCHEMA,
-                           max_tokens=600, cache_system=True, thinking="disabled")
+                           max_tokens=600, cache_system=True, thinking="disabled", budget_reserve=0.6)
         if res.get("skipped"):
             source = "budget_skipped"
         elif res.get("data"):

@@ -307,7 +307,7 @@ def _write_event_cache(events: dict[str, tuple[float, str]]) -> None:
         EVENT_CACHE.write_text(json.dumps(payload, indent=2))
 
 
-def _load_event_cache(max_age_h: float = 26.0) -> dict[str, tuple[float, str]]:
+def _load_event_cache(max_age_h: float = 56.0) -> dict[str, tuple[float, str]]:
     """Reuse recent LLM catalysts so the cheap hourly blend keeps the event signal
     between the (less frequent) --with-events refreshes.
 
@@ -472,12 +472,31 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
         print(f"[event_risk] embargo detector failed: {e}")
     if embargo:
         g_reason = f"{embargo['reason']}; {g_reason or 'nominal'}"
+    # news→direction gate (2026-08-21, owner ask): «طبق اخبار اگر خبرِ مهم جهت می‌دهد،
+    # فقط در آن جهت؛ دورِ رویدادِ مهمِ بی‌جهت، ترید تعطیل». fail-open کامل.
+    direction_gate = None
+    try:
+        from src.intelligence.news_direction import update_direction_gate
+        _st = {}
+        try:
+            _st = json.loads((OUT / "embargo_state.json").read_text())
+        except Exception:
+            pass
+        _lb = _st.get("last_bleeding") or {}
+        _bl = bool(_lb.get("bleeding", float(_lb.get("pnl") or 0) <= -28))
+        direction_gate = update_direction_gate(_st.get("last_signature"), bleeding=_bl,
+                                               bases=_priority_bases(all_bases, 6))
+    except Exception as e:
+        print(f"[event_risk] direction gate failed: {e}")
+    if direction_gate:
+        g_reason = f"{direction_gate['reason']}; {g_reason or 'nominal'}"
     payload = {
         "generated_at": pd.Timestamp.utcnow().tz_localize(None).isoformat() + "Z",
         "with_events": with_events,
         "n_symbols": len(result),
         "global": {"risk": g_risk, "reason": g_reason or "nominal",
-                   **({"embargo": embargo} if embargo else {})},
+                   **({"embargo": embargo} if embargo else {}),
+                   **({"direction_gate": direction_gate} if direction_gate else {})},
         "funding_bias": altdata_funding_bias(alt),
         "symbols": result,
     }

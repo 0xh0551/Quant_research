@@ -115,6 +115,17 @@ SPEND_FILE = _ROOT / "outputs" / "llm_spend.json"
 LEDGER_FILE = _ROOT / "outputs" / "llm_calls.jsonl"
 LEDGER_MAX_BYTES = 5_000_000  # rotate to .1 beyond this; the ledger must never grow unbounded
 MONTHLY_BUDGET_USD = float(os.environ.get("QUANT_LLM_MONTHLY_BUDGET", "5.0"))
+# استثنای موقتِ مالک برای «فقط همین ماه»: outputs/llm_budget_override.json = {"YYYY-MM": usd}
+# (خودمنقضی — ماهِ بعد کلید ندارد و سقف به MONTHLY_BUDGET_USD برمی‌گردد.)
+BUDGET_OVERRIDE_FILE = _ROOT / "outputs" / "llm_budget_override.json"
+
+
+def _month_cap() -> float:
+    try:
+        ov = json.loads(BUDGET_OVERRIDE_FILE.read_text())
+        return float(ov.get(_month_key(), MONTHLY_BUDGET_USD))
+    except Exception:
+        return MONTHLY_BUDGET_USD
 WEB_SEARCH_USD = 0.01  # ~$10 / 1000 Anthropic web searches
 
 
@@ -202,10 +213,13 @@ class QuantLLM:
             return 0.0
 
     def budget_remaining(self) -> float:
-        return round(max(0.0, MONTHLY_BUDGET_USD - self.month_spend()), 4)
+        return round(max(0.0, _month_cap() - self.month_spend()), 4)
 
-    def budget_ok(self, est: float = 0.0) -> bool:
-        return (self.month_spend() + est) <= MONTHLY_BUDGET_USD
+    def budget_ok(self, est: float = 0.0, *, reserve: float = 0.0) -> bool:
+        """`reserve` = سهمی از سقف که برای مصرف‌کننده‌های «واکنشی» (خبر/حادثه) کنار
+        گذاشته می‌شود: کارهای زمان‌بندی‌شده با reserve>0 صدا می‌زنند تا انتهای ماه
+        هوشِ واکنشی هرگز گرسنه نماند (کیفیت بدون عبور از سقف)."""
+        return (self.month_spend() + est + max(0.0, reserve)) <= _month_cap()
 
     def _record_spend(self, usd: float) -> None:
         if not usd or usd <= 0:
@@ -266,6 +280,7 @@ class QuantLLM:
         cache_system: bool = True,
         thinking_headroom: int | None = None,
         retry_on_truncation: bool = True,
+        budget_reserve: float = 0.0,
     ) -> dict[str, Any]:
         """One request. Returns {"text", "data"(if json_schema), "usage", "model", "cost_usd"}.
 
@@ -298,6 +313,7 @@ class QuantLLM:
         attempt, out = 0, None
         while True:
             out = self._complete_once(model, prompt, system=system, json_schema=json_schema,
+                                      budget_reserve=budget_reserve,
                                       budget=budget, thinking=thinking, tier=tier,
                                       cache_system=cache_system, effort=effort)
             truncated = out.get("stop_reason") == "max_tokens"
@@ -314,13 +330,13 @@ class QuantLLM:
 
     def _complete_once(self, model: str, prompt: str, *, system: Any, json_schema: Any,
                        budget: Any, thinking: Any, tier: str, cache_system: Any,
-                       effort: str | None = None) -> dict[str, Any]:
+                       effort: str | None = None, budget_reserve: float = 0.0) -> dict[str, Any]:
         # Pre-reserve this call's WORST-CASE cost so the monthly ceiling is a hard cap
         # (no final-call overshoot): conservatively assume up to 10k input tokens (covers
         # cache-write inflation) + the full output budget at this model's rate.
         pin, pout = self._price_for(model)
         est = (10000 * pin + budget * pout) / 1e6
-        if not self.budget_ok(est):
+        if not self.budget_ok(est, reserve=budget_reserve):
             # Log the refusal too: "the feature went quiet because the cap was hit" is
             # exactly the kind of thing that otherwise gets mistaken for a bug.
             self._record_call(mode="sync", model=model, tier=tier, cost=0.0,
@@ -415,6 +431,7 @@ class QuantLLM:
         effort: str | None = None,
         cache_system: bool = True,
         thinking_headroom: int | None = None,
+        budget_reserve: float = 0.0,
     ) -> str:
         """items = [{"custom_id": str, "prompt": str}, ...] -> batch id.
 
@@ -433,9 +450,9 @@ class QuantLLM:
         max_tokens = max_tokens + headroom
         pin, pout = self._price_for(model)
         est = len(items) * (10000 * pin + max_tokens * pout) / 1e6 * 0.5  # Batch is 50% off
-        if not self.budget_ok(est):
+        if not self.budget_ok(est, reserve=budget_reserve):
             raise RuntimeError(
-                f"monthly LLM budget reached (${self.month_spend():.2f}/${MONTHLY_BUDGET_USD}); batch not submitted"
+                f"monthly LLM budget reached (${self.month_spend():.2f}/${_month_cap()}); batch not submitted"
             )
         sysblock = None
         if system:

@@ -86,6 +86,10 @@ MAX_FALSE_ALARM = 0.08                        # <= 8% of ordinary hours may matc
 ARM_WINDOW_H = 6             # bleeding lookback for arming
 ARM_LOSS_FRAC = 0.004        # trailing fleet closed-PnL <= -0.4% of equity ...
 ARM_MIN_BOTS = 2             # ... with >=2 bots negative in that window
+# پنجره‌ی سریع (2026-08-21، درسِ تاخیرِ ~۶h در سکوییزِ 08-20): ضررِ تندِ کوتاه‌مدت هم
+# مسلح می‌کند — 3h/−0.25% با همان ≥۲ بات. هر دو مسیر همچنان امضای بازار می‌خواهند.
+ARM_FAST_WINDOW_H = 3
+ARM_FAST_LOSS_FRAC = 0.0025
 KEY_FEATURES = {
     "vol_ratio": +1,        # window volume / trailing-7d hourly mean (majors)
     "rv_z": +1,             # realised vol z-score vs 7d rolling windows
@@ -284,13 +288,23 @@ def fleet_bleeding(trades: pd.DataFrame | None = None, at: pd.Timestamp | None =
     t0 = at - pd.Timedelta(hours=window_h)
     if trades is None:
         trades = fleet_trades(t0.to_pydatetime() - timedelta(hours=1), at.to_pydatetime())
-    w = trades[(trades["close_date"] >= t0) & (trades["close_date"] < at)]
     eq = float(equity or fleet_equity())
-    pnl = float(w["pnl"].sum())
-    n_neg = int((w.groupby("bot")["pnl"].sum() < 0).sum()) if len(w) else 0
-    bleeding = (pnl <= -ARM_LOSS_FRAC * eq) and (n_neg >= ARM_MIN_BOTS)
-    return bleeding, {"window_h": window_h, "pnl": round(pnl, 2), "n_trades": len(w),
-                      "bots_negative": n_neg, "threshold": round(-ARM_LOSS_FRAC * eq, 2)}
+
+    def _win(h: float) -> tuple[float, int, int]:
+        ww = trades[(trades["close_date"] >= at - pd.Timedelta(hours=h)) & (trades["close_date"] < at)]
+        neg = int((ww.groupby("bot")["pnl"].sum() < 0).sum()) if len(ww) else 0
+        return float(ww["pnl"].sum()), len(ww), neg
+
+    pnl, n, n_neg = _win(window_h)
+    slow = (pnl <= -ARM_LOSS_FRAC * eq) and (n_neg >= ARM_MIN_BOTS)
+    fpnl, _fn, fneg = _win(ARM_FAST_WINDOW_H)
+    fast = (fpnl <= -ARM_FAST_LOSS_FRAC * eq) and (fneg >= ARM_MIN_BOTS)
+    return (slow or fast), {"window_h": window_h, "pnl": round(pnl, 2), "n_trades": n,
+                            "bots_negative": n_neg, "threshold": round(-ARM_LOSS_FRAC * eq, 2),
+                            "fast": {"window_h": ARM_FAST_WINDOW_H, "pnl": round(fpnl, 2),
+                                     "bots_negative": fneg,
+                                     "threshold": round(-ARM_FAST_LOSS_FRAC * eq, 2),
+                                     "armed": fast}}
 
 
 # --------------------------------------------------------------------------- #
@@ -757,6 +771,60 @@ EXPLAIN_SCHEMA = {
 }
 
 
+def _web_research(llm, prompt: str, schema: dict, *, max_uses: int = 4,
+                  tier: str = "cheap", label: str = "research") -> dict | None:
+    """Two-step: web_search prose research -> cheap schema extraction (the lesson from
+    explain_incident: asking for JSON in the same call breaks on <cite> tags). Returns
+    the validated dict or None. Budget-gated by the caller."""
+    try:
+        from src.llm.client import _parse_structured  # noqa: F401 (import check)
+    except Exception:
+        return None
+    try:
+        client = llm._c()
+        model = llm.model_for(tier)
+        resp = client.messages.create(
+            model=model, max_tokens=2048,
+            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": max_uses}],
+            messages=[{"role": "user", "content": prompt + "\n\nWrite your findings as a "
+                       "clear, compact report with headed sections matching the fields you "
+                       "will be asked for."}],
+        )
+        texts, urls, n_search = [], [], 0
+        for b in resp.content:
+            bt = getattr(b, "type", "")
+            if bt == "text":
+                texts.append(getattr(b, "text", "") or "")
+                for c in (getattr(b, "citations", None) or []):
+                    u = getattr(c, "url", None)
+                    if u:
+                        urls.append(u)
+            elif bt == "server_tool_use":
+                n_search += 1
+        prose = re.sub(r"</?cite[^>]*>", "", "\n".join(texts)).strip()
+        try:
+            llm.record_web_search(resp.usage, model, n_search)
+        except Exception:
+            pass
+        if not prose:
+            return None
+        ext = llm.complete(
+            f"Convert this {label} report into the JSON schema exactly. Keep the analyst's "
+            "numbers and wording; if the report says it could not search, set "
+            "researched=false (when the schema has that field). Add these citation URLs to "
+            "sources if the schema has a sources field: " + ", ".join(sorted(set(urls))[:10])
+            + "\n\nREPORT:\n" + prose[:9000],
+            tier="cheap", json_schema=schema, max_tokens=1200, cache_system=False)
+        data = ext.get("data") if isinstance(ext, dict) else None
+        if isinstance(data, dict):
+            data["_prose"] = prose[:3000]
+            data["_n_searches"] = n_search
+        return data if isinstance(data, dict) else None
+    except Exception as exc:
+        log.warning("_web_research(%s) failed: %s", label, exc)
+        return None
+
+
 def explain_incident(inc: dict, sig: dict, impact: dict, *, tier: str = "smart",
                      max_uses: int = 6) -> dict | None:
     """Ask Claude (with web_search) what happened and how it maps to the fingerprint.
@@ -978,6 +1046,7 @@ def update_embargo(bases: list[str] | None = None, *, now: datetime | None = Non
         except Exception as exc:
             log.warning("fleet_bleeding failed (%s) — treating as not bleeding", exc)
             bleeding, bstats = False, {}
+        bstats = {**bstats, "bleeding": bool(bleeding)}
         st["last_bleeding"] = bstats
         if not bleeding:
             m = None
