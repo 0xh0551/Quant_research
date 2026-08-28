@@ -31,6 +31,7 @@ Writes ONLY under outputs/ and (via event_risk.build) event_risk.json.
 from __future__ import annotations
 
 import json
+import os
 import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -54,7 +55,11 @@ MIN_CONFIDENCE = 0.7
 SIDE_TTL_MIN_H, SIDE_TTL_MAX_H = 4.0, 24.0
 SCAN_MIN_GAP_H = 4.0              # never burn LLM more often than this
 MAX_LLM_PER_DAY = 2               # سقفِ سختِ روزانه‌ی تماس‌های خبری
-QUIET_SWEEP_H = 48.0              # اگر این‌قدر تماس نبود، یک جاروی آرام (کاتالیست‌ها کهنه نشوند)
+# رزروِ بودجه (سهمی از سقفِ ماهانه به دلار) که این لایه به کارهای تحلیلی (بریفِ
+# استراتژیست، پست‌مورتم، market brief) وامی‌گذارد — آدیت 08-28.
+NEWS_RESERVE = float(os.environ.get("QUANT_NEWS_RESERVE", "0.9"))
+QUIET_RESERVE = float(os.environ.get("QUANT_QUIET_RESERVE", "1.5"))
+QUIET_SWEEP_H = 96.0              # اگر این‌قدر تماس نبود، یک جاروی آرام (کاتالیست‌ها کهنه نشوند)
 EVENT_CACHE = OUT / "event_catalysts.json"   # همان کشِ event_risk — این‌جا پر می‌شود (ادغام 08-21)
 CAL_STALE_D = 10.0                 # refresh calendar when older than this
 CAL_LOOKAHEAD_D = 45
@@ -468,7 +473,7 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
         age = None if last_llm is None else (now - datetime.fromisoformat(last_llm))
         gap_ok = age is None or age >= timedelta(hours=SCAN_MIN_GAP_H)
         if trig is None and (age is None or age >= timedelta(hours=QUIET_SWEEP_H)):
-            trig, quiet = "quiet catalyst sweep (48h without a triggered scan)", True
+            trig, quiet = f"quiet catalyst sweep ({QUIET_SWEEP_H:.0f}h without a triggered scan)", True
     except Exception:
         pass
     # سقفِ سختِ روزانه — هیچ روزی بیش از MAX_LLM_PER_DAY تماسِ خبری
@@ -481,7 +486,11 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
             from src.llm.client import get_llm
             llm = get_llm()
             # جاروی آرام (زمان‌بندی‌شده) رزروِ هوشِ واکنشی را نمی‌خورد
-            ok = llm.budget_ok(0.10, reserve=0.5) if quiet else llm.budget_ok(0.10)
+            # اولویتِ بودجه (آدیت 2026-08-28): این اسکن ۸۰٪ مصرفِ ماه را می‌خورد و
+            # بریفِ استراتژیست/پست‌مورتم را گرسنه می‌گذاشت. حالا اسکنِ تریگرشده هم
+            # سهمی (NEWS_RESERVE) برای کارهای تحلیلی نگه می‌دارد؛ جاروی آرام بیشتر.
+            ok = llm.budget_ok(0.10, reserve=QUIET_RESERVE) if quiet \
+                else llm.budget_ok(0.10, reserve=NEWS_RESERVE)
             if llm.is_enabled() and ok:
                 # weekly calendar refresh piggybacks on a triggered run
                 cal_data = _load_json(CALENDAR, {})
