@@ -53,8 +53,14 @@ UNCLEAR_PAUSE_H = 4.0             # important news, no direction yet → short p
 MIN_IMPORTANCE = 0.7
 MIN_CONFIDENCE = 0.7
 SIDE_TTL_MIN_H, SIDE_TTL_MAX_H = 4.0, 24.0
-SCAN_MIN_GAP_H = 4.0              # never burn LLM more often than this
-MAX_LLM_PER_DAY = 2               # سقفِ سختِ روزانه‌ی تماس‌های خبری
+SCAN_MIN_GAP_H = 4.0              # never burn LLM more often than this (تریگرهای خبری/کف)
+MAX_LLM_PER_DAY = 4               # سقفِ سختِ روزانه‌ی تماس‌های خبری (2→4، حادثه‌ی 09-03)
+# ── حادثه‌ی 2026-09-03 (BTC +4.8% زیرِ گیتِ «فقط شورت» ۱۴ساعته، بدونِ بازبینی): ──
+FAST_GAP_H = 2.0                  # فاصله‌ی حداقل وقتی تریگر *قیمتی* است (btc_6h / contradiction)
+CONTRA_6H = 2.0                   # % حرکتِ 6h خلافِ گیتِ side → ابطالِ فوری (همان TREND_HOLD_VETO_6H)
+EMERGENCY_PER_DAY = 1             # یک تماسِ اضطراری بعد از ابطال، خارج از سقفِ روزانه
+AUTHORITY_MIN_N = 10              # اختیارِ سخت فقط با کارنامه: n≥10 و hit-rate≥0.6
+AUTHORITY_MIN_HIT = 0.6
 # رزروِ بودجه (سهمی از سقفِ ماهانه به دلار) که این لایه به کارهای تحلیلی (بریفِ
 # استراتژیست، پست‌مورتم، market brief) وامی‌گذارد — آدیت 08-28.
 NEWS_RESERVE = float(os.environ.get("QUANT_NEWS_RESERVE", "0.9"))
@@ -399,7 +405,8 @@ def _trend_hold(active: dict, until: datetime, live_sig: dict | None,
 # hourly entry point (called from event_risk.build)
 # --------------------------------------------------------------------------- #
 def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None = None,
-                          bleeding: bool | None = None, bases: list[str] | None = None) -> dict | None:
+                          bleeding: bool | None = None, bases: list[str] | None = None,
+                          fast: bool = False) -> dict | None:
     """Returns the `global.direction_gate` payload or None. Persists state/log/score."""
     now = now or _now()
     st = _load_json(STATE, {})
@@ -440,6 +447,27 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
             _log_event({**active, "event": "expired", "at": now.isoformat()})
             active = None
 
+    # A) ابطال (09-03): گیتِ side فعال + حرکتِ 6h BTC خلافِ جهت ≥ CONTRA_6H → همین حالا لغو.
+    #    قبلاً فقط «تمدید» وتو می‌شد و حکمِ غلط تا انقضا (۱۴h) لشگر را قفل می‌کرد.
+    contradicted = None
+    if active and active.get("mode") == "side":
+        r6 = None
+        try:
+            r6 = float((live_sig or {}).get("btc_ret_pct"))
+        except (TypeError, ValueError):
+            pass
+        if r6 is None:
+            try:
+                r6 = _btc_ret_pct(pd.Timestamp(now) - pd.Timedelta(hours=6), pd.Timestamp(now))
+            except Exception:
+                r6 = None
+        _sign = 1.0 if active.get("allowed") == "long" else -1.0
+        if r6 is not None and _sign * float(r6) <= -CONTRA_6H:
+            _log_event({**active, "event": "contradicted", "btc6h": round(float(r6), 2),
+                        "at": now.isoformat()})
+            contradicted = f"contradiction: gate={active.get('allowed')} vs btc_6h={round(float(r6), 2)}%"
+            active = None
+
     # 1) deterministic calendar pause (free) — only if no side gate is active
     cal = calendar_pause(now)
     if cal and (not active or active.get("mode") == "pause"):
@@ -449,9 +477,9 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
         active = {**cal, "since": (active or {}).get("since", now.isoformat())}
 
     # 2) triggered LLM classification
-    trig = None
+    trig = contradicted                       # ابطال = تریگرِ قیمتیِ با اولویت
     ev = _upcoming_or_recent_event(now)
-    if ev:
+    if trig is None and ev:
         trig = f"scheduled event near: {ev['name']} @ {ev['at_utc']}"
     if trig is None:
         trig = _market_trigger(live_sig)
@@ -471,7 +499,8 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
     gap_ok, quiet = True, False
     try:
         age = None if last_llm is None else (now - datetime.fromisoformat(last_llm))
-        gap_ok = age is None or age >= timedelta(hours=SCAN_MIN_GAP_H)
+        _price_trig = bool(trig) and str(trig).startswith(("btc_", "contradiction", "vol_regime"))
+        gap_ok = age is None or age >= timedelta(hours=FAST_GAP_H if _price_trig else SCAN_MIN_GAP_H)
         if trig is None and (age is None or age >= timedelta(hours=QUIET_SWEEP_H)):
             trig, quiet = f"quiet catalyst sweep ({QUIET_SWEEP_H:.0f}h without a triggered scan)", True
     except Exception:
@@ -479,8 +508,15 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
     # سقفِ سختِ روزانه — هیچ روزی بیش از MAX_LLM_PER_DAY تماسِ خبری
     day_key = now.strftime("%Y-%m-%d")
     used_today = int((st.get("llm_daily") or {}).get(day_key, 0))
+    _emerg = int((st.get("emergency_daily") or {}).get(day_key, 0))
     if used_today >= MAX_LLM_PER_DAY:
-        trig = None
+        if contradicted and _emerg < EMERGENCY_PER_DAY:
+            st["emergency_daily"] = {day_key: _emerg + 1}   # تماسِ اضطراری بعد از ابطال
+            gap_ok = True
+        else:
+            trig = None
+    if fast and trig and not str(trig).startswith(("btc_", "contradiction", "vol_regime")):
+        trig = None                                          # مسیرِ سریع (۱۰ دقیقه‌ای) فقط تریگرِ قیمتی
     if trig and gap_ok:
         try:
             from src.llm.client import get_llm
@@ -533,4 +569,12 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
         return None
     out = {k: active.get(k) for k in ("mode", "allowed", "until", "reason", "source", "since")}
     out["active"] = True
+    # D) اختیار بر پایه‌ی کارنامه (09-03): گیتِ side فقط با n≥AUTHORITY_MIN_N و hit≥0.6
+    #    «سخت» است (سمتِ مخالف = 0)؛ وگرنه «نرم» (سمتِ مخالف ×0.5). pause تقویمی همیشه سخت.
+    tr = gate_track_record()
+    _n = int(tr.get("hits", 0)) + int(tr.get("misses", 0))
+    _hit = (int(tr.get("hits", 0)) / _n) if _n else 0.0
+    earned = _n >= AUTHORITY_MIN_N and _hit >= AUTHORITY_MIN_HIT
+    out["authority"] = "hard" if (active.get("mode") == "pause" or earned) else "soft"
+    out["track_record"] = {"n": _n, "hit_rate": round(_hit, 2)}
     return out

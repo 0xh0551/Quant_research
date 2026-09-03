@@ -16,6 +16,16 @@ smoothed, positive in BOTH chronological halves, tp in [MIN_TP, MAX_TP] price sp
 number is in-sample by construction — expect the live effect to be smaller; the nightly
 rerun + guards are what keep a lucky number from surviving.
 
+Ratchet actuator (2026-08-28, Popeye MU post-mortem): a fixed TP kept failing the
+stability gate because it cuts runners; an ARMED giveback ratchet (lock peak*(1-g) once
+MFE >= arm) exits round-trips like MU (+3.3% → −3%) while letting winners run. Its
+counterfactual is NOT exact from MFE alone (the 08-12 trailing lesson), so it is
+path-simulated on 1h candles fetched from the bot's own venue, adverse-extreme-first
+(pessimistic). Parameters are FIXED (RATCHET_ARM/RATCHET_GIVEBACK), not optimised per
+bot — the 08-27 grid was flat across (arm, g), so we take the anti-overfit point. The
+ratchet replaces the flat TP for a bot only when its pessimistic improvement beats the
+TP's exact one and passes the same $-and-halves guards.
+
 Read-only on bot DBs. Writes ONLY outputs/agent_exits_evidence.json and (atomic)
 <user_data>/agent_exits.json.
 """
@@ -44,6 +54,12 @@ GRID_STEP = 0.0025
 SMOOTH_STEPS = 2          # ±0.5%
 MIN_IMPROVE_USD = 20.0
 MAX_LOOKBACK_D = 60
+
+# راچتِ مسلح‌شونده — پارامترها ثابت و ضدِ overfit (گریدِ 08-27 در کل بازه مثبت بود)
+RATCHET_ARM = 0.02        # price-space MFE that arms the ratchet
+RATCHET_GIVEBACK = 0.40   # exit when price gives back this fraction of the peak move
+RATCHET_MIN_COVERAGE = 0.8  # need candles for >=80% of trades or refuse to actuate
+CANDLE_CACHE = OUT / "candle_cache"
 
 # هر بات از «دوره‌ی معماریِ فعلی»اش سنجیده می‌شود — دوره‌های بازنشسته نمی‌آیند،
 # وگرنه استراتژیِ بازنویسی‌شده با رفتارِ نسخهٔ قبلیِ خودش قضاوت می‌شود.
@@ -145,6 +161,133 @@ def tune(df: pd.DataFrame) -> dict:
     return ev
 
 
+_EXCHANGES: dict[str, object] = {}
+
+
+def _exchange_for(bot: str):
+    """ccxt swap client from the bot's own freqtrade config (exchange.name); None = no ratchet."""
+    if bot in _EXCHANGES:
+        return _EXCHANGES[bot]
+    ex = None
+    try:
+        import re
+
+        import ccxt
+        cfg_path = local_config.bot_configs().get(bot)
+        raw = Path(cfg_path).read_text()
+        # کانفیگ فریک‌ترید می‌تواند کامنت و کامای انتهایی داشته باشد (rapidjson) — json.loads نه
+        raw = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
+        raw = re.sub(r"^\s*//.*$", "", raw, flags=re.M)   # کامنتِ تمام‌خط (هرچه باشد)
+        raw = re.sub(r"//[^\n\"]*$", "", raw, flags=re.M)  # کامنتِ انتهای خط، بدونِ " (URLها امن)
+        raw = re.sub(r",(\s*[}\]])", r"\1", raw)
+        name = json.loads(raw)["exchange"]["name"].lower()
+        cls = getattr(ccxt, name, None) or getattr(ccxt, {"gate": "gateio"}.get(name, ""), None)
+        if cls is not None:
+            ex = cls({"enableRateLimit": True, "options": {"defaultType": "swap"}})
+    except Exception:
+        ex = None
+    _EXCHANGES[bot] = ex
+    return ex
+
+
+def _trade_candles(ex, pair: str, t0: float, t1: float) -> list | None:
+    """1h OHLCV for [t0, t1] via per-pair JSON cache — closed-trade windows never change,
+    so the nightly rerun only hits the network for the newest trades."""
+    CANDLE_CACHE.mkdir(parents=True, exist_ok=True)
+    f = CANDLE_CACHE / (pair.replace("/", "_").replace(":", "_") + ".json")
+    key = f"{int(t0)}_{int(t1)}"
+    try:
+        store = json.loads(f.read_text()) if f.exists() else {}
+    except ValueError:
+        store = {}
+    if key in store:
+        return store[key]
+    out: list = []
+    try:
+        since = int(t0 * 1000)
+        while since < t1 * 1000:
+            batch = ex.fetch_ohlcv(pair, "1h", since=since, limit=500)
+            if not batch:
+                break
+            out += batch
+            since = batch[-1][0] + 3_600_000
+            if len(batch) < 500:
+                break
+    except Exception:
+        return None
+    out = [c for c in out if t0 * 1000 <= c[0] <= t1 * 1000]
+    store[key] = out
+    tmp = f.with_suffix(".tmp")
+    tmp.write_text(json.dumps(store))
+    tmp.replace(f)
+    return out
+
+
+def _ratchet_trade_pnl(row, ex, arm: float, g: float) -> float | None:
+    """Pessimistic 1h path sim of the armed ratchet for one closed trade: within each
+    candle the ADVERSE extreme is applied before the favourable one, and the exit fill is
+    the lock level itself. None = no candles (caller keeps the actual exit)."""
+    t0 = pd.Timestamp(row["open_date"]).timestamp()
+    t1 = pd.Timestamp(row["close_date"]).timestamp()
+    o = _trade_candles(ex, row["pair"], t0, t1)
+    if not o:
+        return None
+    op, short = float(row["open_rate"]), bool(row["is_short"])
+    peak = 0.0
+    for _ts, _o, hi, lo, _cl, _v in o:
+        fav_adverse = (op - hi) / op if short else (lo - op) / op
+        fav_best = (op - lo) / op if short else (hi - op) / op
+        if peak >= arm:
+            lock = peak * (1 - g)
+            if fav_adverse <= lock:
+                return float((lock - FEE_RT) * row["stake_amount"] * row["leverage"])
+        peak = max(peak, fav_best)
+    return float(row["close_profit_abs"])
+
+
+def tune_ratchet(df: pd.DataFrame, bot: str) -> dict:
+    """Path-simulated counterfactual of the fixed-parameter ratchet, same guards as tune():
+    n, $-improvement, positive in both chronological halves, plus candle coverage."""
+    n = len(df)
+    ev: dict = {"arm_pct": RATCHET_ARM, "giveback": RATCHET_GIVEBACK, "n": n,
+                "ratchet": None}
+    if n < MIN_N:
+        ev["why"] = f"insufficient evidence (n={n} < {MIN_N})"
+        return ev
+    ex = _exchange_for(bot)
+    if ex is None:
+        ev["why"] = "no exchange client for candle path-sim"
+        return ev
+    sims, covered = [], 0
+    for _, row in df.iterrows():
+        v = _ratchet_trade_pnl(row, ex, RATCHET_ARM, RATCHET_GIVEBACK)
+        if v is None:
+            v = float(row["close_profit_abs"])
+        else:
+            covered += 1
+        sims.append(v)
+    coverage = covered / n
+    ev["candle_coverage"] = round(coverage, 3)
+    s = pd.Series(sims)
+    actual = float(df["close_profit_abs"].sum())
+    half = n // 2
+    imp = round(float(s.sum() - actual), 2)
+    imp1 = round(float(s.iloc[:half].sum() - df["close_profit_abs"].iloc[:half].sum()), 2)
+    imp2 = round(float(s.iloc[half:].sum() - df["close_profit_abs"].iloc[half:].sum()), 2)
+    ev.update({"sim_pnl": round(float(s.sum()), 2), "improvement": imp,
+               "split_half_improvement": [imp1, imp2]})
+    if coverage < RATCHET_MIN_COVERAGE:
+        ev["why"] = f"candle coverage {coverage:.0%} < {RATCHET_MIN_COVERAGE:.0%}"
+    elif imp < MIN_IMPROVE_USD:
+        ev["why"] = f"improvement below ${MIN_IMPROVE_USD:.0f}"
+    elif imp1 <= 0 or imp2 <= 0:
+        ev["why"] = f"unstable across halves ({imp1}, {imp2})"
+    else:
+        ev.update({"ratchet": {"arm_pct": RATCHET_ARM, "giveback": RATCHET_GIVEBACK},
+                   "why": "ok"})
+    return ev
+
+
 def capture_stats(df: pd.DataFrame) -> dict:
     """Sum-weighted capture (realised move / MFE) — same definition as the FreqUI tab."""
     if df.empty:
@@ -236,18 +379,28 @@ def tune_fleet() -> tuple[dict, dict]:
                                                                 "why": "n<MIN_N -> pooled"}
         tp_long = sides["long"].get("tp") or pooled.get("tp")
         tp_short = sides["short"].get("tp") or pooled.get("tp")
+        rt = tune_ratchet(df, bot) if len(df) else {"ratchet": None, "why": "no trades"}
+        # راچت جای TP ثابت می‌نشیند فقط وقتی شبیه‌سازیِ بدبینانه‌اش از بهبودِ دقیقِ TP بهتر
+        # باشد — دو اکچوئیتورِ هم‌زمان رفتاری می‌سازد که هیچ‌کدام از سیم‌ها معتبرش نکرده.
+        tp_imp = pooled.get("raw_improvement") if pooled.get("tp") is not None else None
+        use_ratchet = rt.get("ratchet") is not None and (
+            tp_imp is None or float(rt.get("improvement") or 0) >= float(tp_imp))
+        if use_ratchet:
+            tp_long = tp_short = None
         diag = diagnose(df) if len(df) else {"label": "insufficient", "n": 0}
         stops = stop_geometry(df) if len(df) else {}
         pairs = pair_capture(df) if len(df) else []
         payload_bots[bot] = {
             "tp_long_pct": tp_long, "tp_short_pct": tp_short,
+            "ratchet": rt.get("ratchet") if use_ratchet else None,
             "diagnosis": diag.get("label"),
             "epoch": BOT_EPOCH.get(bot), "n": len(df),
-            "why": pooled.get("why"),
+            "why": (f"ratchet: {rt.get('why')}" if use_ratchet else pooled.get("why")),
         }
-        evidence[bot] = {"pooled": pooled, "sides": sides, "diagnosis": diag,
-                         "stop_geometry": stops, "pair_capture": pairs,
-                         "epoch": BOT_EPOCH.get(bot), "n": len(df)}
+        evidence[bot] = {"pooled": pooled, "sides": sides, "ratchet": rt,
+                        "diagnosis": diag,
+                        "stop_geometry": stops, "pair_capture": pairs,
+                        "epoch": BOT_EPOCH.get(bot), "n": len(df)}
     return payload_bots, evidence
 
 

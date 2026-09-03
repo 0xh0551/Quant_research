@@ -15,6 +15,7 @@ data/processed/*
 data/research/*
 data/altdata/*
 data/funding/*
+data/funding_hist/*
 data/hl_flow/*
 data/microstructure/*
 outputs/*
