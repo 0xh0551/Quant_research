@@ -90,6 +90,19 @@ ARM_MIN_BOTS = 2             # ... with >=2 bots negative in that window
 # مسلح می‌کند — 3h/−0.25% با همان ≥۲ بات. هر دو مسیر همچنان امضای بازار می‌خواهند.
 ARM_FAST_WINDOW_H = 3
 ARM_FAST_LOSS_FRAC = 0.0025
+# ── v2 «پروتکل استرس» (2026-09-04، docs/EMBARGO_V2_DESIGN.md) ──────────────
+# آشکارساز: استرس (دامنهٔ 6h بیت‌کوین ≥ p75 غلتانِ ۶۰ روز و اره‌ای ≥ میانه) **یا** خونریزی؛
+# اثرانگشتِ حادثه فقط با خونریزی (قانون مالک 08-19). مدت: 18h از شروع، آزادسازی بعد از
+# 6 ارزیابیِ ساعتیِ تمیز، سقف 24h؛ تمدید فقط تا سقف و فقط وقتی آشکارساز هنوز برقرار است.
+# دامنه: outputs/embargo_scope.json (شبانه، scripts/embargo_scope_build.py) → per-bot
+# veto / half / free؛ بدون فایل → همه veto (رفتار v1).
+V2_TTL_H = 18.0
+V2_CAP_H = 24.0
+V2_CLEAN_RELEASE = 6
+STRESS_LOOKBACK_D = 60
+STRESS_RANGE_Q = 0.75
+STRESS_WHIP_Q = 0.50
+SCOPE_FILE = OUT / "embargo_scope.json"
 KEY_FEATURES = {
     "vol_ratio": +1,        # window volume / trailing-7d hourly mean (majors)
     "rv_z": +1,             # realised vol z-score vs 7d rolling windows
@@ -991,6 +1004,65 @@ def _save_state(st: dict) -> None:
     tmp.replace(EMBARGO_STATE)
 
 
+def stress_thresholds(now: datetime, st: dict | None = None) -> dict:
+    """p75 دامنهٔ 6h و میانهٔ اره‌ای BTC روی ۶۰ روزِ غلتان (1h bybit؛ کشِ روزانه در state)."""
+    cached = (st or {}).get("stress_thresholds") or {}
+    try:
+        if cached and (now - datetime.fromisoformat(cached["computed_at"])).total_seconds() < 24 * 3600:
+            return cached
+    except Exception:
+        pass
+    t1 = pd.Timestamp(now).floor("h")
+    t0 = t1 - pd.Timedelta(days=STRESS_LOOKBACK_D)
+    df = _ohlcv_1h("BTC/USDT:USDT", t0, t1)
+    if df.empty:
+        return cached or {}
+    d = df.set_index("ts").sort_index()
+    d = d[(d.index >= t0) & (d.index <= t1)]
+    r1 = d["c"].pct_change().dropna()
+
+    def feats(g: pd.DataFrame) -> pd.Series:
+        if len(g) < 4:
+            return pd.Series({"range": np.nan, "whip": np.nan})
+        rng = (g["h"].max() - g["l"].min()) / g["o"].iloc[0] * 100
+        net = abs(g["c"].iloc[-1] / g["o"].iloc[0] - 1) * 100
+        seg = r1[(r1.index > g.index[0]) & (r1.index <= g.index[-1])]
+        return pd.Series({"range": rng, "whip": float(seg.abs().sum() * 100 - net)})
+    F = d.groupby(pd.Grouper(freq="6h")).apply(feats).dropna()
+    if len(F) < 20:
+        return cached or {}
+    out = {"range_p75_pct": round(float(F["range"].quantile(STRESS_RANGE_Q)), 3),
+           "whip_median_pct": round(float(F["whip"].quantile(STRESS_WHIP_Q)), 3),
+           "n_buckets": int(len(F)), "computed_at": now.isoformat()}
+    if st is not None:
+        st["stress_thresholds"] = out
+    return out
+
+
+def is_stress(sig: dict, thr: dict) -> tuple[bool, list[str]]:
+    """امضای زندهٔ 6h در برابر آستانه‌های غلتان (whipsaw_pct امضا = اره‌ای 1h میانگینِ میجرها)."""
+    if not sig or not thr:
+        return False, []
+    hits = []
+    try:
+        if float(sig.get("btc_range_pct") or 0) >= float(thr["range_p75_pct"]):
+            hits.append(f"btc_range_pct={float(sig['btc_range_pct']):.2f}≥p75 {thr['range_p75_pct']:.2f}")
+        if float(sig.get("whipsaw_pct") or 0) >= float(thr["whip_median_pct"]):
+            hits.append(f"whipsaw_pct={float(sig['whipsaw_pct']):.2f}≥med {thr['whip_median_pct']:.2f}")
+    except Exception:
+        return False, []
+    return len(hits) == 2, hits
+
+
+def load_scope() -> dict:
+    """{bot: veto|half|free} از embargo_scope.json؛ خالی = همه veto (v1)."""
+    try:
+        d = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
+        return {b: str(v.get("mode", "veto")) for b, v in (d.get("bots") or {}).items()}
+    except Exception:
+        return {}
+
+
 def update_embargo(bases: list[str] | None = None, *, now: datetime | None = None) -> dict | None:
     """Hourly: refresh the live fingerprint, match, and return the `global.embargo`
     payload for event_risk.json (or None). ARMS ONLY WHEN THE FLEET IS BLEEDING
@@ -1018,19 +1090,9 @@ def update_embargo(bases: list[str] | None = None, *, now: datetime | None = Non
     except Exception as exc:
         log.warning("embargo_override unreadable (%s) — ignored", exc)
     mem = load_memory()
-    if not (mem.get("incidents")):
-        return None
     st = _load_state()
     active = st.get("active")
-    if active:
-        try:
-            until = datetime.fromisoformat(active["until"])
-        except Exception:
-            until = now
-        if until <= now:
-            _log_embargo({**active, "event": "expired", "at": now.isoformat()})
-            st["active"] = None
-            active = None
+    # ── امضا، خونریزی، استرس (هر سه همیشه محاسبه می‌شوند؛ v2) ──
     try:
         sig = live_signature(bases)
     except Exception as exc:
@@ -1038,45 +1100,89 @@ def update_embargo(bases: list[str] | None = None, *, now: datetime | None = Non
         sig = {}
     st["last_signature"] = {k: v for k, v in sig.items() if k not in ("majors", "alts")}
     st["last_checked"] = now.isoformat()
-    m = match_live(sig, mem) if sig else None
+    try:
+        bleeding, bstats = fleet_bleeding(None, pd.Timestamp(now))
+    except Exception as exc:
+        log.warning("fleet_bleeding failed (%s) — treating as not bleeding", exc)
+        bleeding, bstats = False, {}
+    bstats = {**bstats, "bleeding": bool(bleeding)}
+    st["last_bleeding"] = bstats
+    thr = {}
+    try:
+        thr = stress_thresholds(now, st)
+    except Exception as exc:
+        log.warning("stress_thresholds failed: %s", exc)
+    stress, stress_hits = is_stress(sig, thr)
+    st["last_stress"] = {"stress": bool(stress), "hits": stress_hits, "thresholds": thr}
+    m = match_live(sig, mem) if (sig and mem.get("incidents")) else None
+    if m and not bleeding:
+        m = None                     # قانون مالک 2026-08-19: اثرانگشت بدون خونریزی = فرصت
+    triggers = [t for t, on in (("stress", stress), ("bleeding", bleeding), ("fingerprint", bool(m))) if on]
+    scope = load_scope()
+    floor_mult = float(m["floor_mult"]) if m else 0.5
+    hits = list(stress_hits)
+    if bleeding:
+        hits.append(f"fleet_bleeding={bstats.get('pnl')}$/{bstats.get('window_h')}h "
+                    f"({bstats.get('bots_negative')} bots)")
     if m:
-        # قانون مالک 2026-08-19: امضا کافی نیست — فقط با خون‌ریزیِ واقعیِ ناوگان مسلح شو.
+        hits += list(m.get("hits") or [])
+
+    if active:
         try:
-            bleeding, bstats = fleet_bleeding(None, pd.Timestamp(now))
-        except Exception as exc:
-            log.warning("fleet_bleeding failed (%s) — treating as not bleeding", exc)
-            bleeding, bstats = False, {}
-        bstats = {**bstats, "bleeding": bool(bleeding)}
-        st["last_bleeding"] = bstats
-        if not bleeding:
-            m = None
-    if m:
-        m["bleeding"] = bstats
-        until = now + timedelta(hours=float(m["ttl_h"]))
-        if active:
-            # extend, keep the stronger setting
-            new_until = max(datetime.fromisoformat(active["until"]), until)
-            active.update({"until": new_until.isoformat(), "last_match": now.isoformat(),
-                           "strength": max(float(active.get("strength", 0)), float(m["strength"])),
-                           "floor_mult": min(float(active.get("floor_mult", 1)), float(m["floor_mult"])),
-                           "hits": m["hits"], "extensions": int(active.get("extensions", 0)) + 1})
+            since_dt = datetime.fromisoformat(active["since"])
+            until_dt = datetime.fromisoformat(active["until"])
+        except Exception:
+            since_dt, until_dt = now, now
+        cap_dt = since_dt + timedelta(hours=V2_CAP_H)
+        if triggers:
+            active["clean_checks"] = 0
+            active["last_match"] = now.isoformat()
+            active["hits"] = hits
+            active["triggers"] = triggers
+            if m:
+                active["floor_mult"] = min(float(active.get("floor_mult", 1)), floor_mult)
+                active["strength"] = max(float(active.get("strength", 0)), float(m["strength"]))
+            if now >= until_dt and until_dt < cap_dt:
+                active["until"] = min(cap_dt, now + timedelta(hours=V2_TTL_H)).isoformat()
+                active["extensions"] = int(active.get("extensions", 0)) + 1
+                _log_embargo({**active, "event": "extended_to_cap", "at": now.isoformat()})
         else:
-            active = {"since": now.isoformat(), "until": until.isoformat(), "last_match": now.isoformat(),
-                      "matched": m["incident_id"], "cause_class": m.get("cause_class"),
-                      "strength": m["strength"], "floor_mult": m["floor_mult"], "ttl_h": m["ttl_h"],
-                      "hits": m["hits"], "extensions": 0, "bleeding_at_start": m.get("bleeding"),
-                      "signature_at_start": st["last_signature"]}
-            _log_embargo({**active, "event": "start"})
-        st["active"] = active
+            active["clean_checks"] = int(active.get("clean_checks", 0)) + 1
+        until_dt = datetime.fromisoformat(active["until"])
+        if int(active.get("clean_checks", 0)) >= V2_CLEAN_RELEASE:
+            _log_embargo({**active, "event": "released_clean", "at": now.isoformat()})
+            active = None
+        elif until_dt <= now:
+            _log_embargo({**active, "event": "expired", "at": now.isoformat()})
+            active = None
+    elif triggers:
+        active = {"mode": "v2", "since": now.isoformat(),
+                  "until": (now + timedelta(hours=V2_TTL_H)).isoformat(),
+                  "last_match": now.isoformat(), "triggers": triggers,
+                  "matched": (m["incident_id"] if m else triggers[0]),
+                  "cause_class": (m.get("cause_class") if m else ("stress" if stress else "bleeding")),
+                  "strength": (float(m["strength"]) if m else 0.5), "floor_mult": floor_mult,
+                  "ttl_h": V2_TTL_H, "cap_h": V2_CAP_H, "hits": hits, "extensions": 0, "clean_checks": 0,
+                  "bleeding_at_start": bstats, "stress_at_start": st["last_stress"],
+                  "signature_at_start": st["last_signature"]}
+        _log_embargo({**active, "event": "start"})
+    if active is not None:
+        active["scope"] = scope
+    st["active"] = active
     _save_state(st)
     if not active:
         return None
+    n_veto = sum(1 for v in scope.values() if v == "veto")
+    n_half = sum(1 for v in scope.values() if v == "half")
+    scope_txt = (f"scope veto={n_veto} half={n_half} free={len(scope) - n_veto - n_half}"
+                 if scope else "scope: all veto (no scope file)")
     return {
-        "active": True, "since": active["since"], "until": active["until"],
+        "active": True, "mode": "v2", "since": active["since"], "until": active["until"],
         "strength": active["strength"], "floor_mult": active["floor_mult"],
         "matched": active["matched"], "cause_class": active.get("cause_class"),
-        "reason": f"embargo: market fingerprint matches incident {active['matched']} "
-                  f"({', '.join(active.get('hits') or [])[:160]})",
+        "triggers": active.get("triggers"), "scope": scope,
+        "reason": f"stress-protocol[{','.join(active.get('triggers') or [])}] {scope_txt}: "
+                  f"{', '.join(active.get('hits') or [])[:160]}",
     }
 
 

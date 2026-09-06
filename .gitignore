@@ -37,3 +37,4 @@ configs/manual_drops.json
 backups/
 *.bak_*
 *.pre_v4*
+data/bot_state/
