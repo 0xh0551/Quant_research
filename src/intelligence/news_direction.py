@@ -30,11 +30,13 @@ Writes ONLY under outputs/ and (via event_risk.build) event_risk.json.
 
 from __future__ import annotations
 
+import contextlib
 import json
-import os
 import logging
-from datetime import datetime, timedelta, timezone
+import os
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 
@@ -47,7 +49,7 @@ STATE = OUT / "direction_gate_state.json"
 LOG = OUT / "direction_gate_log.jsonl"
 OVERRIDE = OUT / "direction_gate_override.json"
 
-UTC = timezone.utc
+UTC = UTC
 PRE_H, POST_H = 2.0, 1.0          # pause window around a scheduled event
 UNCLEAR_PAUSE_H = 4.0             # important news, no direction yet → short pause
 MIN_IMPORTANCE = 0.7
@@ -129,14 +131,14 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _load_json(p: Path, default):
+def _load_json(p: Path, default: Any) -> Any:
     try:
         return json.loads(p.read_text())
     except Exception:
         return default
 
 
-def _save_json(p: Path, data) -> None:
+def _save_json(p: Path, data: Any) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     tmp = p.with_suffix(p.suffix + ".tmp")
     tmp.write_text(json.dumps(data, indent=1, ensure_ascii=False, default=str))
@@ -155,7 +157,7 @@ def _log_event(rec: dict) -> None:
 # --------------------------------------------------------------------------- #
 # macro calendar
 # --------------------------------------------------------------------------- #
-def refresh_calendar(llm) -> bool:
+def refresh_calendar(llm: Any) -> bool:
     """Weekly Claude+web_search refresh of the scheduled-events calendar."""
     from src.intelligence.incident import _web_research  # shared two-step helper
     prompt = (
@@ -241,7 +243,7 @@ def _market_trigger(live_sig: dict | None) -> str | None:
     return None
 
 
-def classify_news(llm, context: str, bases: list[str] | None = None) -> dict | None:
+def classify_news(llm: Any, context: str, bases: list[str] | None = None) -> dict | None:
     from src.intelligence.incident import _web_research
     asset_part = ""
     if bases:
@@ -326,7 +328,7 @@ def _btc_ret_pct(t0: pd.Timestamp, t1: pd.Timestamp) -> float | None:
 def score_expired(st: dict, now: datetime) -> None:
     """Score every logged gate whose TTL has passed and is not yet scored."""
     try:
-        recs = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+        recs = [json.loads(ln) for ln in LOG.read_text().splitlines() if ln.strip()]
     except Exception:
         return
     scored = {r.get("since") for r in recs if r.get("event") == "scored"}
@@ -350,7 +352,7 @@ def score_expired(st: dict, now: datetime) -> None:
 
 def gate_track_record() -> dict:
     try:
-        recs = [json.loads(l) for l in LOG.read_text().splitlines() if l.strip()]
+        recs = [json.loads(ln) for ln in LOG.read_text().splitlines() if ln.strip()]
     except Exception:
         return {}
     sc = [r for r in recs if r.get("event") == "scored" and r.get("mode") == "side"]
@@ -380,10 +382,10 @@ def _trend_hold(active: dict, until: datetime, live_sig: dict | None,
         if r24 is None or sign * r24 < TREND_HOLD_MIN_24H:
             return None                     # روند دیگر تأیید نمی‌کند
         r6 = None
-        try:
-            r6 = float((live_sig or {}).get("btc_ret_pct"))
-        except (TypeError, ValueError):
-            pass
+        _v = (live_sig or {}).get("btc_ret_pct")
+        if _v is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                r6 = float(_v)
         if r6 is None:
             r6 = _btc_ret_pct(pd.Timestamp(now) - pd.Timedelta(hours=6), pd.Timestamp(now))
         if r6 is not None and sign * r6 <= -TREND_HOLD_VETO_6H:
@@ -452,10 +454,10 @@ def update_direction_gate(live_sig: dict | None = None, *, now: datetime | None 
     contradicted = None
     if active and active.get("mode") == "side":
         r6 = None
-        try:
-            r6 = float((live_sig or {}).get("btc_ret_pct"))
-        except (TypeError, ValueError):
-            pass
+        _v = (live_sig or {}).get("btc_ret_pct")
+        if _v is not None:
+            with contextlib.suppress(TypeError, ValueError):
+                r6 = float(_v)
         if r6 is None:
             try:
                 r6 = _btc_ret_pct(pd.Timestamp(now) - pd.Timedelta(hours=6), pd.Timestamp(now))

@@ -16,7 +16,7 @@ smoothed, positive in BOTH chronological halves, tp in [MIN_TP, MAX_TP] price sp
 number is in-sample by construction — expect the live effect to be smaller; the nightly
 rerun + guards are what keep a lucky number from surviving.
 
-Ratchet actuator (2026-08-28, Popeye MU post-mortem): a fixed TP kept failing the
+Ratchet actuator (2026-08-28, a bridge bot's MU post-mortem): a fixed TP kept failing the
 stability gate because it cuts runners; an ARMED giveback ratchet (lock peak*(1-g) once
 MFE >= arm) exits round-trips like MU (+3.3% → −3%) while letting winners run. Its
 counterfactual is NOT exact from MFE alone (the 08-12 trailing lesson), so it is
@@ -36,6 +36,7 @@ import json
 import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -164,7 +165,7 @@ def tune(df: pd.DataFrame) -> dict:
 _EXCHANGES: dict[str, object] = {}
 
 
-def _exchange_for(bot: str):
+def _exchange_for(bot: str) -> Any:
     """ccxt swap client from the bot's own freqtrade config (exchange.name); None = no ratchet."""
     if bot in _EXCHANGES:
         return _EXCHANGES[bot]
@@ -174,6 +175,8 @@ def _exchange_for(bot: str):
 
         import ccxt
         cfg_path = local_config.bot_configs().get(bot)
+        if cfg_path is None:
+            raise FileNotFoundError(bot)
         raw = Path(cfg_path).read_text()
         # کانفیگ فریک‌ترید می‌تواند کامنت و کامای انتهایی داشته باشد (rapidjson) — json.loads نه
         raw = re.sub(r"/\*.*?\*/", "", raw, flags=re.S)
@@ -190,7 +193,7 @@ def _exchange_for(bot: str):
     return ex
 
 
-def _trade_candles(ex, pair: str, t0: float, t1: float) -> list | None:
+def _trade_candles(ex: Any, pair: str, t0: float, t1: float) -> list | None:
     """1h OHLCV for [t0, t1] via per-pair JSON cache — closed-trade windows never change,
     so the nightly rerun only hits the network for the newest trades."""
     CANDLE_CACHE.mkdir(parents=True, exist_ok=True)
@@ -201,7 +204,7 @@ def _trade_candles(ex, pair: str, t0: float, t1: float) -> list | None:
     except ValueError:
         store = {}
     if key in store:
-        return store[key]
+        return list(store[key])
     out: list = []
     try:
         since = int(t0 * 1000)
@@ -223,7 +226,7 @@ def _trade_candles(ex, pair: str, t0: float, t1: float) -> list | None:
     return out
 
 
-def _ratchet_trade_pnl(row, ex, arm: float, g: float) -> float | None:
+def _ratchet_trade_pnl(row: Any, ex: Any, arm: float, g: float) -> float | None:
     """Pessimistic 1h path sim of the armed ratchet for one closed trade: within each
     candle the ADVERSE extreme is applied before the favourable one, and the exit fill is
     the lock level itself. None = no candles (caller keeps the actual exit)."""

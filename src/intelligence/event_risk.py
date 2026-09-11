@@ -478,10 +478,8 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
     try:
         from src.intelligence.news_direction import update_direction_gate
         _st = {}
-        try:
+        with contextlib.suppress(Exception):
             _st = json.loads((OUT / "embargo_state.json").read_text())
-        except Exception:
-            pass
         _lb = _st.get("last_bleeding") or {}
         _bl = bool(_lb.get("bleeding", float(_lb.get("pnl") or 0) <= -28))
         direction_gate = update_direction_gate(_st.get("last_signature"), bleeding=_bl,

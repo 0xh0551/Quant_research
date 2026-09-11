@@ -784,7 +784,7 @@ EXPLAIN_SCHEMA = {
 }
 
 
-def _web_research(llm, prompt: str, schema: dict, *, max_uses: int = 4,
+def _web_research(llm: Any, prompt: str, schema: dict, *, max_uses: int = 4,
                   tier: str = "cheap", label: str = "research") -> dict | None:
     """Two-step: web_search prose research -> cheap schema extraction (the lesson from
     explain_incident: asking for JSON in the same call breaks on <cite> tags). Returns
@@ -815,10 +815,8 @@ def _web_research(llm, prompt: str, schema: dict, *, max_uses: int = 4,
             elif bt == "server_tool_use":
                 n_search += 1
         prose = re.sub(r"</?cite[^>]*>", "", "\n".join(texts)).strip()
-        try:
+        with contextlib.suppress(Exception):
             llm.record_web_search(resp.usage, model, n_search)
-        except Exception:
-            pass
         if not prose:
             return None
         ext = llm.complete(
@@ -1033,7 +1031,7 @@ def stress_thresholds(now: datetime, st: dict | None = None) -> dict:
         return cached or {}
     out = {"range_p75_pct": round(float(F["range"].quantile(STRESS_RANGE_Q)), 3),
            "whip_median_pct": round(float(F["whip"].quantile(STRESS_WHIP_Q)), 3),
-           "n_buckets": int(len(F)), "computed_at": now.isoformat()}
+           "n_buckets": len(F), "computed_at": now.isoformat()}
     if st is not None:
         st["stress_thresholds"] = out
     return out

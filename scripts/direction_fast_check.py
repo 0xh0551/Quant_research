@@ -6,13 +6,18 @@
 FAST_GAP_H) و اگر گیت عوض شد، فقط بلاکِ global.direction_gate را در event_risk.json
 (+ کپیِ user_data بات‌ها) به‌روز می‌کند — اسکنِ ساعتیِ کامل دست‌نخورده می‌ماند."""
 from __future__ import annotations
-import json, sys, time
+
+import json
+import sys
+import time
 from pathlib import Path
+
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from src.intelligence.event_risk import OUT, BOT_UD  # noqa: E402
+from src.intelligence.event_risk import BOT_UD, OUT  # noqa: E402
 from src.intelligence.incident import live_signature  # noqa: E402
 from src.intelligence.news_direction import update_direction_gate  # noqa: E402
+
 
 def main() -> int:
     t0 = time.time()
@@ -20,7 +25,7 @@ def main() -> int:
     try:
         sig = live_signature()
         sig = {k: v for k, v in sig.items() if k not in ("majors", "alts")}
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         print(f"[fast] live_signature failed: {e} — falling back to embargo_state")
         try:
             sig = json.loads((OUT / "embargo_state.json").read_text()).get("last_signature")
@@ -44,11 +49,15 @@ def main() -> int:
             g.pop("direction_gate", None)
         g["reason"] = (f"{gate['reason']}; " if gate else "") + str(g.get("reason", "")).split("; ", 1)[-1]
         payload = json.dumps(before, indent=2)
-        tmp = OUT / "event_risk.json.tmp"; tmp.write_text(payload); tmp.replace(OUT / "event_risk.json")
+        tmp = OUT / "event_risk.json.tmp"
+        tmp.write_text(payload)
+        tmp.replace(OUT / "event_risk.json")
         if BOT_UD is not None:
             try:
-                t = BOT_UD / "event_risk.json.tmp"; t.write_text(payload); t.replace(BOT_UD / "event_risk.json")
-            except Exception as e:  # noqa: BLE001
+                t = BOT_UD / "event_risk.json.tmp"
+                t.write_text(payload)
+                t.replace(BOT_UD / "event_risk.json")
+            except Exception as e:
                 print(f"[fast] bot copy failed: {e}")
         print("[fast] event_risk.json direction_gate updated")
     return 0
