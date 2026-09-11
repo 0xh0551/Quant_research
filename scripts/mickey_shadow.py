@@ -107,6 +107,8 @@ def tick(now: datetime) -> dict:
                    "open_turnover": round(turnover, 4), "open_cost": turnover * COST_ONEWAY, "scores_at_open": {p: round(sc[p], 3) for p in w_new}})
         mtm = 0.0
     st["last_tick"] = now.isoformat(); st["model_trained_at"] = info["trained_at"]; st["n_universe"] = info["n"]
+    st["scores_last"] = {p: round(v, 4) for p, v in sc.items()}   # 2026-09-11: برای مانیفستِ زنده (predict --source shadow)
+    st["candle"] = info["candle"]
     _atomic(STATE, st)
     with EQ.open("a") as f:
         f.write(json.dumps({"ts": now.isoformat(), "realized_cum": round(st["realized_cum"], 5), "unrealized": round(mtm, 5),
