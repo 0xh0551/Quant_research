@@ -461,28 +461,21 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
         g_risk, g_reason = alt_risk, (alt_reason or "altdata regime")
     elif alt_reason:
         g_reason = f"{g_reason or 'nominal'}; {alt_reason}"
-    # incident-learning embargo (2026-08-17): if the live market fingerprint matches a
-    # learned incident rule, publish global.embargo -> bots block organic entries and
-    # size activity-floor trades by floor_mult. Fail-open: any error -> no embargo.
-    embargo = None
-    try:
-        from src.intelligence.incident import update_embargo
-        embargo = update_embargo(_priority_bases(all_bases, 12))
-    except Exception as e:  # never let the detector break the hourly scan
-        print(f"[event_risk] embargo detector failed: {e}")
-    if embargo:
-        g_reason = f"{embargo['reason']}; {g_reason or 'nominal'}"
     # news→direction gate (2026-08-21, owner ask): «طبق اخبار اگر خبرِ مهم جهت می‌دهد،
     # فقط در آن جهت؛ دورِ رویدادِ مهمِ بی‌جهت، ترید تعطیل». fail-open کامل.
+    # 2026-09-23 (owner: fleet-wide entry veto layer removed): the live market signature
+    # is computed here directly (src/intelligence/market_signature); the old
+    # «fleet bleeding» trigger that came from the retired layer no longer exists.
     direction_gate = None
     try:
         from src.intelligence.news_direction import update_direction_gate
-        _st = {}
-        with contextlib.suppress(Exception):
-            _st = json.loads((OUT / "embargo_state.json").read_text())
-        _lb = _st.get("last_bleeding") or {}
-        _bl = bool(_lb.get("bleeding", float(_lb.get("pnl") or 0) <= -28))
-        direction_gate = update_direction_gate(_st.get("last_signature"), bleeding=_bl,
+        _sig = None
+        try:
+            from src.intelligence.market_signature import live_signature
+            _sig = live_signature(_priority_bases(all_bases, 12))
+        except Exception as e:  # never let the signature break the hourly scan
+            print(f"[event_risk] live market signature failed: {e}")
+        direction_gate = update_direction_gate(_sig, bleeding=None,
                                                bases=_priority_bases(all_bases, 6))
     except Exception as e:
         print(f"[event_risk] direction gate failed: {e}")
@@ -493,7 +486,6 @@ def build(venue_symbols: dict[str, list[str]], with_events: bool = False,
         "with_events": with_events,
         "n_symbols": len(result),
         "global": {"risk": g_risk, "reason": g_reason or "nominal",
-                   **({"embargo": embargo} if embargo else {}),
                    **({"direction_gate": direction_gate} if direction_gate else {})},
         "funding_bias": altdata_funding_bias(alt),
         "symbols": result,

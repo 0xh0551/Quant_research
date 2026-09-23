@@ -12,13 +12,13 @@ Three parts, all published as `global.direction_gate` in event_risk.json (hourly
      reduced size), unless a clear direction verdict overrides it.
   2. news classifier — Claude+web_search, TRIGGERED (not on a fixed clock): calendar
      window, |BTC 6h| move, vol-regime flip, or fleet bleeding. Two-step (prose
-     research → cheap schema extraction, the incident lesson). Verdict: importance,
+     research → cheap schema extraction). Verdict: importance,
      direction long/short/unclear, confidence, ttl. importance>=0.7 & confidence>=0.7
      & direction in {long,short} → SIDE GATE: bots may only enter in that direction.
      important-but-unclear → short PAUSE (market digesting).
   3. scoring — every expired gate is scored deterministically (BTC return over the
      gate window vs the allowed direction) into outputs/direction_gate_log.jsonl.
-     The gate must EARN trust the same way direction_calls and embargoes do.
+     The gate must EARN trust the same way direction_calls do.
 
 Owner rules honoured: the direction comes from the AGENT reading the news (allowed by
 the 2026-08-09 ruling; manual/static gating stays forbidden). Fail-open everywhere:
@@ -71,7 +71,7 @@ QUIET_SWEEP_H = 96.0              # اگر این‌قدر تماس نبود، �
 EVENT_CACHE = OUT / "event_catalysts.json"   # همان کشِ event_risk — این‌جا پر می‌شود (ادغام 08-21)
 CAL_STALE_D = 10.0                 # refresh calendar when older than this
 CAL_LOOKAHEAD_D = 45
-# market triggers (from the embargo detector's hourly signature — free)
+# market triggers (from the hourly market signature — free)
 TRIG_ABS_RET6H = 2.5              # |BTC 6h return| %
 TRIG_REGIME_FLIP = 2.0
 TRIG_ABS_RET24H = 6.0             # |BTC 24h return| % — رالی/ریزشِ پیوسته‌ای که
@@ -159,7 +159,7 @@ def _log_event(rec: dict) -> None:
 # --------------------------------------------------------------------------- #
 def refresh_calendar(llm: Any) -> bool:
     """Weekly Claude+web_search refresh of the scheduled-events calendar."""
-    from src.intelligence.incident import _web_research  # shared two-step helper
+    from src.intelligence.llm_research import web_research  # shared two-step helper
     prompt = (
         "List the exact UTC date-times of upcoming SCHEDULED events in the next "
         f"{CAL_LOOKAHEAD_D} days that historically move crypto markets: FOMC decisions "
@@ -168,7 +168,7 @@ def refresh_calendar(llm: Any) -> bool:
         "large scheduled unlocks of majors). Importance 0-1 (FOMC/CPI/Jackson-Hole ~0.8-1.0; "
         "minor speeches ~0.4). Only events with a KNOWN date; use ISO 8601 UTC."
     )
-    data = _web_research(llm, prompt, CAL_SCHEMA, max_uses=4, label="macro_calendar")
+    data = web_research(llm, prompt, CAL_SCHEMA, max_uses=4, label="macro_calendar")
     if not data or not isinstance(data.get("events"), list) or not data["events"]:
         return False
     events = []
@@ -244,7 +244,7 @@ def _market_trigger(live_sig: dict | None) -> str | None:
 
 
 def classify_news(llm: Any, context: str, bases: list[str] | None = None) -> dict | None:
-    from src.intelligence.incident import _web_research
+    from src.intelligence.llm_research import web_research
     asset_part = ""
     if bases:
         asset_part = (
@@ -268,7 +268,7 @@ def classify_news(llm: Any, context: str, bases: list[str] | None = None) -> dic
         "ttl_h = how long the push should dominate (4-24). Cite sources. Never guess: if "
         "you could not research, researched=false and direction='none'." + asset_part
     )
-    v = _web_research(llm, prompt, VERDICT_SCHEMA, max_uses=3, label="news_direction")
+    v = web_research(llm, prompt, VERDICT_SCHEMA, max_uses=3, label="news_direction")
     # ادغام 08-21: همین یک تماس، کشِ کاتالیستِ per-base را هم تازه می‌کند (جاروی
     # روزانه‌ی جداگانه‌ی event_layer حذف شد — بزرگ‌ترین خرجِ ثابتِ ماه بود).
     if v and v.get("researched") and isinstance(v.get("assets"), list):
@@ -315,7 +315,7 @@ def _policy(verdict: dict, now: datetime) -> dict | None:
 # --------------------------------------------------------------------------- #
 def _btc_ret_pct(t0: pd.Timestamp, t1: pd.Timestamp) -> float | None:
     try:
-        from src.intelligence.incident import _ohlcv_1h
+        from src.intelligence.market_signature import _ohlcv_1h
         df = _ohlcv_1h("BTC/USDT:USDT", pd.Timestamp(t0) - pd.Timedelta(hours=2), pd.Timestamp(t1))
         w = df[(df["ts"] >= pd.Timestamp(t0)) & (df["ts"] <= pd.Timestamp(t1))]
         if len(w) < 2:

@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.8.0] — 2026-09-23
+
+### Incident-learning module retired
+
+- **Removed `src/intelligence/incident.py`** (fleet loss-cluster detector →
+  market fingerprint → learned entry-veto rule). The data helpers the
+  news→direction gate still needs live on as
+  `src/intelligence/market_signature.py` (window fingerprint: return, range,
+  whipsaw, volume ratio, realised-vol z, OI/funding, CoinGecko flows) and
+  `src/intelligence/llm_research.py` (two-step web_search → schema extraction).
+- `event_risk.build` no longer publishes a `global.embargo` block; the direction
+  gate computes the live signature directly.
+
 ## [1.7.0] — 2026-08-20
 
 ### One chart form per module, and no series drawn twice
