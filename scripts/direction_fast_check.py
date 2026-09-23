@@ -15,7 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from src.intelligence.event_risk import BOT_UD, OUT  # noqa: E402
-from src.intelligence.incident import live_signature  # noqa: E402
+from src.intelligence.market_signature import live_signature  # noqa: E402
 from src.intelligence.news_direction import update_direction_gate  # noqa: E402
 
 
@@ -26,11 +26,8 @@ def main() -> int:
         sig = live_signature()
         sig = {k: v for k, v in sig.items() if k not in ("majors", "alts")}
     except Exception as e:
-        print(f"[fast] live_signature failed: {e} — falling back to embargo_state")
-        try:
-            sig = json.loads((OUT / "embargo_state.json").read_text()).get("last_signature")
-        except Exception:
-            sig = None
+        print(f"[fast] live_signature failed: {e} — gate update runs without a market signature")
+        sig = None
     try:
         before = json.loads((OUT / "event_risk.json").read_text())
     except Exception:
